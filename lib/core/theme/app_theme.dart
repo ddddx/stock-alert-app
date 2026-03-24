@@ -23,7 +23,7 @@ class AppTheme {
         backgroundColor: Colors.white,
         foregroundColor: Color(0xFF1B1F24),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 0,
         color: Colors.white,
         shape: RoundedRectangleBorder(
@@ -37,7 +37,7 @@ class AppTheme {
         backgroundColor: Colors.white,
         showUnselectedLabels: true,
       ),
-      dialogTheme: const DialogTheme(
+      dialogTheme: const DialogThemeData(
         backgroundColor: Colors.white,
       ),
       dividerColor: const Color(0xFFE5EAF1),

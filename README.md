@@ -41,13 +41,32 @@ test/
 - 搜索：东方财富 suggest 接口
 - 行情：东方财富 `push2` 个股行情接口
 
-## 工具说明
+## 验证说明
 
-当前终端环境没有可执行的 `flutter` 命令，因此无法在本次任务中完成 `flutter pub get`、`flutter analyze`、`flutter test` 或 `flutter build apk`。如本机补齐 Flutter SDK 并加入 `PATH`，建议按顺序执行：
+本机已安装可用 Flutter SDK，但未加入全局 `PATH`。实际可执行路径为：
+
+```text
+flutter
+```
+
+本次已完成以下验证：
 
 ```powershell
-flutter pub get
-flutter analyze
-flutter test
-flutter build apk
+$env:PUB_HOSTED_URL='https://pub.dev'
+flutter pub get --offline
+flutter analyze --no-pub
+flutter test --no-pub
+flutter build apk --debug --no-pub
 ```
+
+结果：
+
+- `pub get --offline`：通过
+- `test --no-pub`：通过
+- `build apk --debug --no-pub`：通过，产出 `build/app/outputs/flutter-apk/app-debug.apk`
+- `analyze --no-pub`：仅剩 2 条 `sort_constructors_first` lint 提示，不影响构建
+
+补充说明：
+
+- 默认网络直连 `pub.dev` / `maven.google.com` 在当前机器上不稳定，因此验证时需复用已有缓存并显式设置 `PUB_HOSTED_URL=https://pub.dev`。
+- 现有 release APK 使用 debug 签名，仅适合内部测试，不适合作为正式对外交付包。
