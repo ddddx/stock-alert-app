@@ -31,18 +31,23 @@ class AlertMessageBuilder {
     required int previousIndex,
     required int currentIndex,
     required double referenceValue,
+    required double crossedAmount,
+    required double crossedPercent,
   }) {
     if (rule.stepMetric == StepMetric.percent) {
-      return '${current.name}${current.code}，涨跌幅从'
-          '${(previousIndex * (rule.stepValue ?? 0)).toStringAsFixed(2)}% '
-          '跨到 ${(currentIndex * (rule.stepValue ?? 0)).toStringAsFixed(2)}% 台阶，'
+      return '${current.name}(${current.code}) '
+          '涨跌幅跨过 ${(currentIndex * (rule.stepValue ?? 0)).toStringAsFixed(2)}% 台阶，'
+          '本次累计波动 ${Formatters.signedPrice(crossedAmount)}，'
+          '累计涨跌幅 ${Formatters.percent(crossedPercent)}，'
           '当前涨跌幅 ${Formatters.percent(current.changePercent)}，'
           '现价 ${Formatters.price(current.lastPrice)}。';
     }
 
-    return '${current.name}${current.code}，价格跨过 '
-        '${Formatters.price(referenceValue + previousIndex * (rule.stepValue ?? 0))} '
-        '到 ${Formatters.price(referenceValue + currentIndex * (rule.stepValue ?? 0))} 的台阶，'
+    return '${current.name}(${current.code}) '
+        '价格从 ${Formatters.price(referenceValue + previousIndex * (rule.stepValue ?? 0))} '
+        '跨到 ${Formatters.price(referenceValue + currentIndex * (rule.stepValue ?? 0))} 台阶，'
+        '本次累计波动 ${Formatters.signedPrice(crossedAmount)}，'
+        '累计涨跌幅 ${Formatters.percent(crossedPercent)}，'
         '当前价格 ${Formatters.price(current.lastPrice)}。';
   }
 }

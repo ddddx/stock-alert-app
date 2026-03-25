@@ -5,9 +5,13 @@ class StockIdentity {
     required this.market,
   });
 
-  final String code;
-  final String name;
-  final String market;
+  factory StockIdentity.fromJson(Map<String, dynamic> json) {
+    return StockIdentity(
+      code: json['code'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      market: json['market'] as String? ?? 'SZ',
+    );
+  }
 
   String get secId => '${market == 'SH' ? '1' : '0'}.$code';
   String get displayName => '$name ($code)';
@@ -24,19 +28,15 @@ class StockIdentity {
     );
   }
 
+  final String code;
+  final String name;
+  final String market;
+
   Map<String, dynamic> toJson() {
     return {
       'code': code,
       'name': name,
       'market': market,
     };
-  }
-
-  factory StockIdentity.fromJson(Map<String, dynamic> json) {
-    return StockIdentity(
-      code: json['code'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      market: json['market'] as String? ?? 'SZ',
-    );
   }
 }

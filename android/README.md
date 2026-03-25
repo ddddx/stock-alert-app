@@ -1,26 +1,21 @@
-# Android 平台占位
+# Android 交付状态
 
-当前目录只是占位说明，**不是真正的 Flutter Android 原生工程**。
+当前目录已经是可构建的 Flutter Android 原生工程，并补齐了本次交付所需的关键链路：
 
-由于本机当前未检测到 Flutter / Java / Android SDK，暂未执行：
+- 正式包名：`com.stockpulse.radar`
+- 应用名：`股票异动雷达`
+- Android `TextToSpeech` 中文语音播报
+- 前台服务常驻通知 `MonitorForegroundService`
+- 开机/升级后恢复入口 `BootCompletedReceiver`
+- 通知权限、电池优化设置跳转
+- release 仍使用 debug 签名，仅供内部测试
+
+建议验证顺序：
 
 ```powershell
-flutter create . --platforms=android
+flutter pub get --offline
+flutter analyze --no-pub
+flutter test --no-pub
+flutter build apk --debug --no-pub
+flutter build apk --release --no-pub
 ```
-
-等工具链补齐后，在 `stock-alert-app/` 根目录执行上面的命令，Flutter 会补生成真实的 Android 工程文件。
-
-生成后建议立即执行：
-
-```powershell
-flutter doctor
-flutter pub get
-flutter run
-```
-
-如果后续要做“后台持续监控 + 声音提醒 + 本地通知”，Android 侧通常还需要继续补：
-
-- 前台服务/后台任务能力
-- 通知渠道（Notification Channel）
-- 自定义音频资源
-- 省电白名单/厂商后台限制说明

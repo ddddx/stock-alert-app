@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.stock_alert_app"
+    namespace = "com.stockpulse.radar"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,10 +20,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.stock_alert_app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "com.stockpulse.radar"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -32,8 +29,7 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // 暂未接入正式签名；当前 release 继续使用 debug 签名，便于内测出包验证。
             signingConfig = signingConfigs.getByName("debug")
         }
     }

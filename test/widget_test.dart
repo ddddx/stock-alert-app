@@ -61,6 +61,7 @@ void main() {
     expect(firstPass, isEmpty);
     expect(secondPass, hasLength(1));
     expect(secondPass.first.message, contains('平安银行'));
-    expect(secondPass.first.message, contains('0.50%'));
+    expect(secondPass.first.message, contains('¥0.08'));
+    expect(secondPass.first.message, contains('+0.80%'));
   });
 }

@@ -1,6 +1,12 @@
 <manifest xmlns:android='http://schemas.android.com/apk/res/android'>
+    <uses-permission android:name='android.permission.INTERNET' />
+    <uses-permission android:name='android.permission.POST_NOTIFICATIONS' />
+    <uses-permission android:name='android.permission.FOREGROUND_SERVICE' />
+    <uses-permission android:name='android.permission.RECEIVE_BOOT_COMPLETED' />
+    <uses-permission android:name='android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' />
+
     <application
-        android:label='A股异动监控'
+        android:label='股票异动雷达'
         android:name='${applicationName}'
         android:icon='@mipmap/ic_launcher'>
         <activity
@@ -23,6 +29,22 @@
                 <category android:name='android.intent.category.LAUNCHER' />
             </intent-filter>
         </activity>
+        <service
+            android:name='.MonitorForegroundService'
+            android:enabled='true'
+            android:exported='false'
+            android:foregroundServiceType='dataSync' />
+
+        <receiver
+            android:name='.BootCompletedReceiver'
+            android:enabled='true'
+            android:exported='false'>
+            <intent-filter>
+                <action android:name='android.intent.action.BOOT_COMPLETED' />
+                <action android:name='android.intent.action.MY_PACKAGE_REPLACED' />
+            </intent-filter>
+        </receiver>
+
         <meta-data
             android:name='flutterEmbedding'
             android:value='2' />

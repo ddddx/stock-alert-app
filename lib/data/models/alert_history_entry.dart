@@ -18,6 +18,28 @@ class AlertHistoryEntry {
     required this.playedSound,
   });
 
+  factory AlertHistoryEntry.fromJson(Map<String, dynamic> json) {
+    return AlertHistoryEntry(
+      id: json['id'] as String? ?? '',
+      ruleId: json['ruleId'] as String? ?? '',
+      ruleType: AlertRuleType.values.byName(
+        json['ruleType'] as String? ?? AlertRuleType.shortWindowMove.name,
+      ),
+      stockCode: json['stockCode'] as String? ?? '',
+      stockName: json['stockName'] as String? ?? '',
+      market: json['market'] as String? ?? 'SZ',
+      triggeredAt: DateTime.tryParse(json['triggeredAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      currentPrice: (json['currentPrice'] as num?)?.toDouble() ?? 0,
+      referencePrice: (json['referencePrice'] as num?)?.toDouble() ?? 0,
+      changeAmount: (json['changeAmount'] as num?)?.toDouble() ?? 0,
+      changePercent: (json['changePercent'] as num?)?.toDouble() ?? 0,
+      message: json['message'] as String? ?? '',
+      spokenText: json['spokenText'] as String? ?? '',
+      playedSound: json['playedSound'] as bool? ?? false,
+    );
+  }
+
   final String id;
   final String ruleId;
   final AlertRuleType ruleType;

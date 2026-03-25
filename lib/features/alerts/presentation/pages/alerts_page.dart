@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../../data/models/alert_rule.dart';
 import '../../../../data/models/stock_identity.dart';
 import '../../../../data/models/stock_quote_snapshot.dart';
-import '../../../../data/repositories/in_memory_alert_repository.dart';
-import '../../../../data/repositories/in_memory_watchlist_repository.dart';
+import '../../../../data/repositories/alert_repository.dart';
+import '../../../../data/repositories/watchlist_repository.dart';
 import '../../../../shared/widgets/section_card.dart';
 
 class AlertsPage extends StatefulWidget {
@@ -15,8 +15,8 @@ class AlertsPage extends StatefulWidget {
     required this.quotes,
   });
 
-  final InMemoryAlertRepository repository;
-  final InMemoryWatchlistRepository watchlistRepository;
+  final AlertRepository repository;
+  final WatchlistRepository watchlistRepository;
   final List<StockQuoteSnapshot> quotes;
 
   @override
@@ -102,8 +102,10 @@ class _AlertsPageState extends State<AlertsPage> {
                         Switch(
                           value: rule.enabled,
                           onChanged: (value) {
-                            setState(() {
-                              widget.repository.toggle(rule.id, value);
+                            widget.repository.toggle(rule.id, value).then((_) {
+                              if (mounted) {
+                                setState(() {});
+                              }
                             });
                           },
                         ),
@@ -263,8 +265,8 @@ class _AlertsPageState extends State<AlertsPage> {
                       const SizedBox(height: 8),
                       Text(
                         _stepMetric == StepMetric.percent
-                            ? '示例：每跨过 0.50% 涨跌幅台阶提醒一次。'
-                            : '示例：以创建时价格为锚点，每跨过固定价差提醒一次。',
+                            ? '示例：每涨跌幅再多变动 0.50%，就播报一次。'
+                            : '示例：以创建规则时价格为锚点，每跨过固定价差就播报一次。',
                       ),
                     ],
                     const SizedBox(height: 12),
@@ -301,8 +303,10 @@ class _AlertsPageState extends State<AlertsPage> {
                       );
                       return;
                     }
-                    setState(() {
-                      widget.repository.add(rule);
+                    widget.repository.add(rule).then((_) {
+                      if (mounted) {
+                        setState(() {});
+                      }
                     });
                     Navigator.of(context).pop();
                   },

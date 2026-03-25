@@ -1,7 +1,7 @@
 name: stock_alert_app
-description: 股票监控 APP Flutter 骨架，包含自选、提醒规则、提醒历史和后台服务占位。
+description: A 股股票异动监控应用，支持实时搜索、自选、后台守护、语音播报与本地持久化。
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

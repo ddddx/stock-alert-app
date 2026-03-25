@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/utils/formatters.dart';
 import '../../../../data/models/stock_quote_snapshot.dart';
-import '../../../../data/repositories/in_memory_settings_repository.dart';
+import '../../../../data/repositories/settings_repository.dart';
 import '../../../../services/alerts/alert_message_builder.dart';
 import '../../../../services/audio/audio_alert_service.dart';
 import '../../../../services/background/monitor_service.dart';
+import '../../../../services/platform/platform_bridge_service.dart';
 import '../../../../shared/widgets/section_card.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -15,15 +16,17 @@ class SettingsPage extends StatefulWidget {
     required this.monitorService,
     required this.audioService,
     required this.messageBuilder,
+    required this.platformBridgeService,
     required this.previewQuote,
     required this.onRefresh,
     required this.onChanged,
   });
 
-  final InMemorySettingsRepository repository;
+  final SettingsRepository repository;
   final MonitorService monitorService;
   final AudioAlertService audioService;
   final AlertMessageBuilder messageBuilder;
+  final PlatformBridgeService platformBridgeService;
   final StockQuoteSnapshot? previewQuote;
   final Future<void> Function() onRefresh;
   final VoidCallback onChanged;
@@ -43,27 +46,41 @@ class _SettingsPageState extends State<SettingsPage> {
       padding: const EdgeInsets.all(16),
       children: [
         SectionCard(
-          title: '监控服务',
-          subtitle: '当前为应用内扫描流程，可手动刷新并执行规则评估。',
+          title: '后台监控',
+          subtitle: '已接入 Android 前台服务常驻通知、开机恢复入口和系统设置跳转，后台可用性比单纯应用内扫描更稳。',
           child: Column(
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('启用监控'),
-                subtitle: const Text('开启后保留监控状态，便于后续接入后台轮询。'),
+                title: const Text('启用后台监控守护'),
+                subtitle: const Text('开启后会拉起常驻通知，便于系统尽量保活并恢复监控状态。'),
                 value: status.serviceEnabled,
                 onChanged: (value) async {
-                  widget.repository.updateService(value);
+                  await widget.repository.updateService(value);
                   if (value) {
                     await widget.monitorService.start();
+                    if (!mounted) {
+                      return;
+                    }
+                    setState(() {
+                      _toast = '已启用前台监控守护，请同时关闭电池优化并允许通知。';
+                    });
                   } else {
                     await widget.monitorService.stop();
+                    if (!mounted) {
+                      return;
+                    }
+                    setState(() {
+                      _toast = '已关闭后台监控守护。';
+                    });
                   }
                   widget.onChanged();
                 },
               ),
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   FilledButton.tonalIcon(
                     onPressed: () async {
@@ -79,11 +96,36 @@ class _SettingsPageState extends State<SettingsPage> {
                     icon: const Icon(Icons.precision_manufacturing_outlined),
                     label: const Text('预热播报'),
                   ),
-                  const SizedBox(width: 8),
                   FilledButton.icon(
                     onPressed: widget.onRefresh,
                     icon: const Icon(Icons.refresh),
                     label: const Text('立即刷新'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await widget.platformBridgeService.openNotificationSettings();
+                      if (!mounted) {
+                        return;
+                      }
+                      setState(() {
+                        _toast = '已打开通知设置，请确认允许通知与常驻提醒。';
+                      });
+                    },
+                    icon: const Icon(Icons.notifications_active_outlined),
+                    label: const Text('通知权限'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await widget.platformBridgeService.openBatteryOptimizationSettings();
+                      if (!mounted) {
+                        return;
+                      }
+                      setState(() {
+                        _toast = '已打开电池优化设置，建议将本应用加入白名单。';
+                      });
+                    },
+                    icon: const Icon(Icons.battery_saver_outlined),
+                    label: const Text('电池白名单'),
                   ),
                 ],
               ),
@@ -93,15 +135,15 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 12),
         SectionCard(
           title: '语音提醒',
-          subtitle: '播报股票名称、代码、价格变动和涨跌幅。',
+          subtitle: '播报股票名称、代码、波动金额与涨跌幅，不再使用占位提示。',
           child: Column(
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('启用语音播报'),
                 value: status.soundEnabled,
-                onChanged: (value) {
-                  widget.repository.updateSound(value);
+                onChanged: (value) async {
+                  await widget.repository.updateSound(value);
                   widget.onChanged();
                 },
               ),
@@ -135,6 +177,10 @@ class _SettingsPageState extends State<SettingsPage> {
               Text('最近说明：${status.lastMessage}'),
               const SizedBox(height: 8),
               Text('最近检查：${Formatters.compactDateTime(status.lastCheckAt)}'),
+              const SizedBox(height: 8),
+              Text(status.serviceEnabled ? '后台守护：已开启常驻通知' : '后台守护：未开启'),
+              const SizedBox(height: 8),
+              const Text('本地数据已持久化，重启应用后会保留自选、规则、历史与设置。'),
               if (_toast != null) ...[
                 const SizedBox(height: 8),
                 Text('操作反馈：$_toast'),

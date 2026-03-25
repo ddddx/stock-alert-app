@@ -6,7 +6,7 @@ abstract class AudioAlertService {
 }
 
 class PlatformTtsAudioAlertService implements AudioAlertService {
-  static const MethodChannel _channel = MethodChannel('stock_alert_app/tts');
+  static const MethodChannel _channel = MethodChannel('stock_pulse/tts');
 
   @override
   Future<void> preload() async {

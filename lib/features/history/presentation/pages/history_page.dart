@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/formatters.dart';
-import '../../../../data/repositories/in_memory_history_repository.dart';
+import '../../../../data/repositories/history_repository.dart';
 import '../../../../shared/widgets/section_card.dart';
 
 class HistoryPage extends StatelessWidget {
   const HistoryPage({super.key, required this.repository});
 
-  final InMemoryHistoryRepository repository;
+  final HistoryRepository repository;
 
   @override
   Widget build(BuildContext context) {

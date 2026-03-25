@@ -9,7 +9,7 @@ class StockAlertApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'A股异动监控',
+      title: '股票异动雷达',
       theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
       home: const AppShell(),

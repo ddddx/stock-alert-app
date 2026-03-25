@@ -1,11 +1,12 @@
 import '../../data/models/stock_quote_snapshot.dart';
-import '../../data/repositories/in_memory_alert_repository.dart';
-import '../../data/repositories/in_memory_history_repository.dart';
-import '../../data/repositories/in_memory_settings_repository.dart';
-import '../../data/repositories/in_memory_watchlist_repository.dart';
+import '../../data/repositories/alert_repository.dart';
+import '../../data/repositories/history_repository.dart';
+import '../../data/repositories/settings_repository.dart';
+import '../../data/repositories/watchlist_repository.dart';
 import '../alerts/alert_rule_engine.dart';
 import '../audio/audio_alert_service.dart';
 import '../market/ashare_market_data_service.dart';
+import '../platform/platform_bridge_service.dart';
 
 class MonitorRunResult {
   const MonitorRunResult({
@@ -37,28 +38,31 @@ abstract class MonitorService {
 
 class AshareMonitorService implements MonitorService {
   AshareMonitorService({
-    required InMemoryWatchlistRepository watchlistRepository,
-    required InMemoryAlertRepository alertRepository,
-    required InMemoryHistoryRepository historyRepository,
-    required InMemorySettingsRepository settingsRepository,
+    required WatchlistRepository watchlistRepository,
+    required AlertRepository alertRepository,
+    required HistoryRepository historyRepository,
+    required SettingsRepository settingsRepository,
     required AshareMarketDataService marketDataService,
     required AudioAlertService audioAlertService,
     required AlertRuleEngine ruleEngine,
+    required PlatformBridgeService platformBridgeService,
   })  : _watchlistRepository = watchlistRepository,
         _alertRepository = alertRepository,
         _historyRepository = historyRepository,
         _settingsRepository = settingsRepository,
         _marketDataService = marketDataService,
         _audioAlertService = audioAlertService,
-        _ruleEngine = ruleEngine;
+        _ruleEngine = ruleEngine,
+        _platformBridgeService = platformBridgeService;
 
-  final InMemoryWatchlistRepository _watchlistRepository;
-  final InMemoryAlertRepository _alertRepository;
-  final InMemoryHistoryRepository _historyRepository;
-  final InMemorySettingsRepository _settingsRepository;
+  final WatchlistRepository _watchlistRepository;
+  final AlertRepository _alertRepository;
+  final HistoryRepository _historyRepository;
+  final SettingsRepository _settingsRepository;
   final AshareMarketDataService _marketDataService;
   final AudioAlertService _audioAlertService;
   final AlertRuleEngine _ruleEngine;
+  final PlatformBridgeService _platformBridgeService;
 
   bool _running = false;
   List<StockQuoteSnapshot> _latestQuotes = const [];
@@ -82,7 +86,7 @@ class AshareMonitorService implements MonitorService {
   @override
   Future<void> prepare() async {
     await _audioAlertService.preload();
-    _settingsRepository.markPrepared('已完成语音播报预热，可执行 A 股扫描。');
+    await _settingsRepository.markPrepared('已完成语音播报预热，可执行 A 股扫描。');
   }
 
   @override
@@ -91,7 +95,8 @@ class AshareMonitorService implements MonitorService {
     final watchlist = _watchlistRepository.getAll();
     if (watchlist.isEmpty) {
       const summary = '自选为空，未执行行情刷新。';
-      _settingsRepository.markChecked(checkedAt: checkedAt, message: summary);
+      await _settingsRepository.markChecked(checkedAt: checkedAt, message: summary);
+      await _platformBridgeService.updateForegroundMonitorSummary(summary: summary);
       return MonitorRunResult(
         quotes: const [],
         triggers: const [],
@@ -114,13 +119,14 @@ class AshareMonitorService implements MonitorService {
         if (soundEnabled) {
           playedSound = await _audioAlertService.speak(trigger.spokenText);
         }
-        _historyRepository.add(trigger.toHistoryEntry(playedSound: playedSound));
+        await _historyRepository.add(trigger.toHistoryEntry(playedSound: playedSound));
       }
 
       final summary = triggers.isEmpty
           ? '已刷新 ${quotes.length} 只 A 股，暂无规则触发。'
           : '已刷新 ${quotes.length} 只 A 股，触发 ${triggers.length} 条提醒。';
-      _settingsRepository.markChecked(checkedAt: checkedAt, message: summary);
+      await _settingsRepository.markChecked(checkedAt: checkedAt, message: summary);
+      await _platformBridgeService.updateForegroundMonitorSummary(summary: summary);
       return MonitorRunResult(
         quotes: quotes,
         triggers: triggers,
@@ -129,7 +135,8 @@ class AshareMonitorService implements MonitorService {
       );
     } catch (error) {
       final summary = '行情刷新失败：$error';
-      _settingsRepository.markChecked(checkedAt: checkedAt, message: summary);
+      await _settingsRepository.markChecked(checkedAt: checkedAt, message: summary);
+      await _platformBridgeService.updateForegroundMonitorSummary(summary: summary);
       return MonitorRunResult(
         quotes: _latestQuotes,
         triggers: const [],
@@ -143,10 +150,14 @@ class AshareMonitorService implements MonitorService {
   @override
   Future<void> start() async {
     _running = true;
+    await _platformBridgeService.startForegroundMonitorService(
+      summary: _settingsRepository.getStatus().lastMessage,
+    );
   }
 
   @override
   Future<void> stop() async {
     _running = false;
+    await _platformBridgeService.stopForegroundMonitorService();
   }
 }

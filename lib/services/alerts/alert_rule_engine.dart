@@ -186,12 +186,18 @@ class AlertRuleEngine {
         ? current.previousClose
         : (rule.anchorPrice ?? current.lastPrice);
     final previousIndex = state.lastStepIndex!;
+    final crossedAmount = current.lastPrice - referenceValue;
+    final crossedPercent = referenceValue == 0
+        ? 0.0
+        : crossedAmount / referenceValue * 100.0;
     final message = _messageBuilder.buildStepAlertMessage(
       rule: rule,
       current: current,
       previousIndex: previousIndex,
       currentIndex: currentIndex,
       referenceValue: referenceValue,
+      crossedAmount: crossedAmount,
+      crossedPercent: crossedPercent,
     );
 
     return _EvaluationOutcome(
@@ -205,8 +211,8 @@ class AlertRuleEngine {
         quote: current,
         triggeredAt: now,
         referencePrice: referenceValue,
-        changeAmount: current.changeAmount,
-        changePercent: current.changePercent,
+        changeAmount: crossedAmount,
+        changePercent: crossedPercent,
         message: message,
         spokenText: message,
       ),

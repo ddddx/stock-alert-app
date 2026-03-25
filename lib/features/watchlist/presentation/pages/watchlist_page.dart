@@ -4,7 +4,7 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../data/models/stock_identity.dart';
 import '../../../../data/models/stock_quote_snapshot.dart';
 import '../../../../data/models/stock_search_result.dart';
-import '../../../../data/repositories/in_memory_watchlist_repository.dart';
+import '../../../../data/repositories/watchlist_repository.dart';
 import '../../../../services/market/ashare_market_data_service.dart';
 import '../../../../shared/widgets/section_card.dart';
 
@@ -17,7 +17,7 @@ class WatchlistPage extends StatefulWidget {
     required this.onRefresh,
   });
 
-  final InMemoryWatchlistRepository repository;
+  final WatchlistRepository repository;
   final AshareMarketDataService marketDataService;
   final List<StockQuoteSnapshot> quotes;
   final Future<void> Function() onRefresh;
@@ -69,8 +69,10 @@ class _WatchlistPageState extends State<WatchlistPage> {
                           stock: item,
                           quote: quoteByCode[item.code],
                           onRemove: () {
-                            setState(() {
-                              widget.repository.remove(item.code);
+                            widget.repository.remove(item.code).then((_) {
+                              if (mounted) {
+                                setState(() {});
+                              }
                             });
                           },
                         ),
@@ -103,7 +105,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
     }
 
     if (selected != null) {
-      final added = widget.repository.add(selected.toIdentity());
+      final added = await widget.repository.add(selected.toIdentity());
       if (added) {
         await widget.onRefresh();
         if (!mounted) {

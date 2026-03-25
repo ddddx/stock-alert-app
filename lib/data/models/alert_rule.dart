@@ -86,20 +86,31 @@ class AlertRule {
     );
   }
 
-  final String id;
-  final String stockCode;
-  final String stockName;
-  final String market;
-  final AlertRuleType type;
-  final bool enabled;
-  final DateTime createdAt;
-  final double? moveThresholdPercent;
-  final int? lookbackMinutes;
-  final MoveDirection? moveDirection;
-  final double? stepValue;
-  final StepMetric? stepMetric;
-  final double? anchorPrice;
-  final String? note;
+  factory AlertRule.fromJson(Map<String, dynamic> json) {
+    return AlertRule(
+      id: json['id'] as String? ?? '',
+      stockCode: json['stockCode'] as String? ?? '',
+      stockName: json['stockName'] as String? ?? '',
+      market: json['market'] as String? ?? 'SZ',
+      type: AlertRuleType.values.byName(
+        json['type'] as String? ?? AlertRuleType.shortWindowMove.name,
+      ),
+      enabled: json['enabled'] as bool? ?? true,
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      moveThresholdPercent: (json['moveThresholdPercent'] as num?)?.toDouble(),
+      lookbackMinutes: json['lookbackMinutes'] as int?,
+      moveDirection: json['moveDirection'] == null
+          ? null
+          : MoveDirection.values.byName(json['moveDirection'] as String),
+      stepValue: (json['stepValue'] as num?)?.toDouble(),
+      stepMetric: json['stepMetric'] == null
+          ? null
+          : StepMetric.values.byName(json['stepMetric'] as String),
+      anchorPrice: (json['anchorPrice'] as num?)?.toDouble(),
+      note: json['note'] as String?,
+    );
+  }
 
   AlertRule copyWith({
     String? id,
@@ -154,31 +165,20 @@ class AlertRule {
     };
   }
 
-  factory AlertRule.fromJson(Map<String, dynamic> json) {
-    return AlertRule(
-      id: json['id'] as String? ?? '',
-      stockCode: json['stockCode'] as String? ?? '',
-      stockName: json['stockName'] as String? ?? '',
-      market: json['market'] as String? ?? 'SZ',
-      type: AlertRuleType.values.byName(
-        json['type'] as String? ?? AlertRuleType.shortWindowMove.name,
-      ),
-      enabled: json['enabled'] as bool? ?? true,
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
-          DateTime.fromMillisecondsSinceEpoch(0),
-      moveThresholdPercent: (json['moveThresholdPercent'] as num?)?.toDouble(),
-      lookbackMinutes: json['lookbackMinutes'] as int?,
-      moveDirection: json['moveDirection'] == null
-          ? null
-          : MoveDirection.values.byName(json['moveDirection'] as String),
-      stepValue: (json['stepValue'] as num?)?.toDouble(),
-      stepMetric: json['stepMetric'] == null
-          ? null
-          : StepMetric.values.byName(json['stepMetric'] as String),
-      anchorPrice: (json['anchorPrice'] as num?)?.toDouble(),
-      note: json['note'] as String?,
-    );
-  }
+  final String id;
+  final String stockCode;
+  final String stockName;
+  final String market;
+  final AlertRuleType type;
+  final bool enabled;
+  final DateTime createdAt;
+  final double? moveThresholdPercent;
+  final int? lookbackMinutes;
+  final MoveDirection? moveDirection;
+  final double? stepValue;
+  final StepMetric? stepMetric;
+  final double? anchorPrice;
+  final String? note;
 
   String get typeLabel {
     switch (type) {
@@ -199,12 +199,10 @@ class AlertRule {
         };
         return '${lookbackMinutes ?? 0} 分钟内$directionLabel超过 ${(moveThresholdPercent ?? 0).toStringAsFixed(2)}%';
       case AlertRuleType.stepAlert:
-        final metricLabel = switch (stepMetric ?? StepMetric.price) {
-          StepMetric.price => '价格',
-          StepMetric.percent => '涨跌幅',
-        };
         final unit = stepMetric == StepMetric.percent ? '%' : '元';
-        return '每 $metricLabel 变化 ${(stepValue ?? 0).toStringAsFixed(2)}$unit 提醒';
+        return stepMetric == StepMetric.percent
+            ? '每涨跌幅每变动 ${(stepValue ?? 0).toStringAsFixed(2)}$unit 播报一次'
+            : '以建规则时价格为锚点，每跨过 ${(stepValue ?? 0).toStringAsFixed(2)}$unit 价格台阶播报一次';
     }
   }
 }
