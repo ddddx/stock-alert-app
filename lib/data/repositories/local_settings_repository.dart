@@ -9,6 +9,7 @@ class LocalSettingsRepository implements SettingsRepository {
   MonitorStatus _status = const MonitorStatus(
     serviceEnabled: false,
     soundEnabled: true,
+    pollIntervalSeconds: 20,
     lastCheckAt: null,
     lastMessage: '等待首次刷新 A 股行情。',
   );
@@ -21,6 +22,10 @@ class LocalSettingsRepository implements SettingsRepository {
       return;
     }
     _status = MonitorStatus.fromJson(payload);
+    if (_status.pollIntervalSeconds < 15) {
+      _status = _status.copyWith(pollIntervalSeconds: 15);
+      await _persist();
+    }
   }
 
   @override
@@ -35,6 +40,13 @@ class LocalSettingsRepository implements SettingsRepository {
   @override
   Future<void> updateSound(bool enabled) async {
     _status = _status.copyWith(soundEnabled: enabled);
+    await _persist();
+  }
+
+  @override
+  Future<void> updatePollIntervalSeconds(int seconds) async {
+    final normalized = seconds.clamp(15, 300).toInt();
+    _status = _status.copyWith(pollIntervalSeconds: normalized);
     await _persist();
   }
 

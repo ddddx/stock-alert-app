@@ -5,6 +5,7 @@ abstract class SettingsRepository {
   MonitorStatus getStatus();
   Future<void> updateService(bool enabled);
   Future<void> updateSound(bool enabled);
+  Future<void> updatePollIntervalSeconds(int seconds);
   Future<void> markPrepared(String message);
   Future<void> markChecked({required DateTime checkedAt, required String message});
 }

@@ -25,7 +25,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _refreshing = false;
   bool _bootstrapping = true;
@@ -58,6 +58,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         await _bootstrap();
@@ -70,6 +71,28 @@ class _AppShellState extends State<AppShell> {
       }
       await _refreshQuotes();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_bootstrapping) {
+      return;
+    }
+    switch (state) {
+      case AppLifecycleState.resumed:
+        unawaited(_handleResume());
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        break;
+    }
   }
 
   @override
@@ -187,7 +210,7 @@ class _AppShellState extends State<AppShell> {
     await _settingsRepository.initialize();
     await _monitorService.prepare();
     if (_settingsRepository.getStatus().serviceEnabled) {
-      await _monitorService.start();
+      await _monitorService.reload();
     }
   }
 
@@ -205,6 +228,17 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       _refreshing = false;
     });
+  }
+
+  Future<void> _handleResume() async {
+    await _settingsRepository.initialize();
+    await _historyRepository.initialize();
+    if (_settingsRepository.getStatus().serviceEnabled) {
+      await _monitorService.requestBackgroundRefresh();
+    }
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _markDirty() {

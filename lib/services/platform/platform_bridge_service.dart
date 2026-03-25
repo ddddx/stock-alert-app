@@ -56,6 +56,28 @@ class PlatformBridgeService {
     }
   }
 
+  Future<void> reloadForegroundMonitorService() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    try {
+      await _channel.invokeMethod<void>('reloadForegroundMonitorService');
+    } on PlatformException {
+      // Ignore and keep the Flutter side usable.
+    }
+  }
+
+  Future<void> refreshForegroundMonitorService() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    try {
+      await _channel.invokeMethod<void>('refreshForegroundMonitorService');
+    } on PlatformException {
+      // Ignore and keep the Flutter side usable.
+    }
+  }
+
   Future<void> stopForegroundMonitorService() async {
     if (!Platform.isAndroid) {
       return;

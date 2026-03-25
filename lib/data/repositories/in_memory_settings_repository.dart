@@ -4,6 +4,7 @@ class InMemorySettingsRepository {
   MonitorStatus _status = const MonitorStatus(
     serviceEnabled: false,
     soundEnabled: true,
+    pollIntervalSeconds: 20,
     lastCheckAt: null,
     lastMessage: '等待首次刷新 A 股行情。',
   );
@@ -16,6 +17,10 @@ class InMemorySettingsRepository {
 
   void updateSound(bool enabled) {
     _status = _status.copyWith(soundEnabled: enabled);
+  }
+
+  void updatePollIntervalSeconds(int seconds) {
+    _status = _status.copyWith(pollIntervalSeconds: seconds.clamp(15, 300).toInt());
   }
 
   void markPrepared(String message) {

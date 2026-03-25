@@ -9,7 +9,6 @@ import android.speech.tts.TextToSpeech
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
 import java.util.Locale
 
 class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
@@ -45,16 +44,15 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     getStorageDirectoryMethod() -> {
-                        val directory = File(filesDir, storageFolderName())
-                        if (!directory.exists()) {
-                            directory.mkdirs()
-                        }
-                        result.success(directory.absolutePath)
+                        result.success(MonitorStorage.storageDirectory(this).absolutePath)
                     }
 
                     startForegroundServiceMethod() -> {
                         val summary = call.argument<String>(summaryArgument()).orEmpty()
-                        startMonitorService(summary)
+                        startMonitorService(
+                            action = MonitorForegroundService.ACTION_START_MONITOR,
+                            summary = summary,
+                        )
                         result.success(true)
                     }
 
@@ -64,8 +62,18 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                         result.success(true)
                     }
 
+                    reloadForegroundServiceMethod() -> {
+                        startMonitorService(action = MonitorForegroundService.ACTION_RELOAD_MONITOR)
+                        result.success(true)
+                    }
+
+                    refreshForegroundServiceMethod() -> {
+                        startMonitorService(action = MonitorForegroundService.ACTION_REFRESH_NOW)
+                        result.success(true)
+                    }
+
                     stopForegroundServiceMethod() -> {
-                        stopService(Intent(this, MonitorForegroundService::class.java))
+                        stopMonitorService()
                         result.success(true)
                     }
 
@@ -118,20 +126,29 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             text,
             TextToSpeech.QUEUE_FLUSH,
             null,
-            utterancePrefix() + System.currentTimeMillis()
+            utterancePrefix() + System.currentTimeMillis(),
         ) == TextToSpeech.SUCCESS
     }
 
-    private fun startMonitorService(summary: String) {
+    private fun startMonitorService(action: String, summary: String? = null) {
         val intent = Intent(this, MonitorForegroundService::class.java).apply {
-            action = monitorActionStart()
-            putExtra(summaryArgument(), summary)
+            this.action = action
+            if (!summary.isNullOrBlank()) {
+                putExtra(summaryArgument(), summary)
+            }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {
             startService(intent)
         }
+    }
+
+    private fun stopMonitorService() {
+        val stopIntent = Intent(this, MonitorForegroundService::class.java).apply {
+            action = MonitorForegroundService.ACTION_STOP_MONITOR
+        }
+        startService(stopIntent)
     }
 
     private fun openBatteryOptimizationSettings() {
@@ -184,13 +201,13 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     private fun updateForegroundServiceMethod(): String = "updateForegroundMonitorSummary"
 
+    private fun reloadForegroundServiceMethod(): String = "reloadForegroundMonitorService"
+
+    private fun refreshForegroundServiceMethod(): String = "refreshForegroundMonitorService"
+
     private fun stopForegroundServiceMethod(): String = "stopForegroundMonitorService"
 
     private fun openBatterySettingsMethod(): String = "openBatteryOptimizationSettings"
 
     private fun openNotificationSettingsMethod(): String = "openNotificationSettings"
-
-    private fun monitorActionStart(): String = "com.stockpulse.radar.action.START_MONITOR"
-
-    private fun storageFolderName(): String = "stock_pulse_data"
 }

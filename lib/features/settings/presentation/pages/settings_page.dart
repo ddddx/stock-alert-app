@@ -41,29 +41,31 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final status = widget.repository.getStatus();
+    final pollIntervalOptions = const [15, 20, 30, 45, 60, 120, 300];
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         SectionCard(
           title: '后台监控',
-          subtitle: '已接入 Android 前台服务常驻通知、开机恢复入口和系统设置跳转，后台可用性比单纯应用内扫描更稳。',
+          subtitle: '已接入 Android 前台服务常驻通知、原生后台轮询、开机恢复入口和系统设置跳转，后台可用性比单纯应用内扫描更稳。',
           child: Column(
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('启用后台监控守护'),
-                subtitle: const Text('开启后会拉起常驻通知，便于系统尽量保活并恢复监控状态。'),
+                subtitle: const Text('开启后会拉起常驻通知，并由原生前台服务持续后台轮询 A 股行情。'),
                 value: status.serviceEnabled,
                 onChanged: (value) async {
                   await widget.repository.updateService(value);
                   if (value) {
                     await widget.monitorService.start();
+                    await widget.monitorService.requestBackgroundRefresh();
                     if (!mounted) {
                       return;
                     }
                     setState(() {
-                      _toast = '已启用前台监控守护，请同时关闭电池优化并允许通知。';
+                      _toast = '已启用后台守护，原生前台服务会按设定间隔持续轮询。';
                     });
                   } else {
                     await widget.monitorService.stop();
@@ -74,6 +76,39 @@ class _SettingsPageState extends State<SettingsPage> {
                       _toast = '已关闭后台监控守护。';
                     });
                   }
+                  widget.onChanged();
+                },
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                initialValue: status.pollIntervalSeconds,
+                decoration: const InputDecoration(
+                  labelText: '后台轮询间隔',
+                  border: OutlineInputBorder(),
+                  helperText: '建议 15~30 秒；越短越实时，但更耗电。',
+                ),
+                items: pollIntervalOptions
+                    .map(
+                      (seconds) => DropdownMenuItem<int>(
+                        value: seconds,
+                        child: Text('$seconds 秒'),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (value) async {
+                  if (value == null) {
+                    return;
+                  }
+                  await widget.repository.updatePollIntervalSeconds(value);
+                  if (status.serviceEnabled) {
+                    await widget.monitorService.reload();
+                  }
+                  if (!mounted) {
+                    return;
+                  }
+                  setState(() {
+                    _toast = '后台轮询间隔已更新为 $value 秒。';
+                  });
                   widget.onChanged();
                 },
               ),
@@ -97,7 +132,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     label: const Text('预热播报'),
                   ),
                   FilledButton.icon(
-                    onPressed: widget.onRefresh,
+                    onPressed: () async {
+                      await widget.onRefresh();
+                      if (status.serviceEnabled) {
+                        await widget.monitorService.requestBackgroundRefresh();
+                      }
+                    },
                     icon: const Icon(Icons.refresh),
                     label: const Text('立即刷新'),
                   ),
@@ -135,7 +175,7 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 12),
         SectionCard(
           title: '语音提醒',
-          subtitle: '播报股票名称、代码、波动金额与涨跌幅，不再使用占位提示。',
+          subtitle: '播报股票名称、代码、波动金额与涨跌幅，不再使用占位提示。后台原生轮询触发时也会走系统 TTS。',
           child: Column(
             children: [
               SwitchListTile(
@@ -144,6 +184,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 value: status.soundEnabled,
                 onChanged: (value) async {
                   await widget.repository.updateSound(value);
+                  if (!mounted) {
+                    return;
+                  }
+                  setState(() {
+                    _toast = value ? '已开启语音播报。' : '已关闭语音播报。';
+                  });
                   widget.onChanged();
                 },
               ),
@@ -178,9 +224,13 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 8),
               Text('最近检查：${Formatters.compactDateTime(status.lastCheckAt)}'),
               const SizedBox(height: 8),
-              Text(status.serviceEnabled ? '后台守护：已开启常驻通知' : '后台守护：未开启'),
+              Text(status.serviceEnabled ? '后台守护：已开启常驻通知 + 原生后台轮询' : '后台守护：未开启'),
+              const SizedBox(height: 8),
+              Text('轮询间隔：${status.pollIntervalSeconds} 秒'),
               const SizedBox(height: 8),
               const Text('本地数据已持久化，重启应用后会保留自选、规则、历史与设置。'),
+              const SizedBox(height: 8),
+              const Text('若系统强杀进程，前台服务会尽量粘性重启；开机/应用更新后也会尝试自动恢复。'),
               if (_toast != null) ...[
                 const SizedBox(height: 8),
                 Text('操作反馈：$_toast'),

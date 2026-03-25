@@ -11,10 +11,13 @@ class BootCompletedReceiver : BroadcastReceiver() {
         if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_MY_PACKAGE_REPLACED) {
             return
         }
+        if (!MonitorStorage.isServiceEnabled(context)) {
+            return
+        }
 
         val serviceIntent = Intent(context, MonitorForegroundService::class.java).apply {
-            this.action = "com.stockpulse.radar.action.START_MONITOR"
-            putExtra("summary", "设备已重启，后台监控守护已恢复，请打开应用确认行情刷新。")
+            this.action = MonitorForegroundService.ACTION_RELOAD_MONITOR
+            putExtra("summary", "设备已重启，后台监控守护已恢复。")
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

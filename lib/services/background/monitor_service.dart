@@ -31,6 +31,8 @@ abstract class MonitorService {
   Future<MonitorRunResult> refreshWatchlist();
   Future<void> start();
   Future<void> stop();
+  Future<void> reload();
+  Future<void> requestBackgroundRefresh();
   bool get isRunning;
   List<StockQuoteSnapshot> get latestQuotes;
   StockQuoteSnapshot? latestQuoteFor(String code);
@@ -159,5 +161,22 @@ class AshareMonitorService implements MonitorService {
   Future<void> stop() async {
     _running = false;
     await _platformBridgeService.stopForegroundMonitorService();
+  }
+
+  @override
+  Future<void> reload() async {
+    if (!_settingsRepository.getStatus().serviceEnabled) {
+      return;
+    }
+    _running = true;
+    await _platformBridgeService.reloadForegroundMonitorService();
+  }
+
+  @override
+  Future<void> requestBackgroundRefresh() async {
+    if (!_settingsRepository.getStatus().serviceEnabled) {
+      return;
+    }
+    await _platformBridgeService.refreshForegroundMonitorService();
   }
 }
