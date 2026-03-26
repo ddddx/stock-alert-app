@@ -7,19 +7,62 @@ class StockIdentity {
   });
 
   factory StockIdentity.fromJson(Map<String, dynamic> json) {
+    final code = json['code'] as String? ?? '';
     return StockIdentity(
-      code: json['code'] as String? ?? '',
+      code: code,
       name: json['name'] as String? ?? '',
-      market: json['market'] as String? ?? 'SZ',
+      market: normalizeMarket(json['market'] as String?, code: code),
       securityTypeName: json['securityTypeName'] as String? ?? '',
     );
   }
 
-  String get secId => '${market == 'SH' ? '1' : '0'}.$code';
+  static String normalizeMarket(String? rawMarket, {String code = ''}) {
+    final normalized = rawMarket?.trim().toUpperCase() ?? '';
+    if (normalized.isEmpty) {
+      return _inferMarketFromCode(code);
+    }
+
+    if (normalized == 'SH' ||
+        normalized == '1' ||
+        normalized == 'SSE' ||
+        normalized == 'SHSE' ||
+        normalized == 'XSHG' ||
+        normalized.startsWith('SH') ||
+        normalized.contains('SHANGHAI') ||
+        rawMarket!.contains('沪')) {
+      return 'SH';
+    }
+
+    if (normalized == 'SZ' ||
+        normalized == '0' ||
+        normalized == '2' ||
+        normalized == 'SZSE' ||
+        normalized == 'XSHE' ||
+        normalized.startsWith('SZ') ||
+        normalized.contains('SHENZHEN') ||
+        rawMarket!.contains('深')) {
+      return 'SZ';
+    }
+
+    return _inferMarketFromCode(code);
+  }
+
+  static String _inferMarketFromCode(String code) {
+    final trimmedCode = code.trim();
+    if (trimmedCode.startsWith('5') ||
+        trimmedCode.startsWith('6') ||
+        trimmedCode.startsWith('9')) {
+      return 'SH';
+    }
+    return 'SZ';
+  }
+
+  String get normalizedMarket => normalizeMarket(market, code: code);
+  String get secId => '${normalizedMarket == 'SH' ? '1' : '0'}.$code';
   String get displayName => '$name ($code)';
   String get subtitle => securityTypeName.isEmpty
-      ? '$market 证券'
-      : '$market 证券 · $securityTypeName';
+      ? '$normalizedMarket 证券'
+      : '$normalizedMarket 证券 · $securityTypeName';
   int get priceScaleDivisor => SecurityPriceScale.divisorFor(
         code: code,
         securityTypeName: securityTypeName,
@@ -31,10 +74,11 @@ class StockIdentity {
     String? market,
     String? securityTypeName,
   }) {
+    final nextCode = code ?? this.code;
     return StockIdentity(
-      code: code ?? this.code,
+      code: nextCode,
       name: name ?? this.name,
-      market: market ?? this.market,
+      market: normalizeMarket(market ?? this.market, code: nextCode),
       securityTypeName: securityTypeName ?? this.securityTypeName,
     );
   }
@@ -48,7 +92,7 @@ class StockIdentity {
     return {
       'code': code,
       'name': name,
-      'market': market,
+      'market': normalizedMarket,
       'securityTypeName': securityTypeName,
     };
   }

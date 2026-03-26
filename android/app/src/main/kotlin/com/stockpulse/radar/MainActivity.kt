@@ -3,6 +3,7 @@ package com.stockpulse.radar
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -11,6 +12,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -144,12 +146,19 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         ttsInitCompleted = true
-        ttsReady = status == TextToSpeech.SUCCESS && configureTtsVoice()
+        val initialized = status == TextToSpeech.SUCCESS
+        val configuredPreferredVoice = if (initialized) configureTtsVoice() else false
+        ttsReady = initialized
         if (ttsReady) {
+            configureTtsAudio()
             textToSpeech?.setSpeechRate(1.0f)
             textToSpeech?.setPitch(1.0f)
             textToSpeech?.setOnUtteranceProgressListener(ttsProgressListener())
         }
+        Log.i(
+            TAG,
+            "MainActivity TTS init status=$status ready=$ttsReady preferredVoice=$configuredPreferredVoice",
+        )
         flushPendingTtsRequests()
     }
 
@@ -195,11 +204,13 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     private fun speakNow(text: String, result: MethodChannel.Result) {
         if (!ttsReady) {
+            Log.w(TAG, "Rejecting TTS speak request because engine is not ready")
             result.success(false)
             return
         }
         val utteranceId = utterancePrefix() + System.currentTimeMillis()
         val timeoutRunnable = Runnable {
+            Log.w(TAG, "TTS utterance timed out: $utteranceId")
             finishUtterance(utteranceId, false)
         }
         activeUtterances[utteranceId] = ActiveUtterance(result, timeoutRunnable)
@@ -210,6 +221,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             utteranceId,
         ) == TextToSpeech.SUCCESS
         if (!queued) {
+            Log.w(TAG, "TTS speak returned non-success for utterance: $utteranceId")
             finishUtterance(utteranceId, false)
             return
         }
@@ -228,11 +240,29 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             if (availability >= TextToSpeech.LANG_AVAILABLE) {
                 val result = tts.setLanguage(locale)
                 if (result >= TextToSpeech.LANG_AVAILABLE) {
+                    Log.i(TAG, "Selected TTS locale: $locale")
                     return true
                 }
             }
         }
+        Log.w(TAG, "Preferred Chinese TTS locale unavailable; falling back to engine default voice")
         return false
+    }
+
+    private fun configureTtsAudio() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return
+        }
+        runCatching {
+            textToSpeech?.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build(),
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Unable to apply TTS audio attributes", error)
+        }
     }
 
     private fun flushPendingTtsRequests() {
@@ -341,22 +371,28 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     private fun ttsProgressListener(): UtteranceProgressListener {
         return object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
+            override fun onStart(utteranceId: String?) {
+                Log.i(TAG, "TTS utterance started: $utteranceId")
+            }
 
             override fun onDone(utteranceId: String?) {
+                Log.i(TAG, "TTS utterance completed: $utteranceId")
                 finishUtterance(utteranceId, true)
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
+                Log.w(TAG, "TTS utterance failed: $utteranceId")
                 finishUtterance(utteranceId, false)
             }
 
             override fun onError(utteranceId: String?, errorCode: Int) {
+                Log.w(TAG, "TTS utterance failed: $utteranceId errorCode=$errorCode")
                 finishUtterance(utteranceId, false)
             }
 
             override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                Log.w(TAG, "TTS utterance stopped: $utteranceId interrupted=$interrupted")
                 finishUtterance(utteranceId, false)
             }
         }
@@ -412,6 +448,10 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private fun openNotificationSettingsMethod(): String = "openNotificationSettings"
 
     private fun notificationPermissionRequestCode(): Int = 21031
+
+    companion object {
+        private const val TAG = "StockPulseMainActivity"
+    }
 
     private data class ActiveUtterance(
         val result: MethodChannel.Result,

@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -113,11 +114,18 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         synchronized(ttsLock) {
             ttsInitCompleted = true
-            ttsReady = status == TextToSpeech.SUCCESS && configureTtsVoice()
+            val initialized = status == TextToSpeech.SUCCESS
+            val configuredPreferredVoice = if (initialized) configureTtsVoice() else false
+            ttsReady = initialized
             if (ttsReady) {
+                configureTtsAudio()
                 textToSpeech?.setSpeechRate(1.0f)
                 textToSpeech?.setPitch(1.0f)
             }
+            Log.i(
+                TAG,
+                "Foreground service TTS init status=$status ready=$ttsReady preferredVoice=$configuredPreferredVoice",
+            )
             ttsLock.notifyAll()
         }
     }
@@ -237,14 +245,20 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
             return false
         }
         if (!awaitTtsReady()) {
+            Log.w(TAG, "Foreground service TTS not ready; skipping speech")
             return false
         }
-        return textToSpeech?.speak(
+        val utteranceId = "stock-pulse-service-${System.currentTimeMillis()}"
+        val queued = textToSpeech?.speak(
             trimmed,
             TextToSpeech.QUEUE_ADD,
             null,
-            "stock-pulse-service-${System.currentTimeMillis()}",
+            utteranceId,
         ) == TextToSpeech.SUCCESS
+        if (!queued) {
+            Log.w(TAG, "Foreground service TTS speak returned non-success for $utteranceId")
+        }
+        return queued
     }
 
     private fun awaitTtsReady(timeoutMillis: Long = 2500L): Boolean {
@@ -281,11 +295,29 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
             if (availability >= TextToSpeech.LANG_AVAILABLE) {
                 val result = tts.setLanguage(locale)
                 if (result >= TextToSpeech.LANG_AVAILABLE) {
+                    Log.i(TAG, "Foreground service selected TTS locale: $locale")
                     return true
                 }
             }
         }
+        Log.w(TAG, "Foreground service preferred Chinese TTS locale unavailable; falling back to engine default voice")
         return false
+    }
+
+    private fun configureTtsAudio() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return
+        }
+        runCatching {
+            textToSpeech?.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build(),
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Unable to apply foreground service TTS audio attributes", error)
+        }
     }
 
     private fun startAsForeground(summary: String) {

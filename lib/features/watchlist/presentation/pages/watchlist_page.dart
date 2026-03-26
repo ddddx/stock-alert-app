@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/formatters.dart';
@@ -40,8 +42,8 @@ class _WatchlistPageState extends State<WatchlistPage> {
         padding: const EdgeInsets.all(16),
         children: [
           SectionCard(
-            title: 'A股自选',
-            subtitle: '支持按代码或名称模糊搜索，列表展示实时行情快照。',
+            title: '沪深自选',
+            subtitle: '支持按代码、名称或拼音自动搜索，列表展示实时行情快照。',
             trailing: Wrap(
               spacing: 8,
               children: [
@@ -60,7 +62,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
             child: items.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Text('还没有自选股票，点击右上角添加。'),
+                    child: Text('还没有自选标的，点击右上角添加。'),
                   )
                 : Column(
                     children: [
@@ -95,7 +97,8 @@ class _WatchlistPageState extends State<WatchlistPage> {
       builder: (context) {
         return _StockSearchSheet(
           service: widget.marketDataService,
-          excludedCodes: widget.repository.getAll().map((item) => item.code).toSet(),
+          excludedCodes:
+              widget.repository.getAll().map((item) => item.code).toSet(),
         );
       },
     );
@@ -159,12 +162,12 @@ class _WatchlistTile extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 4),
-                  Text('${stock.market} A股'),
+                  Text(stock.subtitle),
                   const SizedBox(height: 6),
                   Text(
                     quote == null
-                        ? '未获取到行情，点击刷新重试'
-                        : '开 ${Formatters.price(quote!.openPrice)}  高 ${Formatters.price(quote!.highPrice)}  低 ${Formatters.price(quote!.lowPrice)}',
+                        ? '未获取到行情，点击刷新重试。'
+                        : '开 ${Formatters.priceForSecurity(quote!.openPrice, code: quote!.code, securityTypeName: quote!.securityTypeName, priceDecimalDigits: quote!.resolvedPriceDecimalDigits)}  高 ${Formatters.priceForSecurity(quote!.highPrice, code: quote!.code, securityTypeName: quote!.securityTypeName, priceDecimalDigits: quote!.resolvedPriceDecimalDigits)}  低 ${Formatters.priceForSecurity(quote!.lowPrice, code: quote!.code, securityTypeName: quote!.securityTypeName, priceDecimalDigits: quote!.resolvedPriceDecimalDigits)}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -175,14 +178,21 @@ class _WatchlistTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  quote == null ? '--' : Formatters.price(quote!.lastPrice),
+                  quote == null
+                      ? '--'
+                      : Formatters.priceForSecurity(
+                          quote!.lastPrice,
+                          code: quote!.code,
+                          securityTypeName: quote!.securityTypeName,
+                          priceDecimalDigits: quote!.resolvedPriceDecimalDigits,
+                        ),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   quote == null
                       ? '--'
-                      : '${Formatters.signedPrice(quote!.changeAmount)} / ${Formatters.percent(quote!.changePercent)}',
+                      : '${Formatters.signedPriceForSecurity(quote!.changeAmount, code: quote!.code, securityTypeName: quote!.securityTypeName, priceDecimalDigits: quote!.resolvedPriceDecimalDigits)} / ${Formatters.percent(quote!.changePercent)}',
                   style: TextStyle(
                     color: color,
                     fontWeight: FontWeight.w600,
@@ -217,7 +227,11 @@ class _StockSearchSheet extends StatefulWidget {
 
 class _StockSearchSheetState extends State<_StockSearchSheet> {
   late final TextEditingController _controller;
+  Timer? _debounceTimer;
   bool _loading = false;
+  bool _hasSearched = false;
+  int _searchEpoch = 0;
+  String _lastKeyword = '';
   String? _error;
   List<StockSearchResult> _results = const [];
 
@@ -229,6 +243,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -247,7 +262,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '搜索 A 股',
+                  '搜索沪深证券',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
@@ -255,49 +270,24 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
                   controller: _controller,
                   autofocus: true,
                   decoration: InputDecoration(
-                    hintText: '输入股票代码、名称或拼音缩写',
-                    suffixIcon: IconButton(
-                      onPressed: _loading ? null : _search,
-                      icon: const Icon(Icons.search),
-                    ),
+                    hintText: '输入代码、名称或拼音，输入后自动搜索',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _buildSuffixIcon(),
                   ),
-                  onSubmitted: (_) => _search(),
+                  onChanged: _handleQueryChanged,
+                  onSubmitted: (_) => _triggerImmediateSearch(),
                 ),
                 const SizedBox(height: 12),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ),
                 if (_loading) const LinearProgressIndicator(),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
                 const SizedBox(height: 8),
-                Expanded(
-                  child: _results.isEmpty
-                      ? const Center(
-                          child: Text('输入关键字后搜索候选股票。'),
-                        )
-                      : ListView.builder(
-                          itemCount: _results.length,
-                          itemBuilder: (context, index) {
-                            final item = _results[index];
-                            final disabled = widget.excludedCodes.contains(item.code);
-                            return ListTile(
-                              enabled: !disabled,
-                              title: Text('${item.name} (${item.code})'),
-                              subtitle: Text(item.subtitle),
-                              trailing: disabled
-                                  ? const Text('已添加')
-                                  : const Icon(Icons.chevron_right),
-                              onTap: disabled
-                                  ? null
-                                  : () => Navigator.of(context).pop(item),
-                            );
-                          },
-                        ),
-                ),
+                Expanded(child: _buildResults()),
               ],
             ),
           ),
@@ -306,46 +296,157 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
     );
   }
 
-  Future<void> _search() async {
-    final keyword = _controller.text.trim();
+  Widget? _buildSuffixIcon() {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    if (_controller.text.isEmpty) {
+      return null;
+    }
+    return IconButton(
+      onPressed: _clearQuery,
+      icon: const Icon(Icons.close),
+      tooltip: '清空',
+    );
+  }
+
+  Widget _buildResults() {
+    if (!_hasSearched && _controller.text.trim().isEmpty) {
+      return const Center(
+        child: Text('输入代码、名称或拼音后会自动搜索候选证券。'),
+      );
+    }
+
+    if (_loading && _results.isEmpty) {
+      return const Center(
+        child: Text('正在搜索，请稍候...'),
+      );
+    }
+
+    if (_error != null && _results.isEmpty) {
+      return Center(
+        child: Text(_error!),
+      );
+    }
+
+    if (_hasSearched && _results.isEmpty) {
+      return Center(
+        child: Text('没有找到与“$_lastKeyword”匹配的沪深证券。'),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: _results.length,
+      itemBuilder: (context, index) {
+        final item = _results[index];
+        final disabled = widget.excludedCodes.contains(item.code);
+        return ListTile(
+          enabled: !disabled,
+          title: Text('${item.name} (${item.code})'),
+          subtitle: Text(item.subtitle),
+          trailing:
+              disabled ? const Text('已添加') : const Icon(Icons.chevron_right),
+          onTap: disabled ? null : () => Navigator.of(context).pop(item),
+        );
+      },
+    );
+  }
+
+  void _handleQueryChanged(String value) {
+    _debounceTimer?.cancel();
+    _searchEpoch += 1;
+    final keyword = value.trim();
+
     if (keyword.isEmpty) {
       setState(() {
+        _loading = false;
+        _hasSearched = false;
+        _lastKeyword = '';
+        _error = null;
         _results = const [];
-        _error = '请输入代码、名称或拼音缩写。';
       });
+      return;
+    }
+
+    setState(() {
+      _error = null;
+      _lastKeyword = keyword;
+    });
+
+    final epoch = _searchEpoch;
+    _debounceTimer = Timer(const Duration(milliseconds: 350), () {
+      _search(keyword, epoch: epoch);
+    });
+  }
+
+  Future<void> _triggerImmediateSearch() async {
+    _debounceTimer?.cancel();
+    final keyword = _controller.text.trim();
+    _searchEpoch += 1;
+    if (keyword.isEmpty) {
+      setState(() {
+        _loading = false;
+        _hasSearched = false;
+        _lastKeyword = '';
+        _error = null;
+        _results = const [];
+      });
+      return;
+    }
+    await _search(keyword, epoch: _searchEpoch);
+  }
+
+  Future<void> _search(String keyword, {required int epoch}) async {
+    if (!mounted || epoch != _searchEpoch) {
       return;
     }
 
     setState(() {
       _loading = true;
       _error = null;
+      _lastKeyword = keyword;
     });
 
     try {
       final results = await widget.service.searchStocks(keyword);
-      if (!mounted) {
+      if (!mounted || epoch != _searchEpoch) {
         return;
       }
       setState(() {
+        _loading = false;
+        _hasSearched = true;
         _results = results;
-        if (results.isEmpty) {
-          _error = '没有找到匹配的 A 股候选。';
-        }
       });
     } catch (error) {
-      if (!mounted) {
+      if (!mounted || epoch != _searchEpoch) {
         return;
       }
       setState(() {
+        _loading = false;
+        _hasSearched = true;
         _results = const [];
         _error = '搜索失败：$error';
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
     }
+  }
+
+  void _clearQuery() {
+    _debounceTimer?.cancel();
+    _searchEpoch += 1;
+    _controller.clear();
+    setState(() {
+      _loading = false;
+      _hasSearched = false;
+      _lastKeyword = '';
+      _error = null;
+      _results = const [];
+    });
   }
 }
