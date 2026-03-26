@@ -87,7 +87,11 @@ class AshareMonitorService implements MonitorService {
 
   @override
   Future<void> prepare() async {
-    await _audioAlertService.preload();
+    final ready = await _audioAlertService.preload();
+    if (!ready) {
+      await _settingsRepository.markPrepared('TTS preload failed.');
+      return;
+    }
     await _settingsRepository.markPrepared('已完成语音播报预热，可执行 A 股扫描。');
   }
 
@@ -97,8 +101,10 @@ class AshareMonitorService implements MonitorService {
     final watchlist = _watchlistRepository.getAll();
     if (watchlist.isEmpty) {
       const summary = '自选为空，未执行行情刷新。';
-      await _settingsRepository.markChecked(checkedAt: checkedAt, message: summary);
-      await _platformBridgeService.updateForegroundMonitorSummary(summary: summary);
+      await _settingsRepository.markChecked(
+          checkedAt: checkedAt, message: summary);
+      await _platformBridgeService.updateForegroundMonitorSummary(
+          summary: summary);
       return MonitorRunResult(
         quotes: const [],
         triggers: const [],
@@ -121,14 +127,17 @@ class AshareMonitorService implements MonitorService {
         if (soundEnabled) {
           playedSound = await _audioAlertService.speak(trigger.spokenText);
         }
-        await _historyRepository.add(trigger.toHistoryEntry(playedSound: playedSound));
+        await _historyRepository
+            .add(trigger.toHistoryEntry(playedSound: playedSound));
       }
 
       final summary = triggers.isEmpty
           ? '已刷新 ${quotes.length} 只 A 股，暂无规则触发。'
           : '已刷新 ${quotes.length} 只 A 股，触发 ${triggers.length} 条提醒。';
-      await _settingsRepository.markChecked(checkedAt: checkedAt, message: summary);
-      await _platformBridgeService.updateForegroundMonitorSummary(summary: summary);
+      await _settingsRepository.markChecked(
+          checkedAt: checkedAt, message: summary);
+      await _platformBridgeService.updateForegroundMonitorSummary(
+          summary: summary);
       return MonitorRunResult(
         quotes: quotes,
         triggers: triggers,
@@ -137,8 +146,10 @@ class AshareMonitorService implements MonitorService {
       );
     } catch (error) {
       final summary = '行情刷新失败：$error';
-      await _settingsRepository.markChecked(checkedAt: checkedAt, message: summary);
-      await _platformBridgeService.updateForegroundMonitorSummary(summary: summary);
+      await _settingsRepository.markChecked(
+          checkedAt: checkedAt, message: summary);
+      await _platformBridgeService.updateForegroundMonitorSummary(
+          summary: summary);
       return MonitorRunResult(
         quotes: _latestQuotes,
         triggers: const [],
@@ -151,10 +162,17 @@ class AshareMonitorService implements MonitorService {
 
   @override
   Future<void> start() async {
-    _running = true;
-    await _platformBridgeService.startForegroundMonitorService(
+    final started = await _platformBridgeService.startForegroundMonitorService(
       summary: _settingsRepository.getStatus().lastMessage,
     );
+    _running = started;
+    if (!started) {
+      await _settingsRepository.updateService(false);
+      await _settingsRepository.markChecked(
+        checkedAt: DateTime.now(),
+        message: '后台监控启动失败，已自动关闭后台守护，请检查通知/前台服务权限后重试。',
+      );
+    }
   }
 
   @override
@@ -166,10 +184,19 @@ class AshareMonitorService implements MonitorService {
   @override
   Future<void> reload() async {
     if (!_settingsRepository.getStatus().serviceEnabled) {
+      _running = false;
       return;
     }
-    _running = true;
-    await _platformBridgeService.reloadForegroundMonitorService();
+    final started =
+        await _platformBridgeService.reloadForegroundMonitorService();
+    _running = started;
+    if (!started) {
+      await _settingsRepository.updateService(false);
+      await _settingsRepository.markChecked(
+        checkedAt: DateTime.now(),
+        message: '后台监控恢复失败，已自动关闭后台守护，请重新启用。',
+      );
+    }
   }
 
   @override
@@ -177,6 +204,15 @@ class AshareMonitorService implements MonitorService {
     if (!_settingsRepository.getStatus().serviceEnabled) {
       return;
     }
-    await _platformBridgeService.refreshForegroundMonitorService();
+    final started =
+        await _platformBridgeService.refreshForegroundMonitorService();
+    if (!started) {
+      _running = false;
+      await _settingsRepository.updateService(false);
+      await _settingsRepository.markChecked(
+        checkedAt: DateTime.now(),
+        message: '后台监控刷新失败，已自动关闭后台守护，请重新启用。',
+      );
+    }
   }
 }

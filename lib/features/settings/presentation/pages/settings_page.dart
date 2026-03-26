@@ -205,8 +205,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   onPressed: () async {
                     final text = widget.messageBuilder
                         .buildPreviewText(widget.previewQuote);
-                    await widget.audioService.preload();
-                    final played = await widget.audioService.speak(text);
+                    final ready = await widget.audioService.preload();
+                    final played = ready && await widget.audioService.speak(text);
                     final message = played
                         ? '已试播：$text'
                         : '试播失败：系统 TTS 未完成初始化、未安装可用语音引擎，或当前媒体音量过低。文案为：$text';

@@ -20,15 +20,20 @@ data class NativeStock(
     val code: String,
     val name: String,
     val market: String,
+    val securityTypeName: String = "",
 ) {
     val secId: String
         get() = "${if (market == "SH") "1" else "0"}.$code"
+    val priceScaleDivisor: Double
+        get() = NativeSecurityPriceScale.divisorFor(code, securityTypeName)
 }
 
 data class NativeQuote(
     val code: String,
     val name: String,
     val market: String,
+    val securityTypeName: String = "",
+    val priceDecimalDigits: Int? = null,
     val lastPrice: Double,
     val previousClose: Double,
     val changeAmount: Double,
@@ -83,6 +88,109 @@ data class NativeAlertHistoryEntry(
     val playedSound: Boolean,
 )
 
+object NativeSecurityPriceScale {
+    private const val STOCK_DIVISOR = 100.0
+    private const val MILLI_PRICE_DIVISOR = 1000.0
+
+    fun resolvePriceDecimalDigits(
+        code: String,
+        securityTypeName: String,
+        eastmoneyPriceDecimalDigits: Any? = null,
+    ): Int {
+        val quoteDigits = parsePriceDecimalDigits(eastmoneyPriceDecimalDigits)
+        if (quoteDigits != null) {
+            return quoteDigits
+        }
+        return defaultPriceDecimalDigits(code, securityTypeName)
+    }
+
+    fun defaultPriceDecimalDigits(code: String, securityTypeName: String): Int {
+        val trimmedCode = code.trim()
+        if (isLikelyFundCode(trimmedCode) || isLikelyBondCode(trimmedCode)) {
+            return 3
+        }
+
+        if (isLikelyEquityCode(trimmedCode)) {
+            return 2
+        }
+
+        val normalizedType = securityTypeName.trim().uppercase(Locale.ROOT).replace("\\s+".toRegex(), "")
+        if (isMilliPriceSecurityType(normalizedType)) {
+            return 3
+        }
+
+        return 2
+    }
+
+    fun divisorFor(
+        code: String,
+        securityTypeName: String,
+        quoteDecimalDigits: Any? = null,
+        priceDecimalDigits: Int? = null,
+    ): Double {
+        val digits = priceDecimalDigits ?: resolvePriceDecimalDigits(
+            code = code,
+            securityTypeName = securityTypeName,
+            eastmoneyPriceDecimalDigits = quoteDecimalDigits,
+        )
+        return divisorForPriceDecimalDigits(digits)
+    }
+
+    fun divisorForPriceDecimalDigits(digits: Int): Double {
+        var divisor = 1.0
+        repeat(digits.coerceIn(0, 6)) {
+            divisor *= 10.0
+        }
+        return divisor
+    }
+
+    private fun parsePriceDecimalDigits(value: Any?): Int? {
+        val digits = when (value) {
+            is Int -> value
+            is Number -> value.toInt()
+            is String -> value.trim().toIntOrNull()
+            else -> null
+        }
+        if (digits == null || digits < 0 || digits > 6) {
+            return null
+        }
+        return digits
+    }
+
+    private fun isMilliPriceSecurityType(normalizedType: String): Boolean {
+        if (normalizedType.isEmpty()) {
+            return false
+        }
+
+        val keywords = listOf(
+            "ETF",
+            "LOF",
+            "FUND",
+            "REIT",
+            "REITS",
+            "基金",
+            "转债",
+            "可转债",
+            "债券",
+            "BOND",
+            "CONVERTIBLE",
+        )
+        return keywords.any { normalizedType.contains(it) }
+    }
+
+    private fun isLikelyFundCode(code: String): Boolean {
+        return Regex("^(5\\d{5}|1[56]\\d{4})$").matches(code)
+    }
+
+    private fun isLikelyBondCode(code: String): Boolean {
+        return Regex("^(11\\d{4}|12\\d{4})$").matches(code)
+    }
+
+    private fun isLikelyEquityCode(code: String): Boolean {
+        return Regex("^(000\\d{3}|001\\d{3}|002\\d{3}|003\\d{3}|300\\d{3}|301\\d{3}|600\\d{3}|601\\d{3}|603\\d{3}|605\\d{3}|688\\d{3})$").matches(code)
+    }
+}
+
 object MonitorStorage {
     private const val STORAGE_FOLDER = "stock_pulse_data"
     private const val SETTINGS_FILE = "monitor_settings.json"
@@ -107,6 +215,21 @@ object MonitorStorage {
     }
 
     fun isServiceEnabled(context: Context): Boolean = loadSettings(context).serviceEnabled
+
+    fun disableService(context: Context, message: String, checkedAtMillis: Long = System.currentTimeMillis()) {
+        val file = storageFile(context, SETTINGS_FILE)
+        val current = readJsonObject(file) ?: JSONObject()
+        current.put("serviceEnabled", false)
+        if (!current.has("soundEnabled")) {
+            current.put("soundEnabled", true)
+        }
+        if (!current.has("pollIntervalSeconds")) {
+            current.put("pollIntervalSeconds", 20)
+        }
+        current.put("lastCheckAt", formatIso8601(checkedAtMillis))
+        current.put("lastMessage", message.ifBlank { DEFAULT_MESSAGE })
+        writeJsonObject(file, current)
+    }
 
     fun updateStatus(context: Context, checkedAtMillis: Long, message: String) {
         val file = storageFile(context, SETTINGS_FILE)
@@ -138,6 +261,7 @@ object MonitorStorage {
                 code = code,
                 name = item.optString("name").orEmpty().trim(),
                 market = item.optString("market", "SZ").orEmpty().trim().ifBlank { "SZ" },
+                securityTypeName = item.optString("securityTypeName").orEmpty().trim(),
             )
         }
         return stocks
@@ -220,6 +344,8 @@ object MonitorStorage {
                         .put("code", quote.code)
                         .put("name", quote.name)
                         .put("market", quote.market)
+                        .put("securityTypeName", quote.securityTypeName)
+                        .put("priceDecimalDigits", quote.priceDecimalDigits ?: JSONObject.NULL)
                         .put("lastPrice", quote.lastPrice)
                         .put("previousClose", quote.previousClose)
                         .put("changeAmount", quote.changeAmount)
@@ -376,6 +502,12 @@ object MonitorStorage {
             code = optString("code").orEmpty(),
             name = optString("name").orEmpty(),
             market = optString("market", "SZ").orEmpty().ifBlank { "SZ" },
+            securityTypeName = optString("securityTypeName").orEmpty(),
+            priceDecimalDigits = optNullableInt("priceDecimalDigits")
+                ?: NativeSecurityPriceScale.defaultPriceDecimalDigits(
+                    optString("code").orEmpty(),
+                    optString("securityTypeName").orEmpty(),
+                ),
             lastPrice = optNumber("lastPrice"),
             previousClose = optNumber("previousClose"),
             changeAmount = optNumber("changeAmount"),

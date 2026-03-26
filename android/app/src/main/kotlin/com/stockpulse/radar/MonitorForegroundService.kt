@@ -113,14 +113,8 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         synchronized(ttsLock) {
             ttsInitCompleted = true
-            ttsReady = status == TextToSpeech.SUCCESS
+            ttsReady = status == TextToSpeech.SUCCESS && configureTtsVoice()
             if (ttsReady) {
-                val locale = Locale.SIMPLIFIED_CHINESE
-                val availability =
-                    textToSpeech?.isLanguageAvailable(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
-                if (availability >= TextToSpeech.LANG_AVAILABLE) {
-                    textToSpeech?.language = locale
-                }
                 textToSpeech?.setSpeechRate(1.0f)
                 textToSpeech?.setPitch(1.0f)
             }
@@ -271,6 +265,25 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
             }
             return ttsReady
         }
+    }
+
+    private fun configureTtsVoice(): Boolean {
+        val tts = textToSpeech ?: return false
+        val candidateLocales = linkedSetOf(
+            Locale.SIMPLIFIED_CHINESE,
+            Locale.CHINESE,
+            Locale.getDefault(),
+        )
+        for (locale in candidateLocales) {
+            val availability = tts.isLanguageAvailable(locale)
+            if (availability >= TextToSpeech.LANG_AVAILABLE) {
+                val result = tts.setLanguage(locale)
+                if (result >= TextToSpeech.LANG_AVAILABLE) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private fun startAsForeground(summary: String) {

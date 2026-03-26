@@ -6,14 +6,21 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.Locale
 
 class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady = false
+    private var ttsInitCompleted = false
+    private val pendingInitResults = mutableListOf<MethodChannel.Result>()
+    private val pendingSpeakRequests = mutableListOf<PendingSpeakRequest>()
+    private var lastSpeakAttemptStarted = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -22,8 +29,15 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     initMethod() -> {
-                        ensureTts()
-                        result.success(true)
+                        if (ttsInitCompleted) {
+                            result.success(ttsReady)
+                            return@setMethodCallHandler
+                        }
+                        if (!ensureTts()) {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                        pendingInitResults += result
                     }
 
                     speakMethod() -> {
@@ -32,8 +46,15 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                             result.success(false)
                             return@setMethodCallHandler
                         }
-                        ensureTts()
-                        result.success(speak(text))
+                        if (ttsInitCompleted) {
+                            result.success(if (ttsReady) speakNow(text) else false)
+                            return@setMethodCallHandler
+                        }
+                        if (!ensureTts()) {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                        pendingSpeakRequests += PendingSpeakRequest(text, result)
                     }
 
                     else -> result.notImplemented()
@@ -49,11 +70,13 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
                     startForegroundServiceMethod() -> {
                         val summary = call.argument<String>(summaryArgument()).orEmpty()
-                        startMonitorService(
+                        val started = MonitorServiceLauncher.startMonitorService(
+                            context = this,
                             action = MonitorForegroundService.ACTION_START_MONITOR,
                             summary = summary,
+                            disableOnFailure = true,
                         )
-                        result.success(true)
+                        result.success(started)
                     }
 
                     updateForegroundServiceMethod() -> {
@@ -63,18 +86,27 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                     }
 
                     reloadForegroundServiceMethod() -> {
-                        startMonitorService(action = MonitorForegroundService.ACTION_RELOAD_MONITOR)
-                        result.success(true)
+                        val started = MonitorServiceLauncher.startMonitorService(
+                            context = this,
+                            action = MonitorForegroundService.ACTION_RELOAD_MONITOR,
+                            disableOnFailure = true,
+                            failurePrefix = "后台监控恢复失败",
+                        )
+                        result.success(started)
                     }
 
                     refreshForegroundServiceMethod() -> {
-                        startMonitorService(action = MonitorForegroundService.ACTION_REFRESH_NOW)
-                        result.success(true)
+                        val started = MonitorServiceLauncher.startMonitorService(
+                            context = this,
+                            action = MonitorForegroundService.ACTION_REFRESH_NOW,
+                            disableOnFailure = true,
+                            failurePrefix = "后台监控刷新失败",
+                        )
+                        result.success(started)
                     }
 
                     stopForegroundServiceMethod() -> {
-                        stopMonitorService()
-                        result.success(true)
+                        result.success(MonitorServiceLauncher.stopMonitorService(this))
                     }
 
                     openBatterySettingsMethod() -> {
@@ -93,62 +125,114 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onInit(status: Int) {
-        ttsReady = status == TextToSpeech.SUCCESS
+        ttsInitCompleted = true
+        ttsReady = status == TextToSpeech.SUCCESS && configureTtsVoice()
         if (ttsReady) {
-            val locale = Locale.SIMPLIFIED_CHINESE
-            val availability = textToSpeech?.isLanguageAvailable(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
-            if (availability >= TextToSpeech.LANG_AVAILABLE) {
-                textToSpeech?.language = locale
-            }
             textToSpeech?.setSpeechRate(1.0f)
             textToSpeech?.setPitch(1.0f)
         }
+        flushPendingTtsRequests()
     }
 
     override fun onDestroy() {
+        failPendingTtsRequests()
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
         super.onDestroy()
     }
 
-    private fun ensureTts() {
-        if (textToSpeech == null) {
-            textToSpeech = TextToSpeech(this, this)
+    private fun ensureTts(): Boolean {
+        if (textToSpeech != null) {
+            return true
+        }
+        return runCatching {
+            ttsReady = false
+            ttsInitCompleted = false
+            textToSpeech = TextToSpeech(applicationContext, this)
+            true
+        }.getOrElse {
+            false
         }
     }
 
-    private fun speak(text: String): Boolean {
+    private fun speakNow(text: String): Boolean {
         if (!ttsReady) {
             return false
         }
-        return textToSpeech?.speak(
+        val utteranceId = utterancePrefix() + System.currentTimeMillis()
+        val startedSignal = CountDownLatch(1)
+        lastSpeakAttemptStarted = false
+        textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                lastSpeakAttemptStarted = true
+                startedSignal.countDown()
+            }
+
+            override fun onDone(utteranceId: String?) {
+                startedSignal.countDown()
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                startedSignal.countDown()
+            }
+
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                startedSignal.countDown()
+            }
+        })
+        val queued = textToSpeech?.speak(
             text,
             TextToSpeech.QUEUE_FLUSH,
             null,
-            utterancePrefix() + System.currentTimeMillis(),
+            utteranceId,
         ) == TextToSpeech.SUCCESS
+        if (!queued) {
+            return false
+        }
+        startedSignal.await(1500, TimeUnit.MILLISECONDS)
+        return lastSpeakAttemptStarted
     }
 
-    private fun startMonitorService(action: String, summary: String? = null) {
-        val intent = Intent(this, MonitorForegroundService::class.java).apply {
-            this.action = action
-            if (!summary.isNullOrBlank()) {
-                putExtra(summaryArgument(), summary)
+    private fun configureTtsVoice(): Boolean {
+        val tts = textToSpeech ?: return false
+        val candidateLocales = linkedSetOf(
+            Locale.SIMPLIFIED_CHINESE,
+            Locale.CHINESE,
+            Locale.getDefault(),
+        )
+        for (locale in candidateLocales) {
+            val availability = tts.isLanguageAvailable(locale)
+            if (availability >= TextToSpeech.LANG_AVAILABLE) {
+                val result = tts.setLanguage(locale)
+                if (result >= TextToSpeech.LANG_AVAILABLE) {
+                    return true
+                }
             }
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        return false
+    }
+
+    private fun flushPendingTtsRequests() {
+        val initResults = pendingInitResults.toList()
+        pendingInitResults.clear()
+        initResults.forEach { it.success(ttsReady) }
+
+        val speakRequests = pendingSpeakRequests.toList()
+        pendingSpeakRequests.clear()
+        speakRequests.forEach { request ->
+            request.result.success(if (ttsReady) speakNow(request.text) else false)
         }
     }
 
-    private fun stopMonitorService() {
-        val stopIntent = Intent(this, MonitorForegroundService::class.java).apply {
-            action = MonitorForegroundService.ACTION_STOP_MONITOR
+    private fun failPendingTtsRequests() {
+        if (pendingInitResults.isEmpty() && pendingSpeakRequests.isEmpty()) {
+            return
         }
-        startService(stopIntent)
+        ttsReady = false
+        ttsInitCompleted = true
+        flushPendingTtsRequests()
     }
 
     private fun openBatteryOptimizationSettings() {
@@ -210,4 +294,9 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private fun openBatterySettingsMethod(): String = "openBatteryOptimizationSettings"
 
     private fun openNotificationSettingsMethod(): String = "openNotificationSettings"
+
+    private data class PendingSpeakRequest(
+        val text: String,
+        val result: MethodChannel.Result,
+    )
 }

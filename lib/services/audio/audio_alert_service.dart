@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
 abstract class AudioAlertService {
-  Future<void> preload();
+  Future<bool> preload();
   Future<bool> speak(String text);
 }
 
@@ -9,11 +9,12 @@ class PlatformTtsAudioAlertService implements AudioAlertService {
   static const MethodChannel _channel = MethodChannel('stock_pulse/tts');
 
   @override
-  Future<void> preload() async {
+  Future<bool> preload() async {
     try {
-      await _channel.invokeMethod<void>('initTts');
+      final result = await _channel.invokeMethod<bool>('initTts');
+      return result ?? false;
     } on PlatformException {
-      // Keep the app usable on platforms without native TTS wiring.
+      return false;
     }
   }
 
@@ -25,6 +26,10 @@ class PlatformTtsAudioAlertService implements AudioAlertService {
     }
 
     try {
+      final ready = await preload();
+      if (!ready) {
+        return false;
+      }
       final result = await _channel.invokeMethod<bool>(
         'speak',
         <String, dynamic>{'text': trimmed},

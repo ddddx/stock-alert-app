@@ -240,7 +240,7 @@ class NativeMonitorEngine {
         changePercent: Double,
     ): String {
         val direction = if (changeAmount >= 0) "上涨" else "下跌"
-        return "${current.name}(${current.code}) ${rule.lookbackMinutes} 分钟内$direction${formatAbsPercent(changePercent)}，变动 ${formatSignedPrice(changeAmount)}，现价 ${formatPrice(current.lastPrice)}。"
+        return "${current.name}(${current.code}) ${rule.lookbackMinutes} 分钟内$direction${formatAbsPercent(changePercent)}，变动 ${formatSignedPrice(changeAmount, current)}，现价 ${formatPrice(current.lastPrice, current)}。"
     }
 
     private fun buildStepAlertMessage(
@@ -253,18 +253,20 @@ class NativeMonitorEngine {
         crossedPercent: Double,
     ): String {
         return if (rule.stepMetric == "percent") {
-            "${current.name}(${current.code}) 涨跌幅跨过 ${String.format(Locale.US, "%.2f", currentIndex * (rule.stepValue ?: 0.0))}% 台阶，本次累计波动 ${formatSignedPrice(crossedAmount)}，累计涨跌幅 ${formatPercent(crossedPercent)}，当前涨跌幅 ${formatPercent(current.changePercent)}，现价 ${formatPrice(current.lastPrice)}。"
+            "${current.name}(${current.code}) 涨跌幅跨过 ${String.format(Locale.US, "%.2f", currentIndex * (rule.stepValue ?: 0.0))}% 台阶，本次累计波动 ${formatSignedPrice(crossedAmount, current)}，累计涨跌幅 ${formatPercent(crossedPercent)}，当前涨跌幅 ${formatPercent(current.changePercent)}，现价 ${formatPrice(current.lastPrice, current)}。"
         } else {
             val stepValue = rule.stepValue ?: 0.0
-            "${current.name}(${current.code}) 价格从 ${formatPrice(referenceValue + previousIndex * stepValue)} 跨到 ${formatPrice(referenceValue + currentIndex * stepValue)} 台阶，本次累计波动 ${formatSignedPrice(crossedAmount)}，累计涨跌幅 ${formatPercent(crossedPercent)}，当前价格 ${formatPrice(current.lastPrice)}。"
+            "${current.name}(${current.code}) 价格从 ${formatPrice(referenceValue + previousIndex * stepValue, current)} 跨到 ${formatPrice(referenceValue + currentIndex * stepValue, current)} 台阶，本次累计波动 ${formatSignedPrice(crossedAmount, current)}，累计涨跌幅 ${formatPercent(crossedPercent)}，当前价格 ${formatPrice(current.lastPrice, current)}。"
         }
     }
 
-    private fun formatPrice(value: Double): String = "¥${String.format(Locale.US, "%.2f", value)}"
+    private fun formatPrice(value: Double, quote: NativeQuote): String {
+        return "¥${String.format(Locale.US, "%.${priceFractionDigits(quote)}f", value)}"
+    }
 
-    private fun formatSignedPrice(value: Double): String {
+    private fun formatSignedPrice(value: Double, quote: NativeQuote): String {
         val sign = if (value > 0) "+" else if (value < 0) "-" else ""
-        return "$sign¥${String.format(Locale.US, "%.2f", abs(value))}"
+        return "$sign¥${String.format(Locale.US, "%.${priceFractionDigits(quote)}f", abs(value))}"
     }
 
     private fun formatPercent(value: Double): String {
@@ -273,6 +275,11 @@ class NativeMonitorEngine {
     }
 
     private fun formatAbsPercent(value: Double): String = "${String.format(Locale.US, "%.2f", abs(value))}%"
+
+    private fun priceFractionDigits(quote: NativeQuote): Int {
+        return quote.priceDecimalDigits
+            ?: if (NativeSecurityPriceScale.divisorFor(quote.code, quote.securityTypeName) >= 1000.0) 3 else 2
+    }
 }
 
 class NativeMarketDataSource {
@@ -283,7 +290,7 @@ class NativeMarketDataSource {
     private fun fetchSingleQuote(stock: NativeStock): NativeQuote {
         val url = URL(
             "https://push2.eastmoney.com/api/qt/stock/get" +
-                "?invt=2&fltt=2&secid=${stock.secId}&fields=f57,f58,f43,f169,f170,f46,f44,f45,f47,f48,f60,f18"
+                "?invt=2&fltt=2&secid=${stock.secId}&fields=f57,f58,f59,f43,f169,f170,f46,f44,f45,f47,f48,f60,f18"
         )
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
@@ -302,18 +309,23 @@ class NativeMarketDataSource {
             val body = connection.inputStream.bufferedReader().use { it.readText() }
             val payload = JSONObject(body)
             val data = payload.optJSONObject("data") ?: throw IllegalStateException("行情接口返回为空")
-            val previousClose = scaledNumber(data, "f60").takeIf { it != 0.0 } ?: scaledNumber(data, "f18")
+            val quoteCode = data.optString("f57").orEmpty().ifBlank { stock.code }
+            val priceDecimalDigits = priceDecimalDigits(data, stock, quoteCode)
+            val previousClose = scaledPrice(data, stock, "f60", priceDecimalDigits).takeIf { it != 0.0 }
+                ?: scaledPrice(data, stock, "f18", priceDecimalDigits)
             return NativeQuote(
-                code = data.optString("f57").orEmpty().ifBlank { stock.code },
+                code = quoteCode,
                 name = data.optString("f58").orEmpty().ifBlank { stock.name },
                 market = stock.market,
-                lastPrice = scaledNumber(data, "f43"),
+                securityTypeName = stock.securityTypeName,
+                priceDecimalDigits = priceDecimalDigits,
+                lastPrice = scaledPrice(data, stock, "f43", priceDecimalDigits),
                 previousClose = previousClose,
-                changeAmount = scaledNumber(data, "f169"),
-                changePercent = scaledNumber(data, "f170"),
-                openPrice = scaledNumber(data, "f46"),
-                highPrice = scaledNumber(data, "f44"),
-                lowPrice = scaledNumber(data, "f45"),
+                changeAmount = scaledPrice(data, stock, "f169", priceDecimalDigits),
+                changePercent = scaledPercent(data, "f170"),
+                openPrice = scaledPrice(data, stock, "f46", priceDecimalDigits),
+                highPrice = scaledPrice(data, stock, "f44", priceDecimalDigits),
+                lowPrice = scaledPrice(data, stock, "f45", priceDecimalDigits),
                 volume = plainNumber(data, "f47"),
                 timestampMillis = System.currentTimeMillis(),
             )
@@ -322,7 +334,23 @@ class NativeMarketDataSource {
         }
     }
 
-    private fun scaledNumber(json: JSONObject, key: String): Double = plainNumber(json, key) / 100.0
+    private fun scaledPrice(json: JSONObject, stock: NativeStock, key: String, priceDecimalDigits: Int): Double {
+        return plainNumber(json, key) / NativeSecurityPriceScale.divisorFor(
+            code = stock.code,
+            securityTypeName = stock.securityTypeName,
+            priceDecimalDigits = priceDecimalDigits,
+        )
+    }
+
+    private fun scaledPercent(json: JSONObject, key: String): Double = plainNumber(json, key) / 100.0
+
+    private fun priceDecimalDigits(json: JSONObject, stock: NativeStock, quoteCode: String): Int {
+        return NativeSecurityPriceScale.resolvePriceDecimalDigits(
+            code = quoteCode,
+            securityTypeName = stock.securityTypeName,
+            eastmoneyPriceDecimalDigits = json.opt("f59"),
+        )
+    }
 
     private fun plainNumber(json: JSONObject, key: String): Double {
         if (!json.has(key) || json.isNull(key)) {

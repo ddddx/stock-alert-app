@@ -5,6 +5,8 @@ class StockQuoteSnapshot extends StockIdentity {
     required super.code,
     required super.name,
     required super.market,
+    super.securityTypeName = '',
+    this.priceDecimalDigits,
     required this.lastPrice,
     required this.previousClose,
     required this.changeAmount,
@@ -16,6 +18,7 @@ class StockQuoteSnapshot extends StockIdentity {
     required this.timestamp,
   });
 
+  final int? priceDecimalDigits;
   final double lastPrice;
   final double previousClose;
   final double changeAmount;
@@ -25,6 +28,16 @@ class StockQuoteSnapshot extends StockIdentity {
   final double lowPrice;
   final double volume;
   final DateTime timestamp;
+
+  @override
+  int get priceScaleDivisor => SecurityPriceScale.divisorFor(
+        code: code,
+        securityTypeName: securityTypeName,
+        priceDecimalDigits: priceDecimalDigits,
+      );
+
+  int get resolvedPriceDecimalDigits =>
+      priceDecimalDigits ?? (super.priceScaleDivisor >= 1000 ? 3 : 2);
 
   bool get isPositive => changeAmount >= 0;
 }

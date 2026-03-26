@@ -3,6 +3,7 @@ class StockIdentity {
     required this.code,
     required this.name,
     required this.market,
+    this.securityTypeName = '',
   });
 
   factory StockIdentity.fromJson(Map<String, dynamic> json) {
@@ -10,33 +11,168 @@ class StockIdentity {
       code: json['code'] as String? ?? '',
       name: json['name'] as String? ?? '',
       market: json['market'] as String? ?? 'SZ',
+      securityTypeName: json['securityTypeName'] as String? ?? '',
     );
   }
 
   String get secId => '${market == 'SH' ? '1' : '0'}.$code';
   String get displayName => '$name ($code)';
+  String get subtitle => securityTypeName.isEmpty
+      ? '$market 证券'
+      : '$market 证券 · $securityTypeName';
+  int get priceScaleDivisor => SecurityPriceScale.divisorFor(
+        code: code,
+        securityTypeName: securityTypeName,
+      );
 
   StockIdentity copyWith({
     String? code,
     String? name,
     String? market,
+    String? securityTypeName,
   }) {
     return StockIdentity(
       code: code ?? this.code,
       name: name ?? this.name,
       market: market ?? this.market,
+      securityTypeName: securityTypeName ?? this.securityTypeName,
     );
   }
 
   final String code;
   final String name;
   final String market;
+  final String securityTypeName;
 
   Map<String, dynamic> toJson() {
     return {
       'code': code,
       'name': name,
       'market': market,
+      'securityTypeName': securityTypeName,
     };
+  }
+}
+
+class SecurityPriceScale {
+  static const int stockDivisor = 100;
+  static const int milliPriceDivisor = 1000;
+
+  static int resolvePriceDecimalDigits({
+    required String code,
+    String securityTypeName = '',
+    dynamic eastmoneyPriceDecimalDigits,
+  }) {
+    final quoteDigits = _parsePriceDecimalDigits(eastmoneyPriceDecimalDigits);
+    if (quoteDigits != null) {
+      return quoteDigits;
+    }
+    return defaultPriceDecimalDigits(
+      code: code,
+      securityTypeName: securityTypeName,
+    );
+  }
+
+  static int defaultPriceDecimalDigits({
+    required String code,
+    String securityTypeName = '',
+  }) {
+    return _isMilliPriceSecurity(
+          code: code.trim(),
+          securityTypeName: securityTypeName,
+        )
+        ? 3
+        : 2;
+  }
+
+  static int divisorFor({
+    required String code,
+    String securityTypeName = '',
+    dynamic quoteDecimalDigits,
+    int? priceDecimalDigits,
+  }) {
+    final digits =
+        priceDecimalDigits ??
+        resolvePriceDecimalDigits(
+          code: code,
+          securityTypeName: securityTypeName,
+          eastmoneyPriceDecimalDigits: quoteDecimalDigits,
+        );
+    return divisorForPriceDecimalDigits(digits);
+  }
+
+  static int divisorForPriceDecimalDigits(int digits) {
+    var divisor = 1;
+    for (var index = 0; index < digits; index += 1) {
+      divisor *= 10;
+    }
+    return divisor;
+  }
+
+  static bool _isMilliPriceSecurity({
+    required String code,
+    required String securityTypeName,
+  }) {
+    if (_isLikelyFundCode(code) || _isLikelyBondCode(code)) {
+      return true;
+    }
+
+    if (_isLikelyEquityCode(code)) {
+      return false;
+    }
+
+    return _isMilliPriceSecurityType(_normalize(securityTypeName));
+  }
+
+  static bool _isMilliPriceSecurityType(String normalizedType) {
+    if (normalizedType.isEmpty) {
+      return false;
+    }
+
+    const keywords = [
+      'ETF',
+      'LOF',
+      'FUND',
+      'REIT',
+      'REITS',
+      '基金',
+      '转债',
+      '可转债',
+      '债券',
+      'BOND',
+      'CONVERTIBLE',
+    ];
+    return keywords.any(normalizedType.contains);
+  }
+
+  static bool _isLikelyFundCode(String code) {
+    return RegExp(r'^(5\d{5}|1[56]\d{4})$').hasMatch(code);
+  }
+
+  static bool _isLikelyBondCode(String code) {
+    return RegExp(r'^(11\d{4}|12\d{4})$').hasMatch(code);
+  }
+
+  static bool _isLikelyEquityCode(String code) {
+    return RegExp(
+      r'^(000\d{3}|001\d{3}|002\d{3}|003\d{3}|300\d{3}|301\d{3}|600\d{3}|601\d{3}|603\d{3}|605\d{3}|688\d{3})$',
+    ).hasMatch(code);
+  }
+
+  static String _normalize(String value) {
+    return value.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
+  }
+
+  static int? _parsePriceDecimalDigits(dynamic value) {
+    final digits = switch (value) {
+      int() => value,
+      num() => value.toInt(),
+      String() => int.tryParse(value.trim()),
+      _ => null,
+    };
+    if (digits == null || digits < 0 || digits > 6) {
+      return null;
+    }
+    return digits;
   }
 }

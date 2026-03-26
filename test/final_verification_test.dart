@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_alert_app/data/models/monitor_status.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
@@ -103,6 +104,99 @@ void main() {
     expect(audioService.spokenTexts, hasLength(1));
     expect(find.textContaining('试播失败：'), findsWidgets);
   });
+  testWidgets('preview playback does not attempt speak when preload fails', (
+    tester,
+  ) async {
+    final settingsRepository = _FakeSettingsRepository();
+    final audioService = _FakeAudioAlertService(
+      shouldSucceed: true,
+      preloadResult: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsPage(
+            repository: settingsRepository,
+            monitorService: _FakeMonitorService(),
+            audioService: audioService,
+            messageBuilder: AlertMessageBuilder(),
+            platformBridgeService: _FakePlatformBridgeService(),
+            previewQuote: _sampleQuote(),
+            onRefresh: () async {},
+            onChanged: () {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.volume_up_outlined));
+    await tester.pumpAndSettle();
+
+    expect(audioService.preloadCalls, 1);
+    expect(audioService.spokenTexts, isEmpty);
+  });
+
+  test('platform TTS preload returns native init result', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const channel = MethodChannel('stock_pulse/tts');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'initTts') {
+        return false;
+      }
+      fail('Unexpected method: ${call.method}');
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final service = PlatformTtsAudioAlertService();
+    expect(await service.preload(), isFalse);
+  });
+
+  test('platform TTS speak short-circuits when native init fails', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const channel = MethodChannel('stock_pulse/tts');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var speakCalled = false;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'initTts') {
+        return false;
+      }
+      if (call.method == 'speak') {
+        speakCalled = true;
+        return true;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final service = PlatformTtsAudioAlertService();
+    expect(await service.speak('preview text'), isFalse);
+    expect(speakCalled, isFalse);
+  });
+
+  test('platform TTS speak returns native playback result', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const channel = MethodChannel('stock_pulse/tts');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'initTts') {
+        return true;
+      }
+      if (call.method == 'speak') {
+        expect(call.arguments, <String, dynamic>{'text': 'preview text'});
+        return false;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final service = PlatformTtsAudioAlertService();
+    expect(await service.speak('  preview text  '), isFalse);
+  });
 }
 
 class _FakeWatchlistRepository implements WatchlistRepository {
@@ -193,16 +287,20 @@ class _FakeSettingsRepository implements SettingsRepository {
 }
 
 class _FakeAudioAlertService implements AudioAlertService {
-  _FakeAudioAlertService({required this.shouldSucceed});
+  _FakeAudioAlertService({
+    required this.shouldSucceed,
+    this.preloadResult = true,
+  });
 
   final bool shouldSucceed;
+  final bool preloadResult;
   int preloadCalls = 0;
   final List<String> spokenTexts = [];
 
   @override
   Future<bool> preload() async {
     preloadCalls += 1;
-    return true;
+    return preloadResult;
   }
 
   @override
