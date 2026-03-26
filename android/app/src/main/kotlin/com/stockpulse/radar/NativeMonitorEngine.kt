@@ -88,27 +88,31 @@ class NativeMonitorEngine {
         runtimeState: NativeRuntimeState,
         nowMillis: Long,
     ): List<NativeAlertTrigger> {
-        val quoteByCode = quotes.associateBy { it.code }
+        val liveStateKeys = mutableSetOf<String>()
         val triggers = mutableListOf<NativeAlertTrigger>()
 
         for (rule in rules.filter { it.enabled }) {
-            val quote = quoteByCode[rule.stockCode] ?: continue
-            val state = runtimeState.ruleStates[rule.id] ?: NativeRuleState()
-            when (rule.type) {
-                "shortWindowMove" -> {
-                    val result = evaluateShortWindowRule(rule, quote, state, runtimeState, nowMillis)
-                    runtimeState.ruleStates[rule.id] = result.first
-                    result.second?.let(triggers::add)
-                }
+            for (quote in quotes.filter { rule.appliesToCode(it.code) }) {
+                val stateKey = rule.stateKeyFor(quote.code)
+                liveStateKeys += stateKey
+                val state = runtimeState.ruleStates[stateKey] ?: NativeRuleState()
+                when (rule.type) {
+                    "shortWindowMove" -> {
+                        val result = evaluateShortWindowRule(rule, quote, state, runtimeState, nowMillis)
+                        runtimeState.ruleStates[stateKey] = result.first
+                        result.second?.let(triggers::add)
+                    }
 
-                "stepAlert" -> {
-                    val result = evaluateStepRule(rule, quote, state, nowMillis)
-                    runtimeState.ruleStates[rule.id] = result.first
-                    result.second?.let(triggers::add)
+                    "stepAlert" -> {
+                        val result = evaluateStepRule(rule, quote, state, nowMillis)
+                        runtimeState.ruleStates[stateKey] = result.first
+                        result.second?.let(triggers::add)
+                    }
                 }
             }
         }
 
+        runtimeState.ruleStates.keys.removeAll { it !in liveStateKeys }
         return triggers
     }
 
@@ -186,8 +190,8 @@ class NativeMonitorEngine {
             return state.copy(active = false) to null
         }
 
-        val referenceValue = if (rule.stepMetric == "percent") current.previousClose else (rule.anchorPrice ?: current.lastPrice)
-        val previousIndex = state.lastStepIndex
+        val referenceValue = if (rule.stepMetric == "percent") current.previousClose else (rule.anchorPriceFor(current.code) ?: current.lastPrice)
+        val previousIndex = state.lastStepIndex ?: currentIndex
         val crossedAmount = current.lastPrice - referenceValue
         val crossedPercent = if (referenceValue == 0.0) 0.0 else crossedAmount / referenceValue * 100.0
         val message = buildStepAlertMessage(
@@ -224,7 +228,7 @@ class NativeMonitorEngine {
         return if (rule.stepMetric == "percent") {
             bandIndex(quote.changePercent / stepValue)
         } else {
-            val anchor = rule.anchorPrice ?: quote.lastPrice
+            val anchor = rule.anchorPriceFor(quote.code) ?: quote.lastPrice
             bandIndex((quote.lastPrice - anchor) / stepValue)
         }
     }

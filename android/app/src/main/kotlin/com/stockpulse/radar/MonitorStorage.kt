@@ -50,6 +50,8 @@ data class NativeRule(
     val stockCode: String,
     val stockName: String,
     val market: String,
+    val applyToAllWatchlist: Boolean,
+    val targetStocks: List<NativeStock>,
     val type: String,
     val enabled: Boolean,
     val moveThresholdPercent: Double?,
@@ -58,7 +60,49 @@ data class NativeRule(
     val stepValue: Double?,
     val stepMetric: String?,
     val anchorPrice: Double?,
+    val anchorPricesByCode: Map<String, Double>,
 )
+
+fun NativeRule.resolvedTargetStocks(): List<NativeStock> {
+    if (targetStocks.isNotEmpty()) {
+        return targetStocks
+    }
+    if (stockCode.isBlank()) {
+        return emptyList()
+    }
+    return listOf(
+        NativeStock(
+            code = stockCode,
+            name = stockName,
+            market = market,
+        ),
+    )
+}
+
+fun NativeRule.appliesToCode(code: String): Boolean {
+    if (applyToAllWatchlist) {
+        return true
+    }
+    return resolvedTargetStocks().any { it.code == code }
+}
+
+fun NativeRule.anchorPriceFor(code: String): Double? {
+    return anchorPricesByCode[code] ?: anchorPrice?.takeIf { stockCode == code }
+}
+
+fun NativeRule.stateKeyFor(code: String): String {
+    return listOf(
+        id,
+        code,
+        type,
+        moveThresholdPercent?.let { String.format(Locale.US, "%.4f", it) }.orEmpty(),
+        lookbackMinutes?.toString().orEmpty(),
+        moveDirection.orEmpty(),
+        stepValue?.let { String.format(Locale.US, "%.4f", it) }.orEmpty(),
+        stepMetric.orEmpty(),
+        anchorPriceFor(code)?.let { String.format(Locale.US, "%.4f", it) }.orEmpty(),
+    ).joinToString(":")
+}
 
 data class NativeRuleState(
     val active: Boolean = false,
@@ -285,6 +329,8 @@ object MonitorStorage {
                 stockCode = item.optString("stockCode").orEmpty().trim(),
                 stockName = item.optString("stockName").orEmpty().trim(),
                 market = item.optString("market", "SZ").orEmpty().trim().ifBlank { "SZ" },
+                applyToAllWatchlist = item.optBoolean("applyToAllWatchlist", false),
+                targetStocks = item.optStockList("targetStocks"),
                 type = item.optString("type", "shortWindowMove").orEmpty().trim(),
                 enabled = item.optBoolean("enabled", true),
                 moveThresholdPercent = item.optNullableDouble("moveThresholdPercent"),
@@ -293,6 +339,8 @@ object MonitorStorage {
                 stepValue = item.optNullableDouble("stepValue"),
                 stepMetric = item.optNullableString("stepMetric"),
                 anchorPrice = item.optNullableDouble("anchorPrice"),
+                anchorPricesByCode = item.optDoubleMap("anchorPricesByCode")
+                    .ifEmpty { item.optDoubleMap("anchorPrices") },
             )
         }
         return rules
@@ -479,6 +527,50 @@ object MonitorStorage {
             is String -> value.toDoubleOrNull()
             else -> null
         }
+    }
+
+    private fun JSONObject.optDoubleMap(key: String): Map<String, Double> {
+        if (isNull(key) || !has(key)) {
+            return emptyMap()
+        }
+        val raw = optJSONObject(key) ?: return emptyMap()
+        val result = linkedMapOf<String, Double>()
+        val keys = raw.keys()
+        while (keys.hasNext()) {
+            val code = keys.next().orEmpty().trim()
+            val value = raw.opt(code)
+            val parsed = when (value) {
+                is Number -> value.toDouble()
+                is String -> value.toDoubleOrNull()
+                else -> null
+            }
+            if (code.isNotEmpty() && parsed != null && parsed > 0) {
+                result[code] = parsed
+            }
+        }
+        return result
+    }
+
+    private fun JSONObject.optStockList(key: String): List<NativeStock> {
+        if (isNull(key) || !has(key)) {
+            return emptyList()
+        }
+        val array = optJSONArray(key) ?: return emptyList()
+        val stocks = mutableListOf<NativeStock>()
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val code = item.optString("code").orEmpty().trim()
+            if (code.isEmpty()) {
+                continue
+            }
+            stocks += NativeStock(
+                code = code,
+                name = item.optString("name").orEmpty().trim(),
+                market = item.optString("market", "SZ").orEmpty().trim().ifBlank { "SZ" },
+                securityTypeName = item.optString("securityTypeName").orEmpty().trim(),
+            )
+        }
+        return stocks.distinctBy { it.code }
     }
 
     private fun JSONObject.optNullableInt(key: String): Int? {
