@@ -145,65 +145,93 @@ void main() {
     expect(settingsRepository.getStatus().serviceEnabled, isFalse);
   });
 
-  test('platform TTS preload returns native init result', () async {
+  test('flutter TTS preload returns plugin setup result', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    const channel = MethodChannel('stock_pulse/tts');
+    const channel = MethodChannel('flutter_tts');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'initTts') {
+      if (call.method == 'awaitSpeakCompletion') {
+        expect(call.arguments, true);
         return false;
       }
       fail('Unexpected method: ${call.method}');
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final service = PlatformTtsAudioAlertService();
+    final service = FlutterTtsAudioAlertService();
     expect(await service.preload(), isFalse);
   });
 
-  test('platform TTS speak short-circuits when native init fails', () async {
+  test('flutter TTS speak short-circuits when plugin preload fails', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    const channel = MethodChannel('stock_pulse/tts');
+    const channel = MethodChannel('flutter_tts');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     var speakCalled = false;
     messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'initTts') {
+      if (call.method == 'awaitSpeakCompletion') {
         return false;
       }
       if (call.method == 'speak') {
         speakCalled = true;
-        return true;
+        return 1;
       }
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final service = PlatformTtsAudioAlertService();
+    final service = FlutterTtsAudioAlertService();
     expect(await service.speak('preview text'), isFalse);
     expect(speakCalled, isFalse);
   });
 
-  test('platform TTS speak returns native playback result', () async {
+  test('flutter TTS speak returns plugin playback result', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    const channel = MethodChannel('stock_pulse/tts');
+    const channel = MethodChannel('flutter_tts');
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final methods = <String>[];
     messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'initTts') {
+      methods.add(call.method);
+      if (call.method == 'awaitSpeakCompletion') {
         return true;
       }
+      if (call.method == 'stop') {
+        return 1;
+      }
       if (call.method == 'speak') {
-        expect(call.arguments, <String, dynamic>{'text': 'preview text'});
+        expect(call.arguments, 'preview text');
         return false;
       }
       return null;
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final service = PlatformTtsAudioAlertService();
+    final service = FlutterTtsAudioAlertService();
     expect(await service.speak('  preview text  '), isFalse);
+    expect(methods, ['awaitSpeakCompletion', 'stop', 'speak']);
+  });
+
+  test('flutter TTS preload is cached after a successful setup', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    const channel = MethodChannel('flutter_tts');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    var preloadCalls = 0;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'awaitSpeakCompletion') {
+        preloadCalls += 1;
+        return 1;
+      }
+      fail('Unexpected method: ${call.method}');
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final service = FlutterTtsAudioAlertService();
+    expect(await service.preload(), isTrue);
+    expect(await service.preload(), isTrue);
+    expect(preloadCalls, 1);
   });
 }
 

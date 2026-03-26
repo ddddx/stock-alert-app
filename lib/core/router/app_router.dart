@@ -55,7 +55,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       LocalSettingsRepository(store: _settingsStore);
   final _marketDataService = AshareMarketDataService();
   final _messageBuilder = AlertMessageBuilder();
-  final _audioService = PlatformTtsAudioAlertService();
+  final _audioService = FlutterTtsAudioAlertService();
   late final _monitorService = AshareMonitorService(
     watchlistRepository: _watchlistRepository,
     alertRepository: _alertRepository,

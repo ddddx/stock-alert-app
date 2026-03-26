@@ -1,18 +1,33 @@
 import 'package:flutter/services.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 abstract class AudioAlertService {
   Future<bool> preload();
   Future<bool> speak(String text);
 }
 
-class PlatformTtsAudioAlertService implements AudioAlertService {
-  static const MethodChannel _channel = MethodChannel('stock_pulse/tts');
+class FlutterTtsAudioAlertService implements AudioAlertService {
+  FlutterTtsAudioAlertService({FlutterTts? flutterTts})
+      : _flutterTts = flutterTts ?? FlutterTts();
+
+  final FlutterTts _flutterTts;
+  bool _preloaded = false;
+
+  bool _isSuccessfulResult(dynamic result) {
+    return result == null || result == true || result == 1;
+  }
 
   @override
   Future<bool> preload() async {
+    if (_preloaded) {
+      return true;
+    }
+
     try {
-      final result = await _channel.invokeMethod<bool>('initTts');
-      return result ?? false;
+      final result = await _flutterTts.awaitSpeakCompletion(true);
+      final ready = _isSuccessfulResult(result);
+      _preloaded = ready;
+      return ready;
     } on PlatformException {
       return false;
     }
@@ -30,11 +45,9 @@ class PlatformTtsAudioAlertService implements AudioAlertService {
       if (!ready) {
         return false;
       }
-      final result = await _channel.invokeMethod<bool>(
-        'speak',
-        <String, dynamic>{'text': trimmed},
-      );
-      return result ?? false;
+      await _flutterTts.stop();
+      final result = await _flutterTts.speak(trimmed);
+      return _isSuccessfulResult(result);
     } on PlatformException {
       return false;
     }

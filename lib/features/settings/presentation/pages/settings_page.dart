@@ -211,7 +211,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     final played = await widget.audioService.speak(text);
                     final message = played
                         ? '已试播：$text'
-                        : '试播失败：系统 TTS 未完成初始化、未安装可用语音引擎，或当前媒体音量过低。文案为：$text';
+                        : '试播失败：语音插件未完成初始化、设备缺少可用 TTS 服务，或当前媒体音量过低。文案为：$text';
                     _showFeedback(message);
                   },
                   icon: const Icon(Icons.volume_up_outlined),
