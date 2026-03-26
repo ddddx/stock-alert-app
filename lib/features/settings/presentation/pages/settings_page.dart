@@ -162,7 +162,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 key: const Key('poll-interval-input'),
                 controller: _intervalController,
                 keyboardType: TextInputType.number,
-                inputFormatters: const [FilteringTextInputFormatter.digitsOnly],
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
                   labelText: '后台轮询间隔',
                   border: OutlineInputBorder(),
