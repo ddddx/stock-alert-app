@@ -43,7 +43,8 @@ class _WatchlistPageState extends State<WatchlistPage> {
         children: [
           SectionCard(
             title: 'Watchlist',
-            subtitle: 'Search by code, name, or pinyin. Swipe left on a stock to reveal delete.',
+            subtitle:
+                'Search by code, name, or pinyin. Swipe left on a stock to reveal delete.',
             trailing: Wrap(
               spacing: 8,
               children: [
@@ -62,7 +63,8 @@ class _WatchlistPageState extends State<WatchlistPage> {
             child: items.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Text('The watchlist is empty. Use Add to track a stock.'),
+                    child: Text(
+                        'The watchlist is empty. Use Add to track a stock.'),
                   )
                 : Column(
                     children: [
@@ -72,10 +74,6 @@ class _WatchlistPageState extends State<WatchlistPage> {
                           stock: item,
                           quote: quoteByCode[item.code],
                           onRemove: () async {
-                            final confirmed = await _confirmDelete(item);
-                            if (!confirmed) {
-                              return;
-                            }
                             await widget.repository.remove(item.code);
                             if (mounted) {
                               setState(() {});
@@ -88,29 +86,6 @@ class _WatchlistPageState extends State<WatchlistPage> {
         ],
       ),
     );
-  }
-
-  Future<bool> _confirmDelete(StockIdentity stock) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('Delete watchlist item'),
-              content: Text('Remove ${stock.displayName} from the watchlist?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Delete'),
-                ),
-              ],
-            );
-          },
-        ) ??
-        false;
   }
 
   Future<void> _showAddSheet() async {
@@ -458,9 +433,8 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
           enabled: !disabled,
           title: Text('${item.name} (${item.code})'),
           subtitle: Text(item.subtitle),
-          trailing: disabled
-              ? const Text('Added')
-              : const Icon(Icons.chevron_right),
+          trailing:
+              disabled ? const Text('Added') : const Icon(Icons.chevron_right),
           onTap: disabled ? null : () => Navigator.of(context).pop(item),
         );
       },
