@@ -49,8 +49,8 @@ object MonitorServiceLauncher {
     }
 
     private fun Throwable.safeMessage(): String {
-        return when (this) {
-            is SecurityException -> message ?: "缺少前台服务权限"
+        return when {
+            this is SecurityException -> message ?: "缺少前台服务权限"
             isForegroundServiceStartNotAllowed() ->
                 message ?: "当前系统状态不允许启动前台服务"
             else -> message ?: javaClass.simpleName

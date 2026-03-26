@@ -261,12 +261,12 @@ class NativeMonitorEngine {
     }
 
     private fun formatPrice(value: Double, quote: NativeQuote): String {
-        return "¥${String.format(Locale.US, "%.${priceFractionDigits(quote)}f", value)}"
+        return "${String.format(Locale.US, "%.${priceFractionDigits(quote)}f", value)}元"
     }
 
     private fun formatSignedPrice(value: Double, quote: NativeQuote): String {
         val sign = if (value > 0) "+" else if (value < 0) "-" else ""
-        return "$sign¥${String.format(Locale.US, "%.${priceFractionDigits(quote)}f", abs(value))}"
+        return "$sign${String.format(Locale.US, "%.${priceFractionDigits(quote)}f", abs(value))}元"
     }
 
     private fun formatPercent(value: Double): String {

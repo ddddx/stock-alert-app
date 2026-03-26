@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
@@ -20,9 +22,10 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady = false
     private var ttsInitCompleted = false
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val pendingInitResults = mutableListOf<MethodChannel.Result>()
     private val pendingSpeakRequests = mutableListOf<PendingSpeakRequest>()
-    private val activeUtteranceResults = mutableMapOf<String, MethodChannel.Result>()
+    private val activeUtterances = mutableMapOf<String, ActiveUtterance>()
     private var notificationPermissionResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -167,8 +170,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         failPendingTtsRequests()
-        activeUtteranceResults.values.forEach { it.success(false) }
-        activeUtteranceResults.clear()
+        activeUtterances.keys.toList().forEach { finishUtterance(it, false) }
         notificationPermissionResult?.success(false)
         notificationPermissionResult = null
         textToSpeech?.stop()
@@ -197,7 +199,10 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             return
         }
         val utteranceId = utterancePrefix() + System.currentTimeMillis()
-        activeUtteranceResults[utteranceId] = result
+        val timeoutRunnable = Runnable {
+            finishUtterance(utteranceId, false)
+        }
+        activeUtterances[utteranceId] = ActiveUtterance(result, timeoutRunnable)
         val queued = textToSpeech?.speak(
             text,
             TextToSpeech.QUEUE_FLUSH,
@@ -205,9 +210,10 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             utteranceId,
         ) == TextToSpeech.SUCCESS
         if (!queued) {
-            activeUtteranceResults.remove(utteranceId)
-            result.success(false)
+            finishUtterance(utteranceId, false)
+            return
         }
+        mainHandler.postDelayed(timeoutRunnable, utteranceTimeoutMillis())
     }
 
     private fun configureTtsVoice(): Boolean {
@@ -335,11 +341,11 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     private fun ttsProgressListener(): UtteranceProgressListener {
         return object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
+            override fun onStart(utteranceId: String?) = Unit
+
+            override fun onDone(utteranceId: String?) {
                 finishUtterance(utteranceId, true)
             }
-
-            override fun onDone(utteranceId: String?) = Unit
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
@@ -356,15 +362,18 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun finishUtterance(utteranceId: String?, started: Boolean) {
+    private fun finishUtterance(utteranceId: String?, completed: Boolean) {
         if (utteranceId == null) {
             return
         }
-        val result = activeUtteranceResults.remove(utteranceId) ?: return
+        val activeUtterance = activeUtterances.remove(utteranceId) ?: return
+        mainHandler.removeCallbacks(activeUtterance.timeoutRunnable)
         runOnUiThread {
-            result.success(started)
+            activeUtterance.result.success(completed)
         }
     }
+
+    private fun utteranceTimeoutMillis(): Long = 12000L
 
     private fun ttsChannelName(): String = "stock_pulse/tts"
 
@@ -403,6 +412,11 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private fun openNotificationSettingsMethod(): String = "openNotificationSettings"
 
     private fun notificationPermissionRequestCode(): Int = 21031
+
+    private data class ActiveUtterance(
+        val result: MethodChannel.Result,
+        val timeoutRunnable: Runnable,
+    )
 
     private data class PendingSpeakRequest(
         val text: String,
