@@ -225,6 +225,18 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                         scheduleNextPoll(settings.pollIntervalSeconds)
                     }
                 }
+            } catch (error: Exception) {
+                Log.e(TAG, "Monitor refresh failed unexpectedly", error)
+                val settings = loadSettings()
+                val summary =
+                    "Refresh failed: ${error.message ?: error.javaClass.simpleName}"
+                MonitorStorage.updateStatus(this, checkedAtMillis, summary)
+                handler.post {
+                    updateSummary(this, summary)
+                    if (reschedule) {
+                        scheduleNextPoll(settings.pollIntervalSeconds)
+                    }
+                }
             } finally {
                 runningRefresh.set(false)
             }
