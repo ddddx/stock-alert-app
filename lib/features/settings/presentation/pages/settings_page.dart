@@ -86,7 +86,7 @@ class _SettingsPageState extends State<SettingsPage> {
       final current = widget.repository.getStatus().pollIntervalSeconds;
       _syncIntervalController(current);
       _showFeedback(
-        '请输入 $minMonitorPollIntervalSeconds 到 $maxMonitorPollIntervalSeconds 之间的秒数。',
+        '请输入 $minMonitorPollIntervalSeconds 到 $maxMonitorPollIntervalSeconds 秒之间的整数。',
       );
       return;
     }
@@ -101,7 +101,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _syncIntervalController(normalized);
     final feedback = parsed == normalized
         ? '后台轮询间隔已更新为 $normalized 秒。'
-        : '输入值超出范围，已按允许范围调整为 $normalized 秒。';
+        : '输入值超出允许范围，已自动调整为 $normalized 秒。';
     _showFeedback(feedback);
     widget.onChanged();
   }
@@ -121,7 +121,7 @@ class _SettingsPageState extends State<SettingsPage> {
       final enabledAfterStart = widget.repository.getStatus().serviceEnabled;
       _showFeedback(
         enabledAfterStart
-            ? '已启用后台监控守护，原生前台服务会按设定间隔持续轮询。'
+            ? '后台监控守护已启用，原生前台服务会按设定间隔持续轮询。'
             : widget.repository.getStatus().lastMessage,
       );
       widget.onChanged();
@@ -130,7 +130,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     await widget.repository.updateService(false);
     await widget.monitorService.stop();
-    _showFeedback('已关闭后台监控守护。');
+    _showFeedback('后台监控守护已关闭。');
     widget.onChanged();
   }
 
@@ -145,14 +145,14 @@ class _SettingsPageState extends State<SettingsPage> {
         SectionCard(
           title: '后台监控',
           subtitle:
-              'Android 端已经接入前台服务、常驻通知和系统设置跳转。首次使用需要先完成通知授权与电池优化引导。',
+              'Android 端已接入前台服务、常驻通知和系统设置跳转。首次使用前，请先完成通知授权和电池优化引导。',
           child: Column(
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('启用后台监控守护'),
                 subtitle: const Text(
-                  '开启后会拉起常驻通知，并由原生前台服务按设定间隔继续后台轮询。',
+                  '开启后会拉起常驻通知，并由原生前台服务按设定间隔持续在后台轮询。',
                 ),
                 value: status.serviceEnabled,
                 onChanged: _handleServiceToggle,
@@ -166,7 +166,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 decoration: const InputDecoration(
                   labelText: '后台轮询间隔',
                   border: OutlineInputBorder(),
-                  helperText: '允许 1~300 秒；低于 15 秒也可用，但会更耗电。仅在 A 股交易时段监控。',
+                  helperText: '允许 1 到 300 秒。低于 15 秒也可用，但会更耗电；仅在 A 股交易时段监控。',
                   suffixIcon: Icon(Icons.timer_outlined),
                 ),
                 onFieldSubmitted: (_) async => _applyPollInterval(),
@@ -189,7 +189,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     onPressed: () async {
                       final ready = await widget.audioService.preload();
                       final message = ready
-                          ? '语音播报能力已预热，可以直接试播真实文案。'
+                          ? '语音播报能力已预热，可以直接试播真实提醒文案。'
                           : '预热失败：${widget.audioService.lastErrorMessage ?? '语音插件未完成初始化。'}';
                       _showFeedback(message);
                       widget.onChanged();
@@ -209,15 +209,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   OutlinedButton.icon(
                     onPressed: () async {
-                      final granted =
-                          await widget.platformBridgeService.requestNotificationPermission();
+                      final granted = await widget.platformBridgeService
+                          .requestNotificationPermission();
                       if (!granted) {
-                        await widget.platformBridgeService.openNotificationSettings();
+                        await widget.platformBridgeService
+                            .openNotificationSettings();
                       }
                       _showFeedback(
                         granted
-                            ? '通知权限已允许。'
-                            : '未直接授予通知权限，已打开系统通知设置，请确认允许通知。',
+                            ? '通知权限已授予。'
+                            : '未能直接获取通知权限，已打开系统通知设置，请确认允许通知。',
                       );
                     },
                     icon: const Icon(Icons.notifications_active_outlined),
@@ -241,7 +242,7 @@ class _SettingsPageState extends State<SettingsPage> {
         SectionCard(
           title: '语音提醒',
           subtitle:
-              '试播与前台可见时的播报走同一条 Flutter TTS 链路；后台原生轮询暂保留服务内 TTS。',
+              '试播与前台可见时的播报共用同一条 Flutter TTS 链路；后台原生轮询阶段暂保留前台服务和通知能力。',
           child: Column(
             children: [
               SwitchListTile(
@@ -250,7 +251,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 value: status.soundEnabled,
                 onChanged: (value) async {
                   await widget.repository.updateSound(value);
-                  _showFeedback(value ? '已开启语音播报。' : '已关闭语音播报。');
+                  _showFeedback(value ? '语音播报已开启。' : '语音播报已关闭。');
                   widget.onChanged();
                 },
               ),
@@ -287,17 +288,17 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 8),
               Text(
                 status.serviceEnabled
-                    ? '后台守护：已开启常驻通知 + 原生后台轮询'
+                    ? '后台守护：已开启常驻通知和原生后台轮询'
                     : '后台守护：未开启',
               ),
               const SizedBox(height: 8),
               Text('轮询间隔：${status.pollIntervalSeconds} 秒'),
               const SizedBox(height: 8),
-              const Text('本地数据已持久化，重启应用后会保留自选、规则、历史与设置。'),
+              const Text('本地数据已持久化，重启应用后会保留自选、规则、历史和设置。'),
               const SizedBox(height: 8),
               const Text('监控仅在 A 股交易时段运行：工作日 09:30-11:30、13:00-15:00；午休和收市后会暂停。'),
               const SizedBox(height: 8),
-              const Text('若系统强杀进程，前台服务会尽量维持；设备重启或应用更新后，需要重新打开应用并确认权限。'),
+              const Text('如果系统强杀进程，前台服务会尽量维持；设备重启或应用更新后，需要重新打开应用并确认权限。'),
               if (_toast != null) ...[
                 const SizedBox(height: 8),
                 Text('操作反馈：$_toast'),

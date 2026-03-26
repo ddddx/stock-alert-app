@@ -18,11 +18,11 @@ class HistoryPage extends StatelessWidget {
       children: [
         SectionCard(
           title: '提醒历史',
-          subtitle: '展示规则类型、触发行情和播报文案。',
+          subtitle: '展示规则类型、触发行情和语音播报文案。',
           child: entries.isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Text('还没有触发记录，先刷新几次行情。'),
+                  child: Text('还没有触发记录，先刷新几次行情再回来查看。'),
                 )
               : Column(
                   children: [

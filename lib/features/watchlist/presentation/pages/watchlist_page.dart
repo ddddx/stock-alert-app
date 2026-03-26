@@ -42,29 +42,27 @@ class _WatchlistPageState extends State<WatchlistPage> {
         padding: const EdgeInsets.all(16),
         children: [
           SectionCard(
-            title: 'Watchlist',
-            subtitle:
-                'Search by code, name, or pinyin. Swipe left on a stock to reveal delete.',
+            title: '自选股',
+            subtitle: '支持按代码、名称或拼音搜索。向左滑动个股可显示删除按钮。',
             trailing: Wrap(
               spacing: 8,
               children: [
                 IconButton.filledTonal(
                   onPressed: widget.onRefresh,
                   icon: const Icon(Icons.refresh),
-                  tooltip: 'Refresh quotes',
+                  tooltip: '刷新行情',
                 ),
                 FilledButton.icon(
                   onPressed: _adding ? null : _showAddSheet,
                   icon: const Icon(Icons.add),
-                  label: const Text('Add'),
+                  label: const Text('添加'),
                 ),
               ],
             ),
             child: items.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Text(
-                        'The watchlist is empty. Use Add to track a stock.'),
+                    child: Text('当前还没有自选股，点击“添加”开始关注股票。'),
                   )
                 : Column(
                     children: [
@@ -117,7 +115,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
           return;
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added ${selected.name} ${selected.code}')),
+          SnackBar(content: Text('已添加 ${selected.name} ${selected.code}')),
         );
       }
       setState(() {});
@@ -175,7 +173,7 @@ class _WatchlistTileState extends State<_WatchlistTile> {
                       key: Key('watchlist-delete-${widget.stock.code}'),
                       onPressed: _revealed ? widget.onRemove : null,
                       icon: const Icon(Icons.delete_outline),
-                      label: const Text('Delete'),
+                      label: const Text('删除'),
                       style: FilledButton.styleFrom(
                         foregroundColor: const Color(0xFF8B1E1E),
                         backgroundColor: const Color(0xFFFDECEC),
@@ -234,8 +232,8 @@ class _WatchlistTileState extends State<_WatchlistTile> {
                               const SizedBox(height: 6),
                               Text(
                                 quote == null
-                                    ? 'Quote unavailable. Pull to refresh and try again.'
-                                    : 'Open ${Formatters.priceForSecurity(quote.openPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  High ${Formatters.priceForSecurity(quote.highPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  Low ${Formatters.priceForSecurity(quote.lowPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}',
+                                    ? '暂无行情数据，请下拉刷新后重试。'
+                                    : '今开 ${Formatters.priceForSecurity(quote.openPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  最高 ${Formatters.priceForSecurity(quote.highPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  最低 ${Formatters.priceForSecurity(quote.lowPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
@@ -344,7 +342,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Search A-share stocks',
+                  '搜索 A 股',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
@@ -352,7 +350,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
                   controller: _controller,
                   autofocus: true,
                   decoration: InputDecoration(
-                    hintText: 'Enter a code, name, or pinyin',
+                    hintText: '输入代码、名称或拼音',
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _buildSuffixIcon(),
                   ),
@@ -395,20 +393,20 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
     return IconButton(
       onPressed: _clearQuery,
       icon: const Icon(Icons.close),
-      tooltip: 'Clear',
+      tooltip: '清空',
     );
   }
 
   Widget _buildResults() {
     if (!_hasSearched && _controller.text.trim().isEmpty) {
       return const Center(
-        child: Text('Type to search for a stock.'),
+        child: Text('输入关键词开始搜索股票。'),
       );
     }
 
     if (_loading && _results.isEmpty) {
       return const Center(
-        child: Text('Searching...'),
+        child: Text('正在搜索...'),
       );
     }
 
@@ -420,7 +418,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
 
     if (_hasSearched && _results.isEmpty) {
       return Center(
-        child: Text('No result matched "$_lastKeyword".'),
+        child: Text('没有找到与“$_lastKeyword”匹配的股票。'),
       );
     }
 
@@ -434,7 +432,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
           title: Text('${item.name} (${item.code})'),
           subtitle: Text(item.subtitle),
           trailing:
-              disabled ? const Text('Added') : const Icon(Icons.chevron_right),
+              disabled ? const Text('已添加') : const Icon(Icons.chevron_right),
           onTap: disabled ? null : () => Navigator.of(context).pop(item),
         );
       },
@@ -514,7 +512,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
         _loading = false;
         _hasSearched = true;
         _results = const [];
-        _error = 'Search failed: $error';
+        _error = '搜索失败：$error';
       });
     }
   }

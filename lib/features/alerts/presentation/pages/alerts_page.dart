@@ -65,20 +65,19 @@ class _AlertsPageState extends State<AlertsPage> {
       padding: const EdgeInsets.all(16),
       children: [
         SectionCard(
-          title: 'Rules',
-          subtitle:
-              'Create, edit, delete, and target rules to selected stocks or the full watchlist.',
+          title: '提醒规则',
+          subtitle: '创建、编辑和删除规则，并指定作用于选中股票或全部自选股。',
           trailing: FilledButton.icon(
             onPressed: _showAddRuleDialog,
             icon: const Icon(Icons.alarm_add_outlined),
-            label: const Text('Add rule'),
+            label: const Text('添加规则'),
           ),
           child: Column(
             children: [
               if (rules.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Text('No rules yet. Add one to start monitoring.'),
+                  child: Text('还没有提醒规则，添加一条后即可开始监控。'),
                 ),
               for (final rule in rules)
                 Padding(
@@ -132,7 +131,7 @@ class _AlertsPageState extends State<AlertsPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text(existingRule == null ? 'Add rule' : 'Edit rule'),
+              title: Text(existingRule == null ? '添加规则' : '编辑规则'),
               content: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
                 child: SingleChildScrollView(
@@ -145,11 +144,11 @@ class _AlertsPageState extends State<AlertsPage> {
                         items: const [
                           DropdownMenuItem(
                             value: AlertRuleType.shortWindowMove,
-                            child: Text('Short-window move'),
+                            child: Text('短时波动'),
                           ),
                           DropdownMenuItem(
                             value: AlertRuleType.stepAlert,
-                            child: Text('Step alert'),
+                            child: Text('阶梯提醒'),
                           ),
                         ],
                         onChanged: (value) {
@@ -161,7 +160,7 @@ class _AlertsPageState extends State<AlertsPage> {
                           });
                         },
                         decoration:
-                            const InputDecoration(labelText: 'Rule type'),
+                            const InputDecoration(labelText: '规则类型'),
                       ),
                       const SizedBox(height: 12),
                       SwitchListTile(
@@ -177,21 +176,21 @@ class _AlertsPageState extends State<AlertsPage> {
                           });
                         },
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Apply to the full watchlist'),
+                        title: const Text('作用于全部自选股'),
                         subtitle: const Text(
-                          'When enabled, the rule applies to all current and future watchlist stocks.',
+                          '开启后，该规则会作用于当前及后续加入自选的全部股票。',
                         ),
                       ),
                       if (!_applyToAllWatchlist) ...[
                         const SizedBox(height: 8),
                         Text(
-                          'Target stocks',
+                          '目标股票',
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: 8),
                         if (availableStocks.isEmpty)
                           Text(
-                            'No watchlist stocks are available yet. Turn on "Apply to the full watchlist" to create a generic rule now.',
+                            '当前还没有自选股。若想先创建通用规则，请开启“作用于全部自选股”。',
                             style: Theme.of(context).textTheme.bodySmall,
                           )
                         else
@@ -235,14 +234,14 @@ class _AlertsPageState extends State<AlertsPage> {
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
                           decoration: const InputDecoration(
-                              labelText: 'Threshold percent'),
+                              labelText: '阈值涨跌幅'),
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: _lookbackController,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
-                              labelText: 'Lookback minutes'),
+                              labelText: '回看分钟数'),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<MoveDirection>(
@@ -250,15 +249,15 @@ class _AlertsPageState extends State<AlertsPage> {
                           items: const [
                             DropdownMenuItem(
                               value: MoveDirection.either,
-                              child: Text('Either direction'),
+                              child: Text('双向波动'),
                             ),
                             DropdownMenuItem(
                               value: MoveDirection.up,
-                              child: Text('Up only'),
+                              child: Text('仅上涨'),
                             ),
                             DropdownMenuItem(
                               value: MoveDirection.down,
-                              child: Text('Down only'),
+                              child: Text('仅下跌'),
                             ),
                           ],
                           onChanged: (value) {
@@ -270,15 +269,14 @@ class _AlertsPageState extends State<AlertsPage> {
                             });
                           },
                           decoration:
-                              const InputDecoration(labelText: 'Direction'),
+                              const InputDecoration(labelText: '方向'),
                         ),
                       ] else ...[
                         TextField(
                           controller: _stepValueController,
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
-                          decoration:
-                              const InputDecoration(labelText: 'Step size'),
+                          decoration: const InputDecoration(labelText: '阶梯步长'),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<StepMetric>(
@@ -286,11 +284,11 @@ class _AlertsPageState extends State<AlertsPage> {
                           items: const [
                             DropdownMenuItem(
                               value: StepMetric.percent,
-                              child: Text('Percent bands'),
+                              child: Text('按涨跌幅阶梯'),
                             ),
                             DropdownMenuItem(
                               value: StepMetric.price,
-                              child: Text('Price bands'),
+                              child: Text('按价格阶梯'),
                             ),
                           ],
                           onChanged: (value) {
@@ -302,20 +300,20 @@ class _AlertsPageState extends State<AlertsPage> {
                             });
                           },
                           decoration:
-                              const InputDecoration(labelText: 'Step type'),
+                              const InputDecoration(labelText: '阶梯类型'),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           _stepMetric == StepMetric.percent
-                              ? 'Example: speak again each time the move crosses another 0.50% band.'
-                              : 'Each selected stock keeps its own anchor price when using price steps.',
+                              ? '例如：每多跨过一个 0.50% 的涨跌幅台阶，就再次播报一次。'
+                              : '按价格阶梯提醒时，每只选中股票都会保留自己的锚定价格。',
                         ),
                         if (_stepMetric == StepMetric.price &&
                             _applyToAllWatchlist &&
                             availableStocks.isEmpty) ...[
                           const SizedBox(height: 8),
                           Text(
-                            'Price-band step rules need at least one current watchlist stock so the app can record anchor prices.',
+                            '按价格阶梯的全局规则至少需要当前已有一只自选股，应用才能记录锚定价格。',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
@@ -323,8 +321,7 @@ class _AlertsPageState extends State<AlertsPage> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _noteController,
-                        decoration:
-                            const InputDecoration(labelText: 'Note (optional)'),
+                        decoration: const InputDecoration(labelText: '备注（可选）'),
                       ),
                     ],
                   ),
@@ -333,7 +330,7 @@ class _AlertsPageState extends State<AlertsPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: const Text('取消'),
                 ),
                 FilledButton(
                   onPressed: () async {
@@ -343,7 +340,7 @@ class _AlertsPageState extends State<AlertsPage> {
                     );
                     if (rule == null) {
                       _showMessage(
-                        'Enter valid rule values. Targeted rules need at least one stock, and price-band global rules need a current watchlist stock.',
+                        '请输入有效规则参数。定向规则至少需要选择一只股票；按价格阶梯的全局规则需要当前已有自选股。',
                       );
                       return;
                     }
@@ -360,7 +357,7 @@ class _AlertsPageState extends State<AlertsPage> {
                       Navigator.of(context).pop();
                     }
                   },
-                  child: const Text('Save'),
+                  child: const Text('保存'),
                 ),
               ],
             );
@@ -375,16 +372,16 @@ class _AlertsPageState extends State<AlertsPage> {
           context: context,
           builder: (context) {
             return AlertDialog(
-              title: const Text('Delete rule'),
-              content: Text('Delete the ${rule.typeLabel} rule?'),
+              title: const Text('删除规则'),
+              content: Text('确定删除这条“${rule.typeLabel}”规则吗？'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
+                  child: const Text('取消'),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Delete'),
+                  child: const Text('删除'),
                 ),
               ],
             );
@@ -603,7 +600,7 @@ class _RuleCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 4),
-                Text('Targets: ${rule.targetsLabel()}'),
+                Text('目标范围：${rule.targetsLabel()}'),
                 const SizedBox(height: 4),
                 Text(rule.summary),
                 if (rule.note != null && rule.note!.trim().isNotEmpty) ...[
@@ -625,13 +622,13 @@ class _RuleCard extends StatelessWidget {
                     key: Key('edit-rule-${rule.id}'),
                     onPressed: onEdit,
                     icon: const Icon(Icons.edit_outlined),
-                    tooltip: 'Edit',
+                    tooltip: '编辑',
                   ),
                   IconButton(
                     key: Key('delete-rule-${rule.id}'),
                     onPressed: onDelete,
                     icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Delete',
+                    tooltip: '删除',
                   ),
                 ],
               ),

@@ -349,25 +349,25 @@ class AlertRule {
 
   String targetSummaryLabel() {
     if (applyToAllWatchlist) {
-      return 'All watchlist stocks';
+      return '全部自选股';
     }
     final targets = resolvedTargetStocks;
     if (targets.isEmpty) {
-      return 'No stocks selected';
+      return '未选择股票';
     }
     if (targets.length == 1) {
       final stock = targets.first;
       return '${stock.name} (${stock.code})';
     }
-    return '${targets.length} selected stocks';
+    return '已选择 ${targets.length} 只股票';
   }
 
   String get typeLabel {
     switch (type) {
       case AlertRuleType.shortWindowMove:
-        return 'Short-window move';
+        return '短时波动';
       case AlertRuleType.stepAlert:
-        return 'Step alert';
+        return '阶梯提醒';
     }
   }
 
@@ -375,15 +375,15 @@ class AlertRule {
     switch (type) {
       case AlertRuleType.shortWindowMove:
         final directionLabel = switch (moveDirection ?? MoveDirection.either) {
-          MoveDirection.up => 'up',
-          MoveDirection.down => 'down',
-          MoveDirection.either => 'move',
+          MoveDirection.up => '上涨',
+          MoveDirection.down => '下跌',
+          MoveDirection.either => '波动',
         };
-        return '${lookbackMinutes ?? 0}m $directionLabel >= '
+        return '${lookbackMinutes ?? 0} 分钟内$directionLabel >= '
             '${(moveThresholdPercent ?? 0).toStringAsFixed(2)}%';
       case AlertRuleType.stepAlert:
-        final unit = stepMetric == StepMetric.percent ? '%' : 'price';
-        return 'every ${(stepValue ?? 0).toStringAsFixed(2)} $unit';
+        final unit = stepMetric == StepMetric.percent ? '%' : '元';
+        return '每跨过 ${(stepValue ?? 0).toStringAsFixed(2)}$unit 提醒一次';
     }
   }
 

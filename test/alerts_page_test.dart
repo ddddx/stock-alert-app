@@ -24,16 +24,16 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Add rule'));
+    await tester.tap(find.text('添加规则'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
     expect(alertRepository.rules, hasLength(1));
     expect(alertRepository.rules.single.applyToAllWatchlist, isTrue);
     expect(alertRepository.rules.single.targetStocks, isEmpty);
-    expect(find.text('Targets: All watchlist stocks'), findsOneWidget);
+    expect(find.text('目标范围：全部自选股'), findsOneWidget);
   });
 
   testWidgets('alerts page updates selected target stocks while editing a rule',
@@ -82,7 +82,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Alpha (600519)'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
     expect(
@@ -90,7 +90,7 @@ void main() {
           .map((item) => item.code),
       ['000001'],
     );
-    expect(find.text('Targets: Beta (000001)'), findsOneWidget);
+    expect(find.text('目标范围：Beta (000001)'), findsOneWidget);
   });
 
   testWidgets('alerts page deletes an existing rule', (tester) async {
@@ -122,11 +122,11 @@ void main() {
 
     await tester.tap(find.byKey(const Key('delete-rule-rule-1')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+    await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
 
     expect(alertRepository.rules, isEmpty);
-    expect(find.text('No rules yet. Add one to start monitoring.'),
+    expect(find.text('还没有提醒规则，添加一条后即可开始监控。'),
         findsOneWidget);
   });
 }

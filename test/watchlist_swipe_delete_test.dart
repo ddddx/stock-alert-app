@@ -30,6 +30,9 @@ void main() {
       ),
     );
 
+    expect(find.text('自选股'), findsOneWidget);
+    expect(find.text('添加'), findsOneWidget);
+
     final deleteFinder = find.byKey(const Key('watchlist-delete-600519'));
     expect(deleteFinder, findsOneWidget);
     expect(tester.widget<FilledButton>(deleteFinder).onPressed, isNull);
