@@ -1,0 +1,129 @@
+const int minMonitorPollIntervalSeconds = 1;
+const int maxMonitorPollIntervalSeconds = 300;
+
+class AshareMarketHours {
+  const AshareMarketHours();
+
+  static const Duration _shanghaiOffset = Duration(hours: 8);
+  static const int _morningSessionStartMinutes = 9 * 60 + 30;
+  static const int _morningSessionEndMinutes = 11 * 60 + 30;
+  static const int _afternoonSessionStartMinutes = 13 * 60;
+  static const int _afternoonSessionEndMinutes = 15 * 60;
+
+  bool isTradingTime(DateTime moment) {
+    final shanghaiMoment = _toShanghai(moment);
+    if (_isWeekend(shanghaiMoment.weekday)) {
+      return false;
+    }
+
+    final minutes = _minutesSinceMidnight(shanghaiMoment);
+    final inMorningSession =
+        minutes >= _morningSessionStartMinutes &&
+        minutes < _morningSessionEndMinutes;
+    final inAfternoonSession =
+        minutes >= _afternoonSessionStartMinutes &&
+        minutes < _afternoonSessionEndMinutes;
+    return inMorningSession || inAfternoonSession;
+  }
+
+  DateTime nextSessionStart(DateTime moment) {
+    final shanghaiMoment = _toShanghai(moment);
+    final nextSession = _nextSessionStartInShanghai(shanghaiMoment);
+    return _fromShanghai(nextSession);
+  }
+
+  String buildClosedMessage(DateTime moment) {
+    final nextSession = _toShanghai(nextSessionStart(moment));
+    return 'Outside A-share trading hours. Monitoring paused until ${_formatShanghaiLabel(nextSession)}.';
+  }
+
+  DateTime _nextSessionStartInShanghai(DateTime shanghaiMoment) {
+    if (_isWeekend(shanghaiMoment.weekday)) {
+      return _nextWeekdayMorningSession(shanghaiMoment, includeToday: false);
+    }
+
+    final minutes = _minutesSinceMidnight(shanghaiMoment);
+    if (minutes < _morningSessionStartMinutes) {
+      return _sessionStartForDay(shanghaiMoment, hour: 9, minute: 30);
+    }
+    if (minutes < _morningSessionEndMinutes) {
+      return shanghaiMoment;
+    }
+    if (minutes < _afternoonSessionStartMinutes) {
+      return _sessionStartForDay(shanghaiMoment, hour: 13, minute: 0);
+    }
+    if (minutes < _afternoonSessionEndMinutes) {
+      return shanghaiMoment;
+    }
+    return _nextWeekdayMorningSession(shanghaiMoment, includeToday: false);
+  }
+
+  DateTime _nextWeekdayMorningSession(
+    DateTime shanghaiMoment, {
+    required bool includeToday,
+  }) {
+    var candidate = _sessionStartForDay(shanghaiMoment, hour: 9, minute: 30);
+    if (!includeToday) {
+      candidate = candidate.add(const Duration(days: 1));
+    }
+    while (_isWeekend(candidate.weekday)) {
+      candidate = candidate.add(const Duration(days: 1));
+    }
+    return _sessionStartForDay(candidate, hour: 9, minute: 30);
+  }
+
+  DateTime _sessionStartForDay(
+    DateTime shanghaiMoment, {
+    required int hour,
+    required int minute,
+  }) {
+    return DateTime.utc(
+      shanghaiMoment.year,
+      shanghaiMoment.month,
+      shanghaiMoment.day,
+      hour,
+      minute,
+    );
+  }
+
+  DateTime _toShanghai(DateTime moment) {
+    return DateTime.fromMillisecondsSinceEpoch(
+      moment.toUtc().millisecondsSinceEpoch + _shanghaiOffset.inMilliseconds,
+      isUtc: true,
+    );
+  }
+
+  DateTime _fromShanghai(DateTime shanghaiMoment) {
+    return DateTime.fromMillisecondsSinceEpoch(
+      shanghaiMoment.millisecondsSinceEpoch - _shanghaiOffset.inMilliseconds,
+      isUtc: true,
+    ).toLocal();
+  }
+
+  int _minutesSinceMidnight(DateTime shanghaiMoment) {
+    return shanghaiMoment.hour * 60 + shanghaiMoment.minute;
+  }
+
+  bool _isWeekend(int weekday) {
+    return weekday == DateTime.saturday || weekday == DateTime.sunday;
+  }
+
+  String _formatShanghaiLabel(DateTime shanghaiMoment) {
+    const weekdays = <int, String>{
+      DateTime.monday: 'Mon',
+      DateTime.tuesday: 'Tue',
+      DateTime.wednesday: 'Wed',
+      DateTime.thursday: 'Thu',
+      DateTime.friday: 'Fri',
+      DateTime.saturday: 'Sat',
+      DateTime.sunday: 'Sun',
+    };
+    final month = _twoDigits(shanghaiMoment.month);
+    final day = _twoDigits(shanghaiMoment.day);
+    final hour = _twoDigits(shanghaiMoment.hour);
+    final minute = _twoDigits(shanghaiMoment.minute);
+    return '$month-$day ${weekdays[shanghaiMoment.weekday]} $hour:$minute';
+  }
+
+  String _twoDigits(int value) => value.toString().padLeft(2, '0');
+}

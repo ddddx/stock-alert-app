@@ -1,4 +1,5 @@
 import '../models/monitor_status.dart';
+import '../../services/background/monitoring_policy.dart';
 import '../../services/storage/json_file_store.dart';
 import 'settings_repository.dart';
 
@@ -23,8 +24,11 @@ class LocalSettingsRepository implements SettingsRepository {
       return;
     }
     _status = MonitorStatus.fromJson(payload);
-    if (_status.pollIntervalSeconds < 15) {
-      _status = _status.copyWith(pollIntervalSeconds: 15);
+    final normalized = _status.pollIntervalSeconds
+        .clamp(minMonitorPollIntervalSeconds, maxMonitorPollIntervalSeconds)
+        .toInt();
+    if (_status.pollIntervalSeconds != normalized) {
+      _status = _status.copyWith(pollIntervalSeconds: normalized);
       await _persist();
     }
   }
@@ -46,7 +50,9 @@ class LocalSettingsRepository implements SettingsRepository {
 
   @override
   Future<void> updatePollIntervalSeconds(int seconds) async {
-    final normalized = seconds.clamp(15, 300).toInt();
+    final normalized = seconds
+        .clamp(minMonitorPollIntervalSeconds, maxMonitorPollIntervalSeconds)
+        .toInt();
     _status = _status.copyWith(pollIntervalSeconds: normalized);
     await _persist();
   }

@@ -195,6 +195,9 @@ class _FakePlatformBridgeService extends PlatformBridgeService {
 
 class _FakeAudioAlertService implements AudioAlertService {
   @override
+  String? get lastErrorMessage => null;
+
+  @override
   Future<bool> preload() async => true;
 
   @override

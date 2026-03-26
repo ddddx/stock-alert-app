@@ -205,7 +205,9 @@ object MonitorStorage {
     fun loadSettings(context: Context): NativeMonitorSettings {
         val file = storageFile(context, SETTINGS_FILE)
         val json = readJsonObject(file)
-        val interval = (json?.optInt("pollIntervalSeconds", 20) ?: 20).coerceIn(15, 300)
+        val interval = AshareMarketSchedule.normalizePollIntervalSeconds(
+            json?.optInt("pollIntervalSeconds", 20) ?: 20,
+        )
         return NativeMonitorSettings(
             serviceEnabled = json?.optBoolean("serviceEnabled", false) ?: false,
             soundEnabled = json?.optBoolean("soundEnabled", true) ?: true,

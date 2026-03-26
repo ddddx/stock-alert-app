@@ -7,6 +7,7 @@ import '../alerts/alert_rule_engine.dart';
 import '../audio/audio_alert_service.dart';
 import '../market/ashare_market_data_service.dart';
 import '../platform/platform_bridge_service.dart';
+import 'monitoring_policy.dart';
 
 class MonitorRunResult {
   const MonitorRunResult({
@@ -48,6 +49,8 @@ class AshareMonitorService implements MonitorService {
     required AudioAlertService audioAlertService,
     required AlertRuleEngine ruleEngine,
     required PlatformBridgeService platformBridgeService,
+    AshareMarketHours marketHours = const AshareMarketHours(),
+    DateTime Function()? now,
   })  : _watchlistRepository = watchlistRepository,
         _alertRepository = alertRepository,
         _historyRepository = historyRepository,
@@ -55,7 +58,9 @@ class AshareMonitorService implements MonitorService {
         _marketDataService = marketDataService,
         _audioAlertService = audioAlertService,
         _ruleEngine = ruleEngine,
-        _platformBridgeService = platformBridgeService;
+        _platformBridgeService = platformBridgeService,
+        _marketHours = marketHours,
+        _now = now ?? DateTime.now;
 
   final WatchlistRepository _watchlistRepository;
   final AlertRepository _alertRepository;
@@ -65,6 +70,8 @@ class AshareMonitorService implements MonitorService {
   final AudioAlertService _audioAlertService;
   final AlertRuleEngine _ruleEngine;
   final PlatformBridgeService _platformBridgeService;
+  final AshareMarketHours _marketHours;
+  final DateTime Function() _now;
 
   bool _running = false;
   List<StockQuoteSnapshot> _latestQuotes = const [];
@@ -89,7 +96,8 @@ class AshareMonitorService implements MonitorService {
   Future<void> prepare() async {
     final ready = await _audioAlertService.preload();
     if (!ready) {
-      await _settingsRepository.markPrepared('TTS preload failed.');
+      final reason = _audioAlertService.lastErrorMessage ?? '语音插件未完成初始化。';
+      await _settingsRepository.markPrepared('语音播报预热失败：$reason');
       return;
     }
     await _settingsRepository.markPrepared('已完成语音播报预热，可执行 A 股扫描。');
@@ -97,7 +105,7 @@ class AshareMonitorService implements MonitorService {
 
   @override
   Future<MonitorRunResult> refreshWatchlist() async {
-    final checkedAt = DateTime.now();
+    final checkedAt = _now();
     final watchlist = _watchlistRepository.getAll();
     if (watchlist.isEmpty) {
       const summary = '自选为空，未执行行情刷新。';
@@ -107,6 +115,23 @@ class AshareMonitorService implements MonitorService {
           summary: summary);
       return MonitorRunResult(
         quotes: const [],
+        triggers: const [],
+        checkedAt: checkedAt,
+        summary: summary,
+      );
+    }
+
+    if (!_marketHours.isTradingTime(checkedAt)) {
+      final summary = _marketHours.buildClosedMessage(checkedAt);
+      await _settingsRepository.markChecked(
+        checkedAt: checkedAt,
+        message: summary,
+      );
+      await _platformBridgeService.updateForegroundMonitorSummary(
+        summary: summary,
+      );
+      return MonitorRunResult(
+        quotes: _latestQuotes,
         triggers: const [],
         checkedAt: checkedAt,
         summary: summary,
@@ -169,7 +194,7 @@ class AshareMonitorService implements MonitorService {
     if (!started) {
       await _settingsRepository.updateService(false);
       await _settingsRepository.markChecked(
-        checkedAt: DateTime.now(),
+        checkedAt: _now(),
         message: '后台监控启动失败，已自动关闭后台守护，请检查通知/前台服务权限后重试。',
       );
     }
@@ -193,7 +218,7 @@ class AshareMonitorService implements MonitorService {
     if (!started) {
       await _settingsRepository.updateService(false);
       await _settingsRepository.markChecked(
-        checkedAt: DateTime.now(),
+        checkedAt: _now(),
         message: '后台监控恢复失败，已自动关闭后台守护，请重新启用。',
       );
     }
@@ -210,7 +235,7 @@ class AshareMonitorService implements MonitorService {
       _running = false;
       await _settingsRepository.updateService(false);
       await _settingsRepository.markChecked(
-        checkedAt: DateTime.now(),
+        checkedAt: _now(),
         message: '后台监控刷新失败，已自动关闭后台守护，请重新启用。',
       );
     }

@@ -1,4 +1,5 @@
 import '../models/monitor_status.dart';
+import '../../services/background/monitoring_policy.dart';
 
 class InMemorySettingsRepository {
   MonitorStatus _status = const MonitorStatus(
@@ -21,7 +22,11 @@ class InMemorySettingsRepository {
   }
 
   void updatePollIntervalSeconds(int seconds) {
-    _status = _status.copyWith(pollIntervalSeconds: seconds.clamp(15, 300).toInt());
+    _status = _status.copyWith(
+      pollIntervalSeconds: seconds
+          .clamp(minMonitorPollIntervalSeconds, maxMonitorPollIntervalSeconds)
+          .toInt(),
+    );
   }
 
   void markPrepared(String message) {

@@ -141,7 +141,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         if (triggerImmediateRefresh) {
             triggerRefresh(reschedule = true)
         } else {
-            scheduleNextPoll(loadSettings().pollIntervalSeconds)
+            scheduleNextPoll(loadSettings().pollIntervalSeconds, updateClosedSummary = true)
         }
     }
 
@@ -156,6 +156,20 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun triggerRefresh(reschedule: Boolean) {
+        val checkedAtMillis = System.currentTimeMillis()
+        val marketSession = AshareMarketSchedule.currentSession(checkedAtMillis)
+        if (!marketSession.isTradingOpen) {
+            val summary = AshareMarketSchedule.buildClosedSummary(marketSession)
+            MonitorStorage.updateStatus(
+                context = this,
+                checkedAtMillis = checkedAtMillis,
+                message = summary,
+            )
+            updateSummary(this, summary)
+            scheduleNextPoll(loadSettings().pollIntervalSeconds)
+            return
+        }
+
         if (!runningRefresh.compareAndSet(false, true)) {
             if (reschedule) {
                 scheduleNextPoll(loadSettings().pollIntervalSeconds)
@@ -217,9 +231,28 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun scheduleNextPoll(intervalSeconds: Int) {
+    private fun scheduleNextPoll(intervalSeconds: Int, updateClosedSummary: Boolean = false) {
         handler.removeCallbacks(pollRunnable)
-        handler.postDelayed(pollRunnable, intervalSeconds.coerceIn(15, 300) * 1000L)
+        val nowMillis = System.currentTimeMillis()
+        val marketSession = AshareMarketSchedule.currentSession(nowMillis)
+        if (!marketSession.isTradingOpen) {
+            if (updateClosedSummary) {
+                val summary = AshareMarketSchedule.buildClosedSummary(marketSession)
+                MonitorStorage.updateStatus(
+                    context = this,
+                    checkedAtMillis = nowMillis,
+                    message = summary,
+                )
+                updateSummary(this, summary)
+            }
+            handler.postDelayed(pollRunnable, marketSession.delayUntilNextOpenMillis(nowMillis))
+            return
+        }
+
+        handler.postDelayed(
+            pollRunnable,
+            AshareMarketSchedule.normalizePollIntervalSeconds(intervalSeconds) * 1000L,
+        )
     }
 
     private fun ensureTts(): Boolean {

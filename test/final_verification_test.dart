@@ -145,6 +145,39 @@ void main() {
     expect(settingsRepository.getStatus().serviceEnabled, isFalse);
   });
 
+  testWidgets('settings page accepts poll intervals below 15 seconds', (
+    tester,
+  ) async {
+    final settingsRepository = _FakeSettingsRepository();
+    final monitorService = _FakeMonitorService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SettingsPage(
+            repository: settingsRepository,
+            monitorService: monitorService,
+            audioService: _FakeAudioAlertService(shouldSucceed: true),
+            messageBuilder: AlertMessageBuilder(),
+            platformBridgeService: _FakePlatformBridgeService(),
+            previewQuote: _sampleQuote(),
+            onRefresh: () async {},
+            onChanged: () {},
+            onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+                true,
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byKey(const Key('poll-interval-input')), '5');
+    await tester.tap(find.text('应用间隔'));
+    await tester.pumpAndSettle();
+
+    expect(settingsRepository.getStatus().pollIntervalSeconds, 5);
+    expect(find.textContaining('5 秒'), findsWidgets);
+  });
+
   test('flutter TTS preload returns plugin setup result', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     const channel = MethodChannel('flutter_tts');
@@ -340,6 +373,9 @@ class _FakeAudioAlertService implements AudioAlertService {
   final List<String> spokenTexts = [];
 
   @override
+  String? get lastErrorMessage => null;
+
+  @override
   Future<bool> preload() async {
     preloadCalls += 1;
     return preloadResult;
@@ -355,6 +391,7 @@ class _FakeAudioAlertService implements AudioAlertService {
 
 class _FakeMonitorService implements MonitorService {
   int startCalls = 0;
+  int reloadCalls = 0;
 
   @override
   bool get isRunning => false;
@@ -374,7 +411,9 @@ class _FakeMonitorService implements MonitorService {
   }
 
   @override
-  Future<void> reload() async {}
+  Future<void> reload() async {
+    reloadCalls += 1;
+  }
 
   @override
   Future<void> requestBackgroundRefresh() async {}

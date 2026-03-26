@@ -3,75 +3,21 @@ package com.stockpulse.radar
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
-import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.util.Locale
 
-class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
-    private var textToSpeech: TextToSpeech? = null
-    private var ttsReady = false
-    private var ttsInitCompleted = false
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private val pendingInitResults = mutableListOf<MethodChannel.Result>()
-    private val pendingSpeakRequests = mutableListOf<PendingSpeakRequest>()
-    private val activeUtterances = mutableMapOf<String, ActiveUtterance>()
+class MainActivity : FlutterActivity() {
     private var notificationPermissionResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ttsChannelName())
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    initMethod() -> {
-                        if (ttsInitCompleted) {
-                            result.success(ttsReady)
-                            return@setMethodCallHandler
-                        }
-                        if (!ensureTts()) {
-                            result.success(false)
-                            return@setMethodCallHandler
-                        }
-                        pendingInitResults += result
-                    }
-
-                    speakMethod() -> {
-                        val text = call.argument<String>(textArgument()).orEmpty().trim()
-                        if (text.isEmpty()) {
-                            result.success(false)
-                            return@setMethodCallHandler
-                        }
-                        if (ttsInitCompleted) {
-                            if (!ttsReady) {
-                                result.success(false)
-                            } else {
-                                speakNow(text, result)
-                            }
-                            return@setMethodCallHandler
-                        }
-                        if (!ensureTts()) {
-                            result.success(false)
-                            return@setMethodCallHandler
-                        }
-                        pendingSpeakRequests += PendingSpeakRequest(text, result)
-                    }
-
-                    else -> result.notImplemented()
-                }
-            }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, platformChannelName())
             .setMethodCallHandler { call, result ->
@@ -144,24 +90,6 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
     }
 
-    override fun onInit(status: Int) {
-        ttsInitCompleted = true
-        val initialized = status == TextToSpeech.SUCCESS
-        val configuredPreferredVoice = if (initialized) configureTtsVoice() else false
-        ttsReady = initialized
-        if (ttsReady) {
-            configureTtsAudio()
-            textToSpeech?.setSpeechRate(1.0f)
-            textToSpeech?.setPitch(1.0f)
-            textToSpeech?.setOnUtteranceProgressListener(ttsProgressListener())
-        }
-        Log.i(
-            TAG,
-            "MainActivity TTS init status=$status ready=$ttsReady preferredVoice=$configuredPreferredVoice",
-        )
-        flushPendingTtsRequests()
-    }
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -178,144 +106,39 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
-        failPendingTtsRequests()
-        activeUtterances.keys.toList().forEach { finishUtterance(it, false) }
         notificationPermissionResult?.success(false)
         notificationPermissionResult = null
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
-        textToSpeech = null
         super.onDestroy()
-    }
-
-    private fun ensureTts(): Boolean {
-        if (textToSpeech != null) {
-            return true
-        }
-        return runCatching {
-            ttsReady = false
-            ttsInitCompleted = false
-            textToSpeech = TextToSpeech(applicationContext, this)
-            true
-        }.getOrElse {
-            false
-        }
-    }
-
-    private fun speakNow(text: String, result: MethodChannel.Result) {
-        if (!ttsReady) {
-            Log.w(TAG, "Rejecting TTS speak request because engine is not ready")
-            result.success(false)
-            return
-        }
-        val utteranceId = utterancePrefix() + System.currentTimeMillis()
-        val timeoutRunnable = Runnable {
-            Log.w(TAG, "TTS utterance timed out: $utteranceId")
-            finishUtterance(utteranceId, false)
-        }
-        activeUtterances[utteranceId] = ActiveUtterance(result, timeoutRunnable)
-        val queued = textToSpeech?.speak(
-            text,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            utteranceId,
-        ) == TextToSpeech.SUCCESS
-        if (!queued) {
-            Log.w(TAG, "TTS speak returned non-success for utterance: $utteranceId")
-            finishUtterance(utteranceId, false)
-            return
-        }
-        mainHandler.postDelayed(timeoutRunnable, utteranceTimeoutMillis())
-    }
-
-    private fun configureTtsVoice(): Boolean {
-        val tts = textToSpeech ?: return false
-        val candidateLocales = linkedSetOf(
-            Locale.SIMPLIFIED_CHINESE,
-            Locale.CHINESE,
-            Locale.getDefault(),
-        )
-        for (locale in candidateLocales) {
-            val availability = tts.isLanguageAvailable(locale)
-            if (availability >= TextToSpeech.LANG_AVAILABLE) {
-                val result = tts.setLanguage(locale)
-                if (result >= TextToSpeech.LANG_AVAILABLE) {
-                    Log.i(TAG, "Selected TTS locale: $locale")
-                    return true
-                }
-            }
-        }
-        Log.w(TAG, "Preferred Chinese TTS locale unavailable; falling back to engine default voice")
-        return false
-    }
-
-    private fun configureTtsAudio() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-            return
-        }
-        runCatching {
-            textToSpeech?.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build(),
-            )
-        }.onFailure { error ->
-            Log.w(TAG, "Unable to apply TTS audio attributes", error)
-        }
-    }
-
-    private fun flushPendingTtsRequests() {
-        val initResults = pendingInitResults.toList()
-        pendingInitResults.clear()
-        initResults.forEach { it.success(ttsReady) }
-
-        val speakRequests = pendingSpeakRequests.toList()
-        pendingSpeakRequests.clear()
-        speakRequests.forEach { request ->
-            if (!ttsReady) {
-                request.result.success(false)
-            } else {
-                speakNow(request.text, request.result)
-            }
-        }
-    }
-
-    private fun failPendingTtsRequests() {
-        if (pendingInitResults.isEmpty() && pendingSpeakRequests.isEmpty()) {
-            return
-        }
-        ttsReady = false
-        ttsInitCompleted = true
-        flushPendingTtsRequests()
     }
 
     private fun openBatteryOptimizationSettings() {
         val powerManager = getSystemService(PowerManager::class.java)
         val packageName = packageName
-        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && powerManager != null &&
-            !powerManager.isIgnoringBatteryOptimizations(packageName)
-        ) {
-            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:$packageName")
+        val intent =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && powerManager != null &&
+                !powerManager.isIgnoringBatteryOptimizations(packageName)
+            ) {
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+            } else {
+                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
             }
-        } else {
-            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-        }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
     }
 
     private fun openNotificationSettings() {
-        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        val intent =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                }
+            } else {
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
             }
-        } else {
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.parse("package:$packageName")
-            }
-        }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
     }
@@ -369,61 +192,9 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         return powerManager.isIgnoringBatteryOptimizations(packageName)
     }
 
-    private fun ttsProgressListener(): UtteranceProgressListener {
-        return object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                Log.i(TAG, "TTS utterance started: $utteranceId")
-            }
-
-            override fun onDone(utteranceId: String?) {
-                Log.i(TAG, "TTS utterance completed: $utteranceId")
-                finishUtterance(utteranceId, true)
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                Log.w(TAG, "TTS utterance failed: $utteranceId")
-                finishUtterance(utteranceId, false)
-            }
-
-            override fun onError(utteranceId: String?, errorCode: Int) {
-                Log.w(TAG, "TTS utterance failed: $utteranceId errorCode=$errorCode")
-                finishUtterance(utteranceId, false)
-            }
-
-            override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                Log.w(TAG, "TTS utterance stopped: $utteranceId interrupted=$interrupted")
-                finishUtterance(utteranceId, false)
-            }
-        }
-    }
-
-    private fun finishUtterance(utteranceId: String?, completed: Boolean) {
-        if (utteranceId == null) {
-            return
-        }
-        val activeUtterance = activeUtterances.remove(utteranceId) ?: return
-        mainHandler.removeCallbacks(activeUtterance.timeoutRunnable)
-        runOnUiThread {
-            activeUtterance.result.success(completed)
-        }
-    }
-
-    private fun utteranceTimeoutMillis(): Long = 12000L
-
-    private fun ttsChannelName(): String = "stock_pulse/tts"
-
     private fun platformChannelName(): String = "stock_pulse/platform"
 
-    private fun initMethod(): String = "initTts"
-
-    private fun speakMethod(): String = "speak"
-
-    private fun textArgument(): String = "text"
-
     private fun summaryArgument(): String = "summary"
-
-    private fun utterancePrefix(): String = "stock-pulse-"
 
     private fun getStorageDirectoryMethod(): String = "getStorageDirectoryPath"
 
@@ -448,18 +219,4 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private fun openNotificationSettingsMethod(): String = "openNotificationSettings"
 
     private fun notificationPermissionRequestCode(): Int = 21031
-
-    companion object {
-        private const val TAG = "StockPulseMainActivity"
-    }
-
-    private data class ActiveUtterance(
-        val result: MethodChannel.Result,
-        val timeoutRunnable: Runnable,
-    )
-
-    private data class PendingSpeakRequest(
-        val text: String,
-        val result: MethodChannel.Result,
-    )
 }
