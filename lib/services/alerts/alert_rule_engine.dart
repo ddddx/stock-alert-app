@@ -27,7 +27,7 @@ class AlertTrigger {
 
   AlertHistoryEntry toHistoryEntry({required bool playedSound}) {
     return AlertHistoryEntry(
-      id: '${rule.id}-${triggeredAt.millisecondsSinceEpoch}',
+      id: '${rule.id}-${quote.code}-${triggeredAt.millisecondsSinceEpoch}',
       ruleId: rule.id,
       ruleType: rule.type,
       stockCode: quote.code,
@@ -64,33 +64,67 @@ class AlertRuleEngine {
     }
 
     final now = DateTime.now();
-    final quoteByCode = {for (final quote in quotes) quote.code: quote};
+    final enabledRules = rules.where((item) => item.enabled).toList(growable: false);
+    final liveStateKeys = <String>{};
     final triggers = <AlertTrigger>[];
 
-    for (final rule in rules.where((item) => item.enabled)) {
-      final quote = quoteByCode[rule.stockCode];
-      if (quote == null) {
-        continue;
-      }
-
-      final state = _states[rule.id] ?? RuleEvaluationState(ruleId: rule.id);
-      switch (rule.type) {
-        case AlertRuleType.shortWindowMove:
-          final outcome = _evaluateShortWindowRule(rule, quote, state, now);
-          _states[rule.id] = outcome.state;
-          if (outcome.trigger != null) {
-            triggers.add(outcome.trigger!);
-          }
-        case AlertRuleType.stepAlert:
-          final outcome = _evaluateStepRule(rule, quote, state, now);
-          _states[rule.id] = outcome.state;
-          if (outcome.trigger != null) {
-            triggers.add(outcome.trigger!);
-          }
+    for (final rule in enabledRules) {
+      for (final quote in quotes.where((item) => rule.appliesToCode(item.code))) {
+        final stateKey = rule.stateKeyFor(quote.code);
+        liveStateKeys.add(stateKey);
+        final state =
+            _states[stateKey] ?? RuleEvaluationState(ruleId: stateKey);
+        switch (rule.type) {
+          case AlertRuleType.shortWindowMove:
+            final outcome = _evaluateShortWindowRule(rule, quote, state, now);
+            _states[stateKey] = outcome.state;
+            if (outcome.trigger != null) {
+              triggers.add(outcome.trigger!);
+            }
+          case AlertRuleType.stepAlert:
+            final outcome = _evaluateStepRule(rule, quote, state, now);
+            _states[stateKey] = outcome.state;
+            if (outcome.trigger != null) {
+              triggers.add(outcome.trigger!);
+            }
+        }
       }
     }
 
+    _states.removeWhere((key, _) => !liveStateKeys.contains(key));
+
     return triggers;
+  }
+
+  void removeRule(String ruleId) {
+    _states.removeWhere((key, _) => key == ruleId || key.startsWith('$ruleId:'));
+  }
+
+  void replaceRule(AlertRule previousRule, AlertRule nextRule) {
+    if (previousRule.id != nextRule.id) {
+      removeRule(previousRule.id);
+      return;
+    }
+
+    final previousTargets = previousRule.applyToAllWatchlist
+        ? const <String>['*']
+        : previousRule.targetStocks.map((item) => item.code).toList()
+          ..sort();
+    final nextTargets = nextRule.applyToAllWatchlist
+        ? const <String>['*']
+        : nextRule.targetStocks.map((item) => item.code).toList()..sort();
+
+    if (previousRule.type != nextRule.type ||
+        previousRule.moveThresholdPercent != nextRule.moveThresholdPercent ||
+        previousRule.lookbackMinutes != nextRule.lookbackMinutes ||
+        previousRule.moveDirection != nextRule.moveDirection ||
+        previousRule.stepValue != nextRule.stepValue ||
+        previousRule.stepMetric != nextRule.stepMetric ||
+        previousRule.anchorPricesByCode.toString() !=
+            nextRule.anchorPricesByCode.toString() ||
+        previousTargets.join(',') != nextTargets.join(',')) {
+      removeRule(previousRule.id);
+    }
   }
 
   void _appendHistory(StockQuoteSnapshot quote) {
@@ -112,8 +146,10 @@ class AlertRuleEngine {
       return _EvaluationOutcome(state: state.copyWith(active: false));
     }
 
-    final cutoff = current.timestamp.subtract(Duration(minutes: lookbackMinutes));
-    final window = history.where((item) => !item.timestamp.isBefore(cutoff)).toList();
+    final cutoff =
+        current.timestamp.subtract(Duration(minutes: lookbackMinutes));
+    final window =
+        history.where((item) => !item.timestamp.isBefore(cutoff)).toList();
     if (window.length < 2) {
       return _EvaluationOutcome(state: state.copyWith(active: false));
     }
@@ -186,7 +222,7 @@ class AlertRuleEngine {
 
     final referenceValue = rule.stepMetric == StepMetric.percent
         ? current.previousClose
-        : (rule.anchorPrice ?? current.lastPrice);
+        : (rule.anchorPriceFor(current.code) ?? current.lastPrice);
     final previousIndex = state.lastStepIndex!;
     final crossedAmount = current.lastPrice - referenceValue;
     final crossedPercent = referenceValue == 0
@@ -229,7 +265,7 @@ class AlertRuleEngine {
     if (rule.stepMetric == StepMetric.percent) {
       return _bandIndex(quote.changePercent / stepValue);
     }
-    final anchor = rule.anchorPrice ?? quote.lastPrice;
+    final anchor = rule.anchorPriceFor(quote.code) ?? quote.lastPrice;
     return _bandIndex((quote.lastPrice - anchor) / stepValue);
   }
 

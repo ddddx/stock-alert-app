@@ -1,5 +1,5 @@
-import '../models/alert_rule.dart';
 import '../../services/storage/json_file_store.dart';
+import '../models/alert_rule.dart';
 import 'alert_repository.dart';
 
 class LocalAlertRepository implements AlertRepository {
@@ -25,7 +25,7 @@ class LocalAlertRepository implements AlertRepository {
             moveDirection: MoveDirection.either,
             enabled: true,
             createdAt: DateTime.now().subtract(const Duration(days: 1)),
-            note: '监控 5 分钟内的急涨急跌。',
+            note: 'Monitor sudden moves within 5 minutes.',
           ),
           AlertRule.stepAlert(
             id: 'rule-step-1',
@@ -36,7 +36,7 @@ class LocalAlertRepository implements AlertRepository {
             stepMetric: StepMetric.percent,
             enabled: true,
             createdAt: DateTime.now().subtract(const Duration(hours: 8)),
-            note: '每跨过 0.5% 涨跌幅台阶播报一次。',
+            note: 'Announce every additional 0.5% move.',
           ),
         ]);
       await _persist();
@@ -67,6 +67,22 @@ class LocalAlertRepository implements AlertRepository {
   }
 
   @override
+  Future<void> update(AlertRule rule) async {
+    final index = _rules.indexWhere((item) => item.id == rule.id);
+    if (index == -1) {
+      return;
+    }
+    _rules[index] = rule;
+    await _persist();
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    _rules.removeWhere((item) => item.id == id);
+    await _persist();
+  }
+
+  @override
   Future<void> toggle(String id, bool enabled) async {
     final index = _rules.indexWhere((item) => item.id == id);
     if (index == -1) {
@@ -77,6 +93,8 @@ class LocalAlertRepository implements AlertRepository {
   }
 
   Future<void> _persist() {
-    return _store.writeJson(_rules.map((item) => item.toJson()).toList(growable: false));
+    return _store.writeJson(
+      _rules.map((item) => item.toJson()).toList(growable: false),
+    );
   }
 }

@@ -110,6 +110,9 @@ class _FakeAlertRepository implements AlertRepository {
   Future<void> add(AlertRule rule) async {}
 
   @override
+  Future<void> delete(String id) async {}
+
+  @override
   List<AlertRule> getAll() => const [];
 
   @override
@@ -117,6 +120,9 @@ class _FakeAlertRepository implements AlertRepository {
 
   @override
   Future<void> initialize() async {}
+
+  @override
+  Future<void> update(AlertRule rule) async {}
 
   @override
   Future<void> toggle(String id, bool enabled) async {}

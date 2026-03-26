@@ -6,14 +6,18 @@ import '../../data/models/stock_quote_snapshot.dart';
 import '../../data/models/stock_search_result.dart';
 
 class AshareMarketDataService {
-  AshareMarketDataService({HttpClient? httpClient})
-      : _httpClient = httpClient ?? HttpClient() {
+  AshareMarketDataService({
+    HttpClient? httpClient,
+    Future<dynamic> Function(Uri uri)? jsonLoader,
+  })  : _httpClient = httpClient ?? HttpClient(),
+        _jsonLoader = jsonLoader {
     _httpClient.connectionTimeout = const Duration(seconds: 8);
   }
 
   static const _searchToken = 'D43BF722C8E33BDC906FB84D85E326E8';
 
   final HttpClient _httpClient;
+  final Future<dynamic> Function(Uri uri)? _jsonLoader;
 
   Future<List<StockSearchResult>> searchStocks(String keyword) async {
     final query = keyword.trim();
@@ -99,6 +103,15 @@ class AshareMarketDataService {
       return const [];
     }
 
+    try {
+      final batchQuotes = await _fetchBatchQuotes(stocks);
+      if (batchQuotes.length == stocks.length) {
+        return batchQuotes;
+      }
+    } catch (_) {
+      // Fall back to the legacy per-stock path when the batch payload changes.
+    }
+
     return Future.wait(stocks.map(_fetchSingleQuote));
   }
 
@@ -122,6 +135,72 @@ class AshareMarketDataService {
       map: data.cast<String, dynamic>(),
       timestamp: DateTime.now(),
     );
+  }
+
+  Future<List<StockQuoteSnapshot>> _fetchBatchQuotes(
+    List<StockIdentity> stocks,
+  ) async {
+    final uri = Uri.parse(
+      'https://push2.eastmoney.com/api/qt/ulist.np/get'
+      '?invt=2'
+      '&fltt=2'
+      '&fields=f12,f13,f14,f18,f57,f58,f59,f43,f169,f170,f46,f44,f45,f47,f60'
+      '&secids=${stocks.map((item) => item.secId).join(',')}',
+    );
+
+    final payload = await _getJson(uri);
+    if (payload is! Map<String, dynamic>) {
+      throw const HttpException('Batch quote payload format is invalid');
+    }
+
+    final data = payload['data'];
+    if (data is! Map) {
+      throw const HttpException('Batch quote payload is empty');
+    }
+
+    final diff = data['diff'];
+    if (diff is! List) {
+      throw const HttpException('Batch quote list is empty');
+    }
+
+    final stockByCode = {for (final stock in stocks) stock.code: stock};
+    final quotes = <StockQuoteSnapshot>[];
+
+    for (final item in diff.whereType<Map>()) {
+      final map = item.cast<String, dynamic>();
+      final code = _readStaticString(map, ['f57', 'f12']);
+      final stock = stockByCode[code];
+      if (stock == null) {
+        continue;
+      }
+
+      final normalizedMap = <String, dynamic>{
+        ...map,
+        'f57': code,
+        'f58': _readStaticString(map, ['f58', 'f14']),
+        'f60': map['f60'] ?? map['f18'],
+        'f170': _normalizeBatchPercent(map['f170'] ?? map['f3']),
+      };
+
+      quotes.add(
+        parseQuoteSnapshot(
+          stock: stock,
+          map: normalizedMap,
+          timestamp: DateTime.now(),
+        ),
+      );
+    }
+
+    if (quotes.isEmpty) {
+      throw const HttpException('Batch quote list resolved to zero quotes');
+    }
+
+    quotes.sort((left, right) {
+      return stocks
+          .indexWhere((item) => item.code == left.code)
+          .compareTo(stocks.indexWhere((item) => item.code == right.code));
+    });
+    return quotes;
   }
 
   static StockQuoteSnapshot parseQuoteSnapshot({
@@ -307,6 +386,10 @@ class AshareMarketDataService {
   }
 
   Future<dynamic> _getJson(Uri uri) async {
+    final loader = _jsonLoader;
+    if (loader != null) {
+      return loader(uri);
+    }
     final request = await _httpClient.getUrl(uri);
     request.headers.set(
       HttpHeaders.acceptHeader,
@@ -324,6 +407,24 @@ class AshareMarketDataService {
     }
 
     return jsonDecode(body);
+  }
+
+  static dynamic _normalizeBatchPercent(dynamic value) {
+    if (value == null || value == '-') {
+      return value;
+    }
+    if (value is double) {
+      return value * 100;
+    }
+    if (value is String) {
+      final trimmed = value.trim();
+      final parsed = double.tryParse(trimmed);
+      if (parsed != null && trimmed.contains('.')) {
+        return parsed * 100;
+      }
+      return value;
+    }
+    return value;
   }
 
   List<dynamic>? _extractList(dynamic value) {

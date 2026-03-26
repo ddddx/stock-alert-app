@@ -5,5 +5,7 @@ abstract class AlertRepository {
   List<AlertRule> getAll();
   List<AlertRule> getEnabledRules();
   Future<void> add(AlertRule rule);
+  Future<void> update(AlertRule rule);
+  Future<void> delete(String id);
   Future<void> toggle(String id, bool enabled);
 }
