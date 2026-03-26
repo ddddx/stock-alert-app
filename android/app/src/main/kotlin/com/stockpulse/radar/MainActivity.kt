@@ -1,17 +1,19 @@
 package com.stockpulse.radar
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.Locale
 
 class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
@@ -20,7 +22,8 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private var ttsInitCompleted = false
     private val pendingInitResults = mutableListOf<MethodChannel.Result>()
     private val pendingSpeakRequests = mutableListOf<PendingSpeakRequest>()
-    private var lastSpeakAttemptStarted = false
+    private val activeUtteranceResults = mutableMapOf<String, MethodChannel.Result>()
+    private var notificationPermissionResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -47,7 +50,11 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                             return@setMethodCallHandler
                         }
                         if (ttsInitCompleted) {
-                            result.success(if (ttsReady) speakNow(text) else false)
+                            if (!ttsReady) {
+                                result.success(false)
+                            } else {
+                                speakNow(text, result)
+                            }
                             return@setMethodCallHandler
                         }
                         if (!ensureTts()) {
@@ -83,6 +90,14 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                         val summary = call.argument<String>(summaryArgument()).orEmpty()
                         MonitorForegroundService.updateSummary(this, summary)
                         result.success(true)
+                    }
+
+                    androidBackgroundAccessStatusMethod() -> {
+                        result.success(buildAndroidBackgroundAccessStatus())
+                    }
+
+                    requestNotificationPermissionMethod() -> {
+                        requestNotificationPermission(result)
                     }
 
                     reloadForegroundServiceMethod() -> {
@@ -130,12 +145,32 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         if (ttsReady) {
             textToSpeech?.setSpeechRate(1.0f)
             textToSpeech?.setPitch(1.0f)
+            textToSpeech?.setOnUtteranceProgressListener(ttsProgressListener())
         }
         flushPendingTtsRequests()
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != notificationPermissionRequestCode()) {
+            return
+        }
+
+        val granted = hasNotificationPermission()
+        notificationPermissionResult?.success(granted)
+        notificationPermissionResult = null
+    }
+
     override fun onDestroy() {
         failPendingTtsRequests()
+        activeUtteranceResults.values.forEach { it.success(false) }
+        activeUtteranceResults.clear()
+        notificationPermissionResult?.success(false)
+        notificationPermissionResult = null
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
@@ -156,32 +191,13 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun speakNow(text: String): Boolean {
+    private fun speakNow(text: String, result: MethodChannel.Result) {
         if (!ttsReady) {
-            return false
+            result.success(false)
+            return
         }
         val utteranceId = utterancePrefix() + System.currentTimeMillis()
-        val startedSignal = CountDownLatch(1)
-        lastSpeakAttemptStarted = false
-        textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                lastSpeakAttemptStarted = true
-                startedSignal.countDown()
-            }
-
-            override fun onDone(utteranceId: String?) {
-                startedSignal.countDown()
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                startedSignal.countDown()
-            }
-
-            override fun onError(utteranceId: String?, errorCode: Int) {
-                startedSignal.countDown()
-            }
-        })
+        activeUtteranceResults[utteranceId] = result
         val queued = textToSpeech?.speak(
             text,
             TextToSpeech.QUEUE_FLUSH,
@@ -189,10 +205,9 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             utteranceId,
         ) == TextToSpeech.SUCCESS
         if (!queued) {
-            return false
+            activeUtteranceResults.remove(utteranceId)
+            result.success(false)
         }
-        startedSignal.await(1500, TimeUnit.MILLISECONDS)
-        return lastSpeakAttemptStarted
     }
 
     private fun configureTtsVoice(): Boolean {
@@ -222,7 +237,11 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         val speakRequests = pendingSpeakRequests.toList()
         pendingSpeakRequests.clear()
         speakRequests.forEach { request ->
-            request.result.success(if (ttsReady) speakNow(request.text) else false)
+            if (!ttsReady) {
+                request.result.success(false)
+            } else {
+                speakNow(request.text, request.result)
+            }
         }
     }
 
@@ -265,6 +284,88 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         startActivity(intent)
     }
 
+    private fun buildAndroidBackgroundAccessStatus(): Map<String, Any> {
+        val sdkInt = Build.VERSION.SDK_INT
+        return mapOf(
+            "isAndroid" to true,
+            "sdkInt" to sdkInt,
+            "notificationsRuntimePermissionRequired" to
+                (sdkInt >= Build.VERSION_CODES.TIRAMISU),
+            "notificationPermissionGranted" to hasNotificationPermission(),
+            "notificationsEnabled" to NotificationManagerCompat.from(this)
+                .areNotificationsEnabled(),
+            "ignoringBatteryOptimizations" to isIgnoringBatteryOptimizations(),
+        )
+    }
+
+    private fun requestNotificationPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.success(NotificationManagerCompat.from(this).areNotificationsEnabled())
+            return
+        }
+        if (hasNotificationPermission()) {
+            result.success(true)
+            return
+        }
+        notificationPermissionResult?.success(false)
+        notificationPermissionResult = result
+        requestPermissions(
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            notificationPermissionRequestCode(),
+        )
+    }
+
+    private fun hasNotificationPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return NotificationManagerCompat.from(this).areNotificationsEnabled()
+        }
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true
+        }
+        val powerManager = getSystemService(PowerManager::class.java) ?: return true
+        return powerManager.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    private fun ttsProgressListener(): UtteranceProgressListener {
+        return object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                finishUtterance(utteranceId, true)
+            }
+
+            override fun onDone(utteranceId: String?) = Unit
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                finishUtterance(utteranceId, false)
+            }
+
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                finishUtterance(utteranceId, false)
+            }
+
+            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                finishUtterance(utteranceId, false)
+            }
+        }
+    }
+
+    private fun finishUtterance(utteranceId: String?, started: Boolean) {
+        if (utteranceId == null) {
+            return
+        }
+        val result = activeUtteranceResults.remove(utteranceId) ?: return
+        runOnUiThread {
+            result.success(started)
+        }
+    }
+
     private fun ttsChannelName(): String = "stock_pulse/tts"
 
     private fun platformChannelName(): String = "stock_pulse/platform"
@@ -285,6 +386,12 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     private fun updateForegroundServiceMethod(): String = "updateForegroundMonitorSummary"
 
+    private fun androidBackgroundAccessStatusMethod(): String =
+        "getAndroidBackgroundAccessStatus"
+
+    private fun requestNotificationPermissionMethod(): String =
+        "requestNotificationPermission"
+
     private fun reloadForegroundServiceMethod(): String = "reloadForegroundMonitorService"
 
     private fun refreshForegroundServiceMethod(): String = "refreshForegroundMonitorService"
@@ -294,6 +401,8 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private fun openBatterySettingsMethod(): String = "openBatteryOptimizationSettings"
 
     private fun openNotificationSettingsMethod(): String = "openNotificationSettings"
+
+    private fun notificationPermissionRequestCode(): Int = 21031
 
     private data class PendingSpeakRequest(
         val text: String,

@@ -1,12 +1,12 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/local_alert_repository.dart';
 import '../../data/repositories/local_history_repository.dart';
 import '../../data/repositories/local_settings_repository.dart';
 import '../../data/repositories/local_watchlist_repository.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../../features/alerts/presentation/pages/alerts_page.dart';
 import '../../features/history/presentation/pages/history_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
@@ -40,16 +40,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _refreshing = false;
   bool _bootstrapping = true;
+  bool _androidOnboardingRunning = false;
 
   final _platformBridgeService = PlatformBridgeService();
   final _watchlistStore = JsonFileStore(fileName: 'watchlist.json');
   final _alertStore = JsonFileStore(fileName: 'alert_rules.json');
   final _historyStore = JsonFileStore(fileName: 'alert_history.json');
   final _settingsStore = JsonFileStore(fileName: 'monitor_settings.json');
-  late final _watchlistRepository = LocalWatchlistRepository(store: _watchlistStore);
+  late final _watchlistRepository =
+      LocalWatchlistRepository(store: _watchlistStore);
   late final _alertRepository = LocalAlertRepository(store: _alertStore);
   late final _historyRepository = LocalHistoryRepository(store: _historyStore);
-  late final _settingsRepository = LocalSettingsRepository(store: _settingsStore);
+  late final _settingsRepository =
+      LocalSettingsRepository(store: _settingsStore);
   final _marketDataService = AshareMarketDataService();
   final _messageBuilder = AlertMessageBuilder();
   final _audioService = PlatformTtsAudioAlertService();
@@ -80,6 +83,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           });
         }
       }
+      await _runAndroidFirstLaunchOnboarding();
       await _refreshQuotes();
     });
   }
@@ -98,6 +102,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.resumed:
         unawaited(_handleResume());
+        break;
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
@@ -132,6 +137,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             : _monitorService.latestQuotes.first,
         onRefresh: _refreshQuotes,
         onChanged: _markDirty,
+        onRequestAndroidBackgroundAccess: _requestAndroidBackgroundAccess,
       ),
     ];
 
@@ -223,6 +229,123 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       settingsRepository: _settingsRepository,
       monitorService: _monitorService,
     );
+  }
+
+  Future<void> _runAndroidFirstLaunchOnboarding() async {
+    if (_androidOnboardingRunning ||
+        _settingsRepository.getStatus().androidOnboardingShown) {
+      return;
+    }
+    _androidOnboardingRunning = true;
+    try {
+      await _requestAndroidBackgroundAccess(onboarding: true);
+      await _settingsRepository.markAndroidOnboardingShown();
+    } finally {
+      _androidOnboardingRunning = false;
+      _markDirty();
+    }
+  }
+
+  Future<bool> _requestAndroidBackgroundAccess({required bool onboarding}) async {
+    final initial =
+        await _platformBridgeService.getAndroidBackgroundAccessStatus();
+    if (!initial.isAndroid) {
+      return true;
+    }
+
+    var status = initial;
+
+    if (status.needsNotificationPermissionRequest) {
+      final shouldRequest = onboarding
+          ? await _showChoiceDialog(
+              title: '开启通知权限',
+              message:
+                  '后台监控依赖常驻通知。请允许通知权限，Android 13 及以上还需要显式授权 POST_NOTIFICATIONS。',
+              confirmLabel: '去授权',
+              cancelLabel: '稍后',
+            )
+          : true;
+      if (shouldRequest) {
+        await _platformBridgeService.requestNotificationPermission();
+        status = await _platformBridgeService.getAndroidBackgroundAccessStatus();
+      }
+    }
+
+    if (!status.canPostNotifications) {
+      await _showActionDialog(
+        title: '通知仍未开启',
+        message:
+            '后台监控的前台服务必须能正常显示通知。请在系统通知设置中允许本应用通知后，再重新开启后台监控。',
+        actionLabel: '打开设置',
+        onAction: _platformBridgeService.openNotificationSettings,
+      );
+      if (!onboarding) {
+        return false;
+      }
+    }
+
+    if (status.needsBatteryOptimizationGuidance) {
+      await _showActionDialog(
+        title: '关闭电池优化',
+        message:
+            '部分机型会因为电池优化而杀死前台服务。建议把本应用加入后台白名单，避免监控和语音播报被系统中断。',
+        actionLabel: '去设置',
+        onAction: _platformBridgeService.openBatteryOptimizationSettings,
+      );
+    }
+
+    return status.canPostNotifications;
+  }
+
+  Future<void> _showActionDialog({
+    required String title,
+    required String message,
+    required String actionLabel,
+    required Future<void> Function() onAction,
+  }) async {
+    if (!mounted) {
+      return;
+    }
+    final shouldOpen = await _showChoiceDialog(
+      title: title,
+      message: message,
+      confirmLabel: actionLabel,
+      cancelLabel: '稍后',
+    );
+    if (shouldOpen) {
+      await onAction();
+    }
+  }
+
+  Future<bool> _showChoiceDialog({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required String cancelLabel,
+  }) async {
+    if (!mounted) {
+      return false;
+    }
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(cancelLabel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
   }
 
   Future<void> _refreshQuotes() async {

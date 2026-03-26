@@ -12,6 +12,7 @@ class LocalSettingsRepository implements SettingsRepository {
     pollIntervalSeconds: 20,
     lastCheckAt: null,
     lastMessage: '等待首次刷新 A 股行情。',
+    androidOnboardingShown: false,
   );
 
   @override
@@ -47,6 +48,15 @@ class LocalSettingsRepository implements SettingsRepository {
   Future<void> updatePollIntervalSeconds(int seconds) async {
     final normalized = seconds.clamp(15, 300).toInt();
     _status = _status.copyWith(pollIntervalSeconds: normalized);
+    await _persist();
+  }
+
+  @override
+  Future<void> markAndroidOnboardingShown() async {
+    if (_status.androidOnboardingShown) {
+      return;
+    }
+    _status = _status.copyWith(androidOnboardingShown: true);
     await _persist();
   }
 

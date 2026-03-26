@@ -139,9 +139,22 @@ class AshareMarketDataService {
     final priceDivisor = SecurityPriceScale.divisorForPriceDecimalDigits(
       priceDecimalDigits,
     ).toDouble();
-    final previousClose = _scaledPrice(map['f60'], priceDivisor) == 0
-        ? _scaledPrice(map['f18'], priceDivisor)
-        : _scaledPrice(map['f60'], priceDivisor);
+    final previousClose = _scaledPrice(
+              map['f60'],
+              priceDivisor,
+              priceDecimalDigits: priceDecimalDigits,
+            ) ==
+            0
+        ? _scaledPrice(
+            map['f18'],
+            priceDivisor,
+            priceDecimalDigits: priceDecimalDigits,
+          )
+        : _scaledPrice(
+            map['f60'],
+            priceDivisor,
+            priceDecimalDigits: priceDecimalDigits,
+          );
 
     return StockQuoteSnapshot(
       code: resolvedCode,
@@ -151,13 +164,33 @@ class AshareMarketDataService {
       market: stock.market,
       securityTypeName: stock.securityTypeName,
       priceDecimalDigits: priceDecimalDigits,
-      lastPrice: _scaledPrice(map['f43'], priceDivisor),
+      lastPrice: _scaledPrice(
+        map['f43'],
+        priceDivisor,
+        priceDecimalDigits: priceDecimalDigits,
+      ),
       previousClose: previousClose,
-      changeAmount: _scaledPrice(map['f169'], priceDivisor),
+      changeAmount: _scaledPrice(
+        map['f169'],
+        priceDivisor,
+        priceDecimalDigits: priceDecimalDigits,
+      ),
       changePercent: _scaledPercent(map['f170']),
-      openPrice: _scaledPrice(map['f46'], priceDivisor),
-      highPrice: _scaledPrice(map['f44'], priceDivisor),
-      lowPrice: _scaledPrice(map['f45'], priceDivisor),
+      openPrice: _scaledPrice(
+        map['f46'],
+        priceDivisor,
+        priceDecimalDigits: priceDecimalDigits,
+      ),
+      highPrice: _scaledPrice(
+        map['f44'],
+        priceDivisor,
+        priceDecimalDigits: priceDecimalDigits,
+      ),
+      lowPrice: _scaledPrice(
+        map['f45'],
+        priceDivisor,
+        priceDecimalDigits: priceDecimalDigits,
+      ),
       volume: _plainNumber(map['f47']),
       timestamp: timestamp,
     );
@@ -384,8 +417,16 @@ class AshareMarketDataService {
     return '';
   }
 
-  static double _scaledPrice(dynamic value, double divisor) {
-    return _plainNumber(value) / divisor;
+  static double _scaledPrice(
+    dynamic value,
+    double divisor, {
+    required int priceDecimalDigits,
+  }) {
+    final plain = _plainNumber(value);
+    if (_isExplicitDecimalValue(value, plain, priceDecimalDigits)) {
+      return plain;
+    }
+    return plain / divisor;
   }
 
   static double _scaledPercent(dynamic value) {
@@ -400,5 +441,23 @@ class AshareMarketDataService {
       return value.toDouble();
     }
     return double.tryParse(value.toString()) ?? 0;
+  }
+
+  static bool _isExplicitDecimalValue(
+    dynamic rawValue,
+    double plain,
+    int priceDecimalDigits,
+  ) {
+    if (rawValue is! num && rawValue is! String) {
+      return false;
+    }
+    if (plain == 0 || priceDecimalDigits <= 0) {
+      return false;
+    }
+    if (rawValue is num) {
+      return rawValue is double || rawValue is num && rawValue % 1 != 0;
+    }
+    final text = rawValue.toString().trim();
+    return text.contains('.');
   }
 }

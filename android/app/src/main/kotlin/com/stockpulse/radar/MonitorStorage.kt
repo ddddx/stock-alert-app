@@ -78,6 +78,8 @@ data class NativeAlertHistoryEntry(
     val stockCode: String,
     val stockName: String,
     val market: String,
+    val securityTypeName: String,
+    val priceDecimalDigits: Int?,
     val triggeredAtIso: String,
     val currentPrice: Double,
     val referencePrice: Double,
@@ -389,6 +391,8 @@ object MonitorStorage {
                     .put("stockCode", entry.stockCode)
                     .put("stockName", entry.stockName)
                     .put("market", entry.market)
+                    .put("securityTypeName", entry.securityTypeName)
+                    .put("priceDecimalDigits", entry.priceDecimalDigits ?: JSONObject.NULL)
                     .put("triggeredAt", entry.triggeredAtIso)
                     .put("currentPrice", entry.currentPrice)
                     .put("referencePrice", entry.referencePrice)

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_alert_app/data/models/monitor_status.dart';
@@ -63,6 +63,8 @@ void main() {
             previewQuote: _sampleQuote(),
             onRefresh: () async {},
             onChanged: () {},
+            onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+                true,
           ),
         ),
       ),
@@ -92,6 +94,8 @@ void main() {
             previewQuote: _sampleQuote(),
             onRefresh: () async {},
             onChanged: () {},
+            onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+                true,
           ),
         ),
       ),
@@ -102,39 +106,43 @@ void main() {
 
     expect(audioService.preloadCalls, 1);
     expect(audioService.spokenTexts, hasLength(1));
-    expect(find.textContaining('试播失败：'), findsWidgets);
+    expect(find.textContaining('试播失败'), findsWidgets);
   });
-  testWidgets('preview playback does not attempt speak when preload fails', (
+
+  testWidgets('background toggle waits for Android access preflight', (
     tester,
   ) async {
     final settingsRepository = _FakeSettingsRepository();
-    final audioService = _FakeAudioAlertService(
-      shouldSucceed: true,
-      preloadResult: false,
-    );
+    final monitorService = _FakeMonitorService();
+    var preflightCalls = 0;
 
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: SettingsPage(
             repository: settingsRepository,
-            monitorService: _FakeMonitorService(),
-            audioService: audioService,
+            monitorService: monitorService,
+            audioService: _FakeAudioAlertService(shouldSucceed: true),
             messageBuilder: AlertMessageBuilder(),
             platformBridgeService: _FakePlatformBridgeService(),
             previewQuote: _sampleQuote(),
             onRefresh: () async {},
             onChanged: () {},
+            onRequestAndroidBackgroundAccess: ({required onboarding}) async {
+              preflightCalls += 1;
+              return false;
+            },
           ),
         ),
       ),
     );
 
-    await tester.tap(find.byIcon(Icons.volume_up_outlined));
+    await tester.tap(find.byType(SwitchListTile).first);
     await tester.pumpAndSettle();
 
-    expect(audioService.preloadCalls, 1);
-    expect(audioService.spokenTexts, isEmpty);
+    expect(preflightCalls, 1);
+    expect(monitorService.startCalls, 0);
+    expect(settingsRepository.getStatus().serviceEnabled, isFalse);
   });
 
   test('platform TTS preload returns native init result', () async {
@@ -249,6 +257,7 @@ class _FakeSettingsRepository implements SettingsRepository {
     pollIntervalSeconds: 20,
     lastCheckAt: null,
     lastMessage: 'ready',
+    androidOnboardingShown: false,
   );
 
   @override
@@ -256,6 +265,11 @@ class _FakeSettingsRepository implements SettingsRepository {
 
   @override
   Future<void> initialize() async {}
+
+  @override
+  Future<void> markAndroidOnboardingShown() async {
+    _status = _status.copyWith(androidOnboardingShown: true);
+  }
 
   @override
   Future<void> markChecked({
@@ -305,12 +319,15 @@ class _FakeAudioAlertService implements AudioAlertService {
 
   @override
   Future<bool> speak(String text) async {
+    preloadCalls += 1;
     spokenTexts.add(text);
-    return shouldSucceed;
+    return preloadResult && shouldSucceed;
   }
 }
 
 class _FakeMonitorService implements MonitorService {
+  int startCalls = 0;
+
   @override
   bool get isRunning => false;
 
@@ -335,13 +352,33 @@ class _FakeMonitorService implements MonitorService {
   Future<void> requestBackgroundRefresh() async {}
 
   @override
-  Future<void> start() async {}
+  Future<void> start() async {
+    startCalls += 1;
+  }
 
   @override
   Future<void> stop() async {}
 }
 
-class _FakePlatformBridgeService extends PlatformBridgeService {}
+class _FakePlatformBridgeService extends PlatformBridgeService {
+  _FakePlatformBridgeService({
+    this.startResult = true,
+    this.reloadResult = true,
+  });
+
+  final bool startResult;
+  final bool reloadResult;
+
+  @override
+  Future<bool> startForegroundMonitorService({required String summary}) async {
+    return startResult;
+  }
+
+  @override
+  Future<bool> reloadForegroundMonitorService() async {
+    return reloadResult;
+  }
+}
 
 StockQuoteSnapshot _sampleQuote() {
   return StockQuoteSnapshot(
@@ -349,6 +386,7 @@ StockQuoteSnapshot _sampleQuote() {
     name: '国泰中证',
     market: 'SZ',
     securityTypeName: 'ETF',
+    priceDecimalDigits: 3,
     lastPrice: 1.234,
     previousClose: 1.2,
     changeAmount: 0.034,

@@ -5,6 +5,7 @@ class MonitorStatus {
     required this.pollIntervalSeconds,
     required this.lastCheckAt,
     required this.lastMessage,
+    required this.androidOnboardingShown,
   });
 
   factory MonitorStatus.fromJson(Map<String, dynamic> json) {
@@ -16,6 +17,7 @@ class MonitorStatus {
           ? null
           : DateTime.tryParse(json['lastCheckAt'] as String),
       lastMessage: json['lastMessage'] as String? ?? '等待首次刷新 A 股行情。',
+      androidOnboardingShown: json['androidOnboardingShown'] as bool? ?? false,
     );
   }
 
@@ -25,6 +27,7 @@ class MonitorStatus {
     int? pollIntervalSeconds,
     DateTime? lastCheckAt,
     String? lastMessage,
+    bool? androidOnboardingShown,
   }) {
     return MonitorStatus(
       serviceEnabled: serviceEnabled ?? this.serviceEnabled,
@@ -32,6 +35,8 @@ class MonitorStatus {
       pollIntervalSeconds: pollIntervalSeconds ?? this.pollIntervalSeconds,
       lastCheckAt: lastCheckAt ?? this.lastCheckAt,
       lastMessage: lastMessage ?? this.lastMessage,
+      androidOnboardingShown:
+          androidOnboardingShown ?? this.androidOnboardingShown,
     );
   }
 
@@ -40,6 +45,7 @@ class MonitorStatus {
   final int pollIntervalSeconds;
   final DateTime? lastCheckAt;
   final String lastMessage;
+  final bool androidOnboardingShown;
 
   Map<String, dynamic> toJson() {
     return {
@@ -48,6 +54,7 @@ class MonitorStatus {
       'pollIntervalSeconds': pollIntervalSeconds,
       'lastCheckAt': lastCheckAt?.toIso8601String(),
       'lastMessage': lastMessage,
+      'androidOnboardingShown': androidOnboardingShown,
     };
   }
 }

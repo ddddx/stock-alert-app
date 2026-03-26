@@ -8,6 +8,8 @@ class AlertHistoryEntry {
     required this.stockCode,
     required this.stockName,
     required this.market,
+    this.securityTypeName = '',
+    this.priceDecimalDigits,
     required this.triggeredAt,
     required this.currentPrice,
     required this.referencePrice,
@@ -28,6 +30,8 @@ class AlertHistoryEntry {
       stockCode: json['stockCode'] as String? ?? '',
       stockName: json['stockName'] as String? ?? '',
       market: json['market'] as String? ?? 'SZ',
+      securityTypeName: json['securityTypeName'] as String? ?? '',
+      priceDecimalDigits: (json['priceDecimalDigits'] as num?)?.toInt(),
       triggeredAt: DateTime.tryParse(json['triggeredAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       currentPrice: (json['currentPrice'] as num?)?.toDouble() ?? 0,
@@ -46,6 +50,8 @@ class AlertHistoryEntry {
   final String stockCode;
   final String stockName;
   final String market;
+  final String securityTypeName;
+  final int? priceDecimalDigits;
   final DateTime triggeredAt;
   final double currentPrice;
   final double referencePrice;
@@ -63,6 +69,8 @@ class AlertHistoryEntry {
       'stockCode': stockCode,
       'stockName': stockName,
       'market': market,
+      'securityTypeName': securityTypeName,
+      'priceDecimalDigits': priceDecimalDigits,
       'triggeredAt': triggeredAt.toIso8601String(),
       'currentPrice': currentPrice,
       'referencePrice': referencePrice,

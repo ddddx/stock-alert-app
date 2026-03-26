@@ -6,6 +6,7 @@ abstract class SettingsRepository {
   Future<void> updateService(bool enabled);
   Future<void> updateSound(bool enabled);
   Future<void> updatePollIntervalSeconds(int seconds);
+  Future<void> markAndroidOnboardingShown();
   Future<void> markPrepared(String message);
   Future<void> markChecked({required DateTime checkedAt, required String message});
 }

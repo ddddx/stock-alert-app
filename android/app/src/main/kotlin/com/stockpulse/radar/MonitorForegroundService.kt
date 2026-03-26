@@ -178,6 +178,8 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                         stockCode = trigger.quote.code,
                         stockName = trigger.quote.name,
                         market = trigger.quote.market,
+                        securityTypeName = trigger.quote.securityTypeName,
+                        priceDecimalDigits = trigger.quote.priceDecimalDigits,
                         triggeredAtIso = MonitorStorage.formatIso8601(trigger.triggeredAtMillis),
                         currentPrice = trigger.quote.lastPrice,
                         referencePrice = trigger.referencePrice,

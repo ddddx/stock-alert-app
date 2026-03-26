@@ -335,7 +335,12 @@ class NativeMarketDataSource {
     }
 
     private fun scaledPrice(json: JSONObject, stock: NativeStock, key: String, priceDecimalDigits: Int): Double {
-        return plainNumber(json, key) / NativeSecurityPriceScale.divisorFor(
+        val rawValue = if (!json.has(key) || json.isNull(key)) null else json.opt(key)
+        val plain = plainNumber(json, key)
+        if (isExplicitDecimalValue(rawValue, plain, priceDecimalDigits)) {
+            return plain
+        }
+        return plain / NativeSecurityPriceScale.divisorFor(
             code = stock.code,
             securityTypeName = stock.securityTypeName,
             priceDecimalDigits = priceDecimalDigits,
@@ -361,6 +366,19 @@ class NativeMarketDataSource {
             is Number -> value.toDouble()
             is String -> value.toDoubleOrNull() ?: 0.0
             else -> 0.0
+        }
+    }
+
+    private fun isExplicitDecimalValue(rawValue: Any?, plain: Double, priceDecimalDigits: Int): Boolean {
+        if (plain == 0.0 || priceDecimalDigits <= 0) {
+            return false
+        }
+        return when (rawValue) {
+            is Double -> true
+            is Float -> true
+            is Number -> rawValue.toDouble() % 1.0 != 0.0
+            is String -> rawValue.contains(".")
+            else -> false
         }
     }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../../../core/utils/formatters.dart';
 import '../../../../data/models/stock_quote_snapshot.dart';
@@ -20,6 +20,7 @@ class SettingsPage extends StatefulWidget {
     required this.previewQuote,
     required this.onRefresh,
     required this.onChanged,
+    required this.onRequestAndroidBackgroundAccess,
   });
 
   final SettingsRepository repository;
@@ -30,6 +31,8 @@ class SettingsPage extends StatefulWidget {
   final StockQuoteSnapshot? previewQuote;
   final Future<void> Function() onRefresh;
   final VoidCallback onChanged;
+  final Future<bool> Function({required bool onboarding})
+      onRequestAndroidBackgroundAccess;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -42,12 +45,38 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     setState(() {
       _toast = message;
     });
+  }
+
+  Future<void> _handleServiceToggle(bool enabled) async {
+    if (enabled) {
+      final allowed = await widget.onRequestAndroidBackgroundAccess(
+        onboarding: false,
+      );
+      if (!allowed) {
+        _showFeedback('后台监控未开启：请先允许通知，并按提示完成电池优化设置。');
+        widget.onChanged();
+        return;
+      }
+      await widget.repository.updateService(true);
+      await widget.monitorService.start();
+      final enabledAfterStart = widget.repository.getStatus().serviceEnabled;
+      _showFeedback(
+        enabledAfterStart
+            ? '已启用后台监控守护，原生前台服务会按设定间隔持续轮询。'
+            : widget.repository.getStatus().lastMessage,
+      );
+      widget.onChanged();
+      return;
+    }
+
+    await widget.repository.updateService(false);
+    await widget.monitorService.stop();
+    _showFeedback('已关闭后台监控守护。');
+    widget.onChanged();
   }
 
   @override
@@ -61,41 +90,17 @@ class _SettingsPageState extends State<SettingsPage> {
         SectionCard(
           title: '后台监控',
           subtitle:
-              '已接入 Android 前台服务常驻通知、原生后台轮询和系统设置跳转；应用正常重启后会尝试恢复，设备重启或应用更新后需手动确认。',
+              'Android 端已经接入前台服务、常驻通知和系统设置跳转。首次使用需要先完成通知授权与电池优化引导。',
           child: Column(
             children: [
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('启用后台监控守护'),
                 subtitle: const Text(
-                  '开启后会拉起常驻通知，并由原生前台服务持续后台轮询沪深行情。',
+                  '开启后会拉起常驻通知，并由原生前台服务按设定间隔继续后台轮询。',
                 ),
                 value: status.serviceEnabled,
-                onChanged: (value) async {
-                  await widget.repository.updateService(value);
-                  if (value) {
-                    await widget.monitorService.start();
-                    final enabledAfterStart =
-                        widget.repository.getStatus().serviceEnabled;
-                    if (!mounted) {
-                      return;
-                    }
-                    setState(() {
-                      _toast = enabledAfterStart
-                          ? '已启用后台守护，原生前台服务会按设定间隔持续轮询。'
-                          : widget.repository.getStatus().lastMessage;
-                    });
-                  } else {
-                    await widget.monitorService.stop();
-                    if (!mounted) {
-                      return;
-                    }
-                    setState(() {
-                      _toast = '已关闭后台监控守护。';
-                    });
-                  }
-                  widget.onChanged();
-                },
+                onChanged: _handleServiceToggle,
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<int>(
@@ -103,7 +108,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 decoration: const InputDecoration(
                   labelText: '后台轮询间隔',
                   border: OutlineInputBorder(),
-                  helperText: '建议 15~30 秒；越短越实时，但更耗电。',
+                  helperText: '建议 15~30 秒；越短越实时，但会更耗电。',
                 ),
                 items: pollIntervalOptions
                     .map(
@@ -121,12 +126,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   if (status.serviceEnabled) {
                     await widget.monitorService.reload();
                   }
-                  if (!mounted) {
-                    return;
-                  }
-                  setState(() {
-                    _toast = '后台轮询间隔已更新为 $value 秒。';
-                  });
+                  _showFeedback('后台轮询间隔已更新为 $value 秒。');
                   widget.onChanged();
                 },
               ),
@@ -156,9 +156,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   OutlinedButton.icon(
                     onPressed: () async {
-                      await widget.platformBridgeService
-                          .openNotificationSettings();
-                      _showFeedback('已打开通知设置，请确认允许通知与常驻提醒。');
+                      final granted =
+                          await widget.platformBridgeService.requestNotificationPermission();
+                      if (!granted) {
+                        await widget.platformBridgeService.openNotificationSettings();
+                      }
+                      _showFeedback(
+                        granted
+                            ? '通知权限已允许。'
+                            : '未直接授予通知权限，已打开系统通知设置，请确认允许通知。',
+                      );
                     },
                     icon: const Icon(Icons.notifications_active_outlined),
                     label: const Text('通知权限'),
@@ -180,7 +187,7 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 12),
         SectionCard(
           title: '语音提醒',
-          subtitle: '播报证券名称、代码、波动金额与涨跌幅，不再使用占位提示。后台原生轮询触发时也会走系统 TTS。',
+          subtitle: '播报证券名称、代码、波动金额与涨跌幅，后台原生轮询触发时也会走系统 TTS。',
           child: Column(
             children: [
               SwitchListTile(
@@ -189,12 +196,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 value: status.soundEnabled,
                 onChanged: (value) async {
                   await widget.repository.updateSound(value);
-                  if (!mounted) {
-                    return;
-                  }
-                  setState(() {
-                    _toast = value ? '已开启语音播报。' : '已关闭语音播报。';
-                  });
+                  _showFeedback(value ? '已开启语音播报。' : '已关闭语音播报。');
                   widget.onChanged();
                 },
               ),
@@ -203,10 +205,10 @@ class _SettingsPageState extends State<SettingsPage> {
                 alignment: Alignment.centerLeft,
                 child: FilledButton.icon(
                   onPressed: () async {
-                    final text = widget.messageBuilder
-                        .buildPreviewText(widget.previewQuote);
-                    final ready = await widget.audioService.preload();
-                    final played = ready && await widget.audioService.speak(text);
+                    final text = widget.messageBuilder.buildPreviewText(
+                      widget.previewQuote,
+                    );
+                    final played = await widget.audioService.speak(text);
                     final message = played
                         ? '已试播：$text'
                         : '试播失败：系统 TTS 未完成初始化、未安装可用语音引擎，或当前媒体音量过低。文案为：$text';
@@ -230,14 +232,16 @@ class _SettingsPageState extends State<SettingsPage> {
               Text('最近检查：${Formatters.compactDateTime(status.lastCheckAt)}'),
               const SizedBox(height: 8),
               Text(
-                status.serviceEnabled ? '后台守护：已开启常驻通知 + 原生后台轮询' : '后台守护：未开启',
+                status.serviceEnabled
+                    ? '后台守护：已开启常驻通知 + 原生后台轮询'
+                    : '后台守护：未开启',
               ),
               const SizedBox(height: 8),
               Text('轮询间隔：${status.pollIntervalSeconds} 秒'),
               const SizedBox(height: 8),
               const Text('本地数据已持久化，重启应用后会保留自选、规则、历史与设置。'),
               const SizedBox(height: 8),
-              const Text('若系统强杀进程，前台服务会尽量粘性重启；设备重启或应用更新后，为兼容系统限制，需重新打开应用并视情况手动开启。'),
+              const Text('若系统强杀进程，前台服务会尽量维持；设备重启或应用更新后，需要重新打开应用并确认权限。'),
               if (_toast != null) ...[
                 const SizedBox(height: 8),
                 Text('操作反馈：$_toast'),

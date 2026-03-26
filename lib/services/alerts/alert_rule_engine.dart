@@ -33,6 +33,8 @@ class AlertTrigger {
       stockCode: quote.code,
       stockName: quote.name,
       market: quote.market,
+      securityTypeName: quote.securityTypeName,
+      priceDecimalDigits: quote.resolvedPriceDecimalDigits,
       triggeredAt: triggeredAt,
       currentPrice: quote.lastPrice,
       referencePrice: referencePrice,

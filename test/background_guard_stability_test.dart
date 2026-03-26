@@ -128,6 +128,7 @@ class _FakeSettingsRepository implements SettingsRepository {
           pollIntervalSeconds: 20,
           lastCheckAt: null,
           lastMessage: 'ready',
+          androidOnboardingShown: false,
         );
 
   MonitorStatus _status;
@@ -137,6 +138,11 @@ class _FakeSettingsRepository implements SettingsRepository {
 
   @override
   Future<void> initialize() async {}
+
+  @override
+  Future<void> markAndroidOnboardingShown() async {
+    _status = _status.copyWith(androidOnboardingShown: true);
+  }
 
   @override
   Future<void> markChecked({

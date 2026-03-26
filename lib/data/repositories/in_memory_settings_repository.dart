@@ -7,6 +7,7 @@ class InMemorySettingsRepository {
     pollIntervalSeconds: 20,
     lastCheckAt: null,
     lastMessage: '等待首次刷新 A 股行情。',
+    androidOnboardingShown: false,
   );
 
   MonitorStatus getStatus() => _status;
@@ -28,6 +29,10 @@ class InMemorySettingsRepository {
       lastCheckAt: DateTime.now(),
       lastMessage: message,
     );
+  }
+
+  void markAndroidOnboardingShown() {
+    _status = _status.copyWith(androidOnboardingShown: true);
   }
 
   void markChecked({required DateTime checkedAt, required String message}) {

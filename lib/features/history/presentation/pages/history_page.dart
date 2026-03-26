@@ -57,11 +57,11 @@ class HistoryPage extends StatelessWidget {
                               Text('播报文案：${entry.spokenText}'),
                               const SizedBox(height: 6),
                               Text(
-                                '现价 ${Formatters.price(entry.currentPrice)} / 参考 ${Formatters.price(entry.referencePrice)}',
+                                '现价 ${Formatters.priceForSecurity(entry.currentPrice, code: entry.stockCode, securityTypeName: entry.securityTypeName, priceDecimalDigits: entry.priceDecimalDigits)} / 参考 ${Formatters.priceForSecurity(entry.referencePrice, code: entry.stockCode, securityTypeName: entry.securityTypeName, priceDecimalDigits: entry.priceDecimalDigits)}',
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                '变动 ${Formatters.signedPrice(entry.changeAmount)} / ${Formatters.percent(entry.changePercent)}',
+                                '变动 ${Formatters.signedPriceForSecurity(entry.changeAmount, code: entry.stockCode, securityTypeName: entry.securityTypeName, priceDecimalDigits: entry.priceDecimalDigits)} / ${Formatters.percent(entry.changePercent)}',
                               ),
                               const SizedBox(height: 6),
                               Text('时间 ${Formatters.compactDateTime(entry.triggeredAt)}'),
