@@ -42,40 +42,44 @@ class _WatchlistPageState extends State<WatchlistPage> {
         padding: const EdgeInsets.all(16),
         children: [
           SectionCard(
-            title: '沪深自选',
-            subtitle: '支持按代码、名称或拼音自动搜索，列表展示实时行情快照。',
+            title: 'Watchlist',
+            subtitle: 'Search by code, name, or pinyin. Swipe left on a stock to reveal delete.',
             trailing: Wrap(
               spacing: 8,
               children: [
                 IconButton.filledTonal(
                   onPressed: widget.onRefresh,
                   icon: const Icon(Icons.refresh),
-                  tooltip: '刷新行情',
+                  tooltip: 'Refresh quotes',
                 ),
                 FilledButton.icon(
                   onPressed: _adding ? null : _showAddSheet,
                   icon: const Icon(Icons.add),
-                  label: const Text('添加'),
+                  label: const Text('Add'),
                 ),
               ],
             ),
             child: items.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Text('还没有自选标的，点击右上角添加。'),
+                    child: Text('The watchlist is empty. Use Add to track a stock.'),
                   )
                 : Column(
                     children: [
                       for (final item in items)
                         _WatchlistTile(
+                          key: ValueKey('watchlist-${item.code}'),
                           stock: item,
                           quote: quoteByCode[item.code],
-                          onRemove: () {
-                            widget.repository.remove(item.code).then((_) {
-                              if (mounted) {
-                                setState(() {});
-                              }
-                            });
+                          onRemove: () async {
+                            final confirmed = await _confirmDelete(item);
+                            if (!confirmed) {
+                              return;
+                            }
+                            await widget.repository.remove(item.code);
+                            if (mounted) {
+                              setState(() {});
+                            }
                           },
                         ),
                     ],
@@ -84,6 +88,29 @@ class _WatchlistPageState extends State<WatchlistPage> {
         ],
       ),
     );
+  }
+
+  Future<bool> _confirmDelete(StockIdentity stock) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Delete watchlist item'),
+              content: Text('Remove ${stock.displayName} from the watchlist?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
   }
 
   Future<void> _showAddSheet() async {
@@ -115,7 +142,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
           return;
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已添加 ${selected.name} ${selected.code}')),
+          SnackBar(content: Text('Added ${selected.name} ${selected.code}')),
         );
       }
       setState(() {});
@@ -127,8 +154,9 @@ class _WatchlistPageState extends State<WatchlistPage> {
   }
 }
 
-class _WatchlistTile extends StatelessWidget {
+class _WatchlistTile extends StatefulWidget {
   const _WatchlistTile({
+    super.key,
     required this.stock,
     required this.quote,
     required this.onRemove,
@@ -136,79 +164,158 @@ class _WatchlistTile extends StatelessWidget {
 
   final StockIdentity stock;
   final StockQuoteSnapshot? quote;
-  final VoidCallback onRemove;
+  final Future<void> Function() onRemove;
+
+  @override
+  State<_WatchlistTile> createState() => _WatchlistTileState();
+}
+
+class _WatchlistTileState extends State<_WatchlistTile> {
+  static const double _maxRevealOffset = 96;
+  double _offset = 0;
+
+  bool get _revealed => _offset < -8;
 
   @override
   Widget build(BuildContext context) {
+    final quote = widget.quote;
     final positive = (quote?.changeAmount ?? 0) >= 0;
     final color = positive ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFD),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
+      child: SizedBox(
+        height: 116,
+        child: Stack(
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    stock.displayName,
-                    style: Theme.of(context).textTheme.titleSmall,
+            Positioned.fill(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 180),
+                    opacity: _revealed ? 1 : 0,
+                    child: FilledButton.tonalIcon(
+                      key: Key('watchlist-delete-${widget.stock.code}'),
+                      onPressed: _revealed ? widget.onRemove : null,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Delete'),
+                      style: FilledButton.styleFrom(
+                        foregroundColor: const Color(0xFF8B1E1E),
+                        backgroundColor: const Color(0xFFFDECEC),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(stock.subtitle),
-                  const SizedBox(height: 6),
-                  Text(
-                    quote == null
-                        ? '未获取到行情，点击刷新重试。'
-                        : '开 ${Formatters.priceForSecurity(quote!.openPrice, code: quote!.code, securityTypeName: quote!.securityTypeName, priceDecimalDigits: quote!.resolvedPriceDecimalDigits)}  高 ${Formatters.priceForSecurity(quote!.highPrice, code: quote!.code, securityTypeName: quote!.securityTypeName, priceDecimalDigits: quote!.resolvedPriceDecimalDigits)}  低 ${Formatters.priceForSecurity(quote!.lowPrice, code: quote!.code, securityTypeName: quote!.securityTypeName, priceDecimalDigits: quote!.resolvedPriceDecimalDigits)}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+                ),
               ),
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  quote == null
-                      ? '--'
-                      : Formatters.priceForSecurity(
-                          quote!.lastPrice,
-                          code: quote!.code,
-                          securityTypeName: quote!.securityTypeName,
-                          priceDecimalDigits: quote!.resolvedPriceDecimalDigits,
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _revealed ? _close : null,
+                onHorizontalDragUpdate: (details) {
+                  final next = (_offset + details.delta.dx).clamp(
+                    -_maxRevealOffset,
+                    0.0,
+                  );
+                  if (next == _offset) {
+                    return;
+                  }
+                  setState(() {
+                    _offset = next;
+                  });
+                },
+                onHorizontalDragEnd: (details) {
+                  final velocity = details.primaryVelocity ?? 0;
+                  if (velocity < -200 || _offset <= -_maxRevealOffset / 2) {
+                    _open();
+                    return;
+                  }
+                  _close();
+                },
+                child: AnimatedSlide(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  offset: Offset(_offset / 320, 0),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFD),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.stock.displayName,
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(widget.stock.subtitle),
+                              const SizedBox(height: 6),
+                              Text(
+                                quote == null
+                                    ? 'Quote unavailable. Pull to refresh and try again.'
+                                    : 'Open ${Formatters.priceForSecurity(quote.openPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  High ${Formatters.priceForSecurity(quote.highPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  Low ${Formatters.priceForSecurity(quote.lowPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
                         ),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  quote == null
-                      ? '--'
-                      : '${Formatters.signedPriceForSecurity(quote!.changeAmount, code: quote!.code, securityTypeName: quote!.securityTypeName, priceDecimalDigits: quote!.resolvedPriceDecimalDigits)} / ${Formatters.percent(quote!.changePercent)}',
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w600,
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              quote == null
+                                  ? '--'
+                                  : Formatters.priceForSecurity(
+                                      quote.lastPrice,
+                                      code: quote.code,
+                                      securityTypeName: quote.securityTypeName,
+                                      priceDecimalDigits:
+                                          quote.resolvedPriceDecimalDigits,
+                                    ),
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              quote == null
+                                  ? '--'
+                                  : '${Formatters.signedPriceForSecurity(quote.changeAmount, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)} / ${Formatters.percent(quote.changePercent)}',
+                              style: TextStyle(
+                                color: color,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
-            IconButton(
-              onPressed: onRemove,
-              icon: const Icon(Icons.close),
-              tooltip: '移除',
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _open() {
+    setState(() {
+      _offset = -_maxRevealOffset;
+    });
+  }
+
+  void _close() {
+    setState(() {
+      _offset = 0;
+    });
   }
 }
 
@@ -262,7 +369,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '搜索沪深证券',
+                  'Search A-share stocks',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
@@ -270,7 +377,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
                   controller: _controller,
                   autofocus: true,
                   decoration: InputDecoration(
-                    hintText: '输入代码、名称或拼音，输入后自动搜索',
+                    hintText: 'Enter a code, name, or pinyin',
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _buildSuffixIcon(),
                   ),
@@ -313,20 +420,20 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
     return IconButton(
       onPressed: _clearQuery,
       icon: const Icon(Icons.close),
-      tooltip: '清空',
+      tooltip: 'Clear',
     );
   }
 
   Widget _buildResults() {
     if (!_hasSearched && _controller.text.trim().isEmpty) {
       return const Center(
-        child: Text('输入代码、名称或拼音后会自动搜索候选证券。'),
+        child: Text('Type to search for a stock.'),
       );
     }
 
     if (_loading && _results.isEmpty) {
       return const Center(
-        child: Text('正在搜索，请稍候...'),
+        child: Text('Searching...'),
       );
     }
 
@@ -338,7 +445,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
 
     if (_hasSearched && _results.isEmpty) {
       return Center(
-        child: Text('没有找到与“$_lastKeyword”匹配的沪深证券。'),
+        child: Text('No result matched "$_lastKeyword".'),
       );
     }
 
@@ -351,8 +458,9 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
           enabled: !disabled,
           title: Text('${item.name} (${item.code})'),
           subtitle: Text(item.subtitle),
-          trailing:
-              disabled ? const Text('已添加') : const Icon(Icons.chevron_right),
+          trailing: disabled
+              ? const Text('Added')
+              : const Icon(Icons.chevron_right),
           onTap: disabled ? null : () => Navigator.of(context).pop(item),
         );
       },
@@ -432,7 +540,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
         _loading = false;
         _hasSearched = true;
         _results = const [];
-        _error = '搜索失败：$error';
+        _error = 'Search failed: $error';
       });
     }
   }
