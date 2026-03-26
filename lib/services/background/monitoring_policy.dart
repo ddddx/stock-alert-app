@@ -1,6 +1,15 @@
 const int minMonitorPollIntervalSeconds = 1;
 const int maxMonitorPollIntervalSeconds = 300;
 
+int normalizeMonitorPollIntervalSeconds(int seconds) {
+  return seconds
+      .clamp(
+        minMonitorPollIntervalSeconds,
+        maxMonitorPollIntervalSeconds,
+      )
+      .toInt();
+}
+
 class AshareMarketHours {
   const AshareMarketHours();
 
@@ -17,11 +26,9 @@ class AshareMarketHours {
     }
 
     final minutes = _minutesSinceMidnight(shanghaiMoment);
-    final inMorningSession =
-        minutes >= _morningSessionStartMinutes &&
+    final inMorningSession = minutes >= _morningSessionStartMinutes &&
         minutes < _morningSessionEndMinutes;
-    final inAfternoonSession =
-        minutes >= _afternoonSessionStartMinutes &&
+    final inAfternoonSession = minutes >= _afternoonSessionStartMinutes &&
         minutes < _afternoonSessionEndMinutes;
     return inMorningSession || inAfternoonSession;
   }

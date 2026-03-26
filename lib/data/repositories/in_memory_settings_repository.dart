@@ -23,9 +23,7 @@ class InMemorySettingsRepository {
 
   void updatePollIntervalSeconds(int seconds) {
     _status = _status.copyWith(
-      pollIntervalSeconds: seconds
-          .clamp(minMonitorPollIntervalSeconds, maxMonitorPollIntervalSeconds)
-          .toInt(),
+      pollIntervalSeconds: normalizeMonitorPollIntervalSeconds(seconds),
     );
   }
 

@@ -24,9 +24,9 @@ class LocalSettingsRepository implements SettingsRepository {
       return;
     }
     _status = MonitorStatus.fromJson(payload);
-    final normalized = _status.pollIntervalSeconds
-        .clamp(minMonitorPollIntervalSeconds, maxMonitorPollIntervalSeconds)
-        .toInt();
+    final normalized = normalizeMonitorPollIntervalSeconds(
+      _status.pollIntervalSeconds,
+    );
     if (_status.pollIntervalSeconds != normalized) {
       _status = _status.copyWith(pollIntervalSeconds: normalized);
       await _persist();
@@ -50,9 +50,7 @@ class LocalSettingsRepository implements SettingsRepository {
 
   @override
   Future<void> updatePollIntervalSeconds(int seconds) async {
-    final normalized = seconds
-        .clamp(minMonitorPollIntervalSeconds, maxMonitorPollIntervalSeconds)
-        .toInt();
+    final normalized = normalizeMonitorPollIntervalSeconds(seconds);
     _status = _status.copyWith(pollIntervalSeconds: normalized);
     await _persist();
   }
@@ -76,7 +74,8 @@ class LocalSettingsRepository implements SettingsRepository {
   }
 
   @override
-  Future<void> markChecked({required DateTime checkedAt, required String message}) async {
+  Future<void> markChecked(
+      {required DateTime checkedAt, required String message}) async {
     _status = _status.copyWith(lastCheckAt: checkedAt, lastMessage: message);
     await _persist();
   }
