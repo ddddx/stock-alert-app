@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/local_alert_repository.dart';
 import '../../data/repositories/local_history_repository.dart';
 import '../../data/repositories/local_settings_repository.dart';
@@ -17,6 +18,16 @@ import '../../services/background/monitor_service.dart';
 import '../../services/market/ashare_market_data_service.dart';
 import '../../services/platform/platform_bridge_service.dart';
 import '../../services/storage/json_file_store.dart';
+
+Future<void> restoreBackgroundMonitorOnLaunch({
+  required SettingsRepository settingsRepository,
+  required MonitorService monitorService,
+}) async {
+  if (!settingsRepository.getStatus().serviceEnabled) {
+    return;
+  }
+  await monitorService.reload();
+}
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -208,10 +219,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     await _alertRepository.initialize();
     await _historyRepository.initialize();
     await _settingsRepository.initialize();
-    await _monitorService.prepare();
-    if (_settingsRepository.getStatus().serviceEnabled) {
-      await _monitorService.reload();
-    }
+    await restoreBackgroundMonitorOnLaunch(
+      settingsRepository: _settingsRepository,
+      monitorService: _monitorService,
+    );
   }
 
   Future<void> _refreshQuotes() async {
@@ -233,9 +244,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Future<void> _handleResume() async {
     await _settingsRepository.initialize();
     await _historyRepository.initialize();
-    if (_settingsRepository.getStatus().serviceEnabled) {
-      await _monitorService.requestBackgroundRefresh();
-    }
     if (mounted) {
       setState(() {});
     }

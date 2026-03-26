@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -22,8 +23,10 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     private val executor = Executors.newSingleThreadExecutor()
     private val engine = NativeMonitorEngine()
     private val runningRefresh = AtomicBoolean(false)
+    private val ttsLock = Object()
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady = false
+    private var ttsInitCompleted = false
     private var lastSummary: String = defaultSummary()
 
     private val pollRunnable = object : Runnable {
@@ -35,42 +38,52 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     override fun onCreate() {
         super.onCreate()
         ensureChannel(this)
-        ensureTts()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: ACTION_START_MONITOR
-        when (action) {
-            ACTION_START_MONITOR -> {
-                val summary = intent?.getStringExtra(summaryArgument()).orEmpty().ifBlank {
-                    loadBootSummary()
+        return try {
+            when (action) {
+                ACTION_START_MONITOR -> {
+                    val summary = intent?.getStringExtra(summaryArgument()).orEmpty().ifBlank {
+                        loadBootSummary()
+                    }
+                    startAsForeground(summary)
+                    ensureMonitoringActive(triggerImmediateRefresh = true)
                 }
-                startAsForeground(summary)
-                ensureMonitoringActive(triggerImmediateRefresh = true)
-            }
 
-            ACTION_REFRESH_NOW -> {
-                startAsForeground(lastSummary)
-                ensureMonitoringActive(triggerImmediateRefresh = true)
-            }
+                ACTION_REFRESH_NOW -> {
+                    startAsForeground(lastSummary)
+                    ensureMonitoringActive(triggerImmediateRefresh = true)
+                }
 
-            ACTION_RELOAD_MONITOR -> {
-                startAsForeground(loadBootSummary())
-                ensureMonitoringActive(triggerImmediateRefresh = false)
-            }
+                ACTION_RELOAD_MONITOR -> {
+                    startAsForeground(loadBootSummary())
+                    ensureMonitoringActive(triggerImmediateRefresh = false)
+                }
 
-            ACTION_STOP_MONITOR -> {
-                stopMonitoring()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-            }
+                ACTION_STOP_MONITOR -> {
+                    stopMonitoring()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
 
-            else -> {
-                startAsForeground(loadBootSummary())
-                ensureMonitoringActive(triggerImmediateRefresh = true)
+                else -> {
+                    startAsForeground(loadBootSummary())
+                    ensureMonitoringActive(triggerImmediateRefresh = true)
+                }
             }
+            START_STICKY
+        } catch (error: Exception) {
+            Log.e(TAG, "Failed to start monitor foreground service", error)
+            MonitorStorage.disableService(
+                context = this,
+                message = "后台监控启动失败：${error.message ?: error.javaClass.simpleName}；已自动关闭后台监控。",
+            )
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            START_NOT_STICKY
         }
-        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -85,27 +98,33 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val restartIntent = Intent(applicationContext, MonitorForegroundService::class.java).apply {
-            action = ACTION_RELOAD_MONITOR
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            applicationContext.startForegroundService(restartIntent)
-        } else {
-            applicationContext.startService(restartIntent)
+        if (MonitorStorage.isServiceEnabled(this)) {
+            MonitorStorage.disableService(
+                context = this,
+                message = "后台监控在应用任务被移除后已暂停。为避免系统限制导致异常，请重新打开应用后手动开启。",
+            )
+            handler.removeCallbacks(pollRunnable)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onInit(status: Int) {
-        ttsReady = status == TextToSpeech.SUCCESS
-        if (ttsReady) {
-            val locale = Locale.SIMPLIFIED_CHINESE
-            val availability = textToSpeech?.isLanguageAvailable(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
-            if (availability >= TextToSpeech.LANG_AVAILABLE) {
-                textToSpeech?.language = locale
+        synchronized(ttsLock) {
+            ttsInitCompleted = true
+            ttsReady = status == TextToSpeech.SUCCESS
+            if (ttsReady) {
+                val locale = Locale.SIMPLIFIED_CHINESE
+                val availability =
+                    textToSpeech?.isLanguageAvailable(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
+                if (availability >= TextToSpeech.LANG_AVAILABLE) {
+                    textToSpeech?.language = locale
+                }
+                textToSpeech?.setSpeechRate(1.0f)
+                textToSpeech?.setPitch(1.0f)
             }
-            textToSpeech?.setSpeechRate(1.0f)
-            textToSpeech?.setPitch(1.0f)
+            ttsLock.notifyAll()
         }
     }
 
@@ -199,9 +218,20 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         handler.postDelayed(pollRunnable, intervalSeconds.coerceIn(15, 300) * 1000L)
     }
 
-    private fun ensureTts() {
-        if (textToSpeech == null) {
+    private fun ensureTts(): Boolean {
+        if (textToSpeech != null) {
+            return true
+        }
+        return runCatching {
+            synchronized(ttsLock) {
+                ttsReady = false
+                ttsInitCompleted = false
+            }
             textToSpeech = TextToSpeech(applicationContext, this)
+            true
+        }.getOrElse { error ->
+            Log.w(TAG, "Unable to initialize TTS in foreground service", error)
+            false
         }
     }
 
@@ -210,8 +240,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         if (trimmed.isEmpty()) {
             return false
         }
-        ensureTts()
-        if (!ttsReady) {
+        if (!awaitTtsReady()) {
             return false
         }
         return textToSpeech?.speak(
@@ -220,6 +249,28 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
             null,
             "stock-pulse-service-${System.currentTimeMillis()}",
         ) == TextToSpeech.SUCCESS
+    }
+
+    private fun awaitTtsReady(timeoutMillis: Long = 2500L): Boolean {
+        if (!ensureTts()) {
+            return false
+        }
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        synchronized(ttsLock) {
+            while (!ttsInitCompleted && System.currentTimeMillis() < deadline) {
+                val remaining = deadline - System.currentTimeMillis()
+                if (remaining <= 0) {
+                    break
+                }
+                runCatching {
+                    ttsLock.wait(remaining)
+                }.onFailure {
+                    Thread.currentThread().interrupt()
+                    return false
+                }
+            }
+            return ttsReady
+        }
     }
 
     private fun startAsForeground(summary: String) {
@@ -237,6 +288,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         private const val CHANNEL_ID = "stock_monitor_guard"
         private const val CHANNEL_NAME = "股票异动后台监控"
         private const val NOTIFICATION_ID = 20031
+        private const val TAG = "MonitorForegroundSvc"
         const val ACTION_START_MONITOR = "com.stockpulse.radar.action.START_MONITOR"
         const val ACTION_REFRESH_NOW = "com.stockpulse.radar.action.REFRESH_NOW"
         const val ACTION_RELOAD_MONITOR = "com.stockpulse.radar.action.RELOAD_MONITOR"
