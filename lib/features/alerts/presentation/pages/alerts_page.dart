@@ -203,26 +203,28 @@ class _AlertsPageState extends State<AlertsPage> {
                               ),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: ListView(
-                              shrinkWrap: true,
-                              children: [
-                                for (final stock in availableStocks)
-                                  CheckboxListTile(
-                                    dense: true,
-                                    value: _selectedCodes.contains(stock.code),
-                                    title: Text(stock.displayName),
-                                    subtitle: Text(stock.subtitle),
-                                    onChanged: (value) {
-                                      setDialogState(() {
-                                        if (value ?? false) {
-                                          _selectedCodes.add(stock.code);
-                                        } else {
-                                          _selectedCodes.remove(stock.code);
-                                        }
-                                      });
-                                    },
-                                  ),
-                              ],
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (final stock in availableStocks)
+                                    CheckboxListTile(
+                                      dense: true,
+                                      value: _selectedCodes.contains(stock.code),
+                                      title: Text(stock.displayName),
+                                      subtitle: Text(stock.subtitle),
+                                      onChanged: (value) {
+                                        setDialogState(() {
+                                          if (value ?? false) {
+                                            _selectedCodes.add(stock.code);
+                                          } else {
+                                            _selectedCodes.remove(stock.code);
+                                          }
+                                        });
+                                      },
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                       ],
