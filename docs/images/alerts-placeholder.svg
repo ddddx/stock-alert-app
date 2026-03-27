@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1560" viewBox="0 0 720 1560" role="img" aria-labelledby="title desc">
+  <title id="title">Alerts screenshot placeholder</title>
+  <desc id="desc">Placeholder image for the alerts screen.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff7ef"/>
+      <stop offset="100%" stop-color="#ffe2c7"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="1560" fill="url(#bg)"/>
+  <rect x="48" y="64" width="624" height="1432" rx="40" fill="#ffffff" opacity="0.96"/>
+  <text x="96" y="170" fill="#5a2d0c" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="700">ALERTS</text>
+  <text x="96" y="232" fill="#8d6847" font-family="Segoe UI, Arial, sans-serif" font-size="28">Placeholder only</text>
+  <rect x="96" y="294" width="528" height="88" rx="22" fill="#fff0e1"/>
+  <text x="128" y="348" fill="#7b5a3d" font-family="Segoe UI, Arial, sans-serif" font-size="28">Real alerts screenshot not yet captured in this repo</text>
+  <rect x="96" y="436" width="528" height="220" rx="28" fill="#fff8f1"/>
+  <rect x="96" y="706" width="528" height="220" rx="28" fill="#fff8f1"/>
+  <rect x="96" y="976" width="528" height="220" rx="28" fill="#fff8f1"/>
+  <text x="360" y="1380" text-anchor="middle" fill="#957358" font-family="Segoe UI, Arial, sans-serif" font-size="28">docs/images/alerts-placeholder.svg</text>
+</svg>

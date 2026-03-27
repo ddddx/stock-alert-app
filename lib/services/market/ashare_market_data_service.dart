@@ -179,7 +179,7 @@ class AshareMarketDataService {
         'f57': code,
         'f58': _readStaticString(map, ['f58', 'f14']),
         'f60': map['f60'] ?? map['f18'],
-        'f170': _normalizeBatchPercent(map['f170'] ?? map['f3']),
+        'f170': _normalizeBatchPercent(stock: stock, map: map),
       };
 
       quotes.add(
@@ -409,22 +409,56 @@ class AshareMarketDataService {
     return jsonDecode(body);
   }
 
-  static dynamic _normalizeBatchPercent(dynamic value) {
-    if (value == null || value == '-') {
-      return value;
+  static dynamic _normalizeBatchPercent({
+    required StockIdentity stock,
+    required Map<String, dynamic> map,
+  }) {
+    final rawValue = map['f170'] ?? map['f3'];
+    if (rawValue == null || rawValue == '-') {
+      return rawValue;
     }
-    if (value is double) {
-      return value * 100;
+
+    final rawPercent = _plainNumber(rawValue);
+    final quoteCode = _readStaticString(map, ['f57', 'f12']);
+    final resolvedCode = quoteCode.isEmpty ? stock.code : quoteCode;
+    final priceDecimalDigits = SecurityPriceScale.resolvePriceDecimalDigits(
+      code: resolvedCode,
+      securityTypeName: stock.securityTypeName,
+      eastmoneyPriceDecimalDigits: map['f59'],
+    );
+    final priceDivisor = SecurityPriceScale.divisorForPriceDecimalDigits(
+      priceDecimalDigits,
+    ).toDouble();
+    final previousClose = _scaledPrice(
+              map['f60'] ?? map['f18'],
+              priceDivisor,
+              priceDecimalDigits: priceDecimalDigits,
+            ) ==
+            0
+        ? _scaledPrice(
+            map['f18'],
+            priceDivisor,
+            priceDecimalDigits: priceDecimalDigits,
+          )
+        : _scaledPrice(
+            map['f60'] ?? map['f18'],
+            priceDivisor,
+            priceDecimalDigits: priceDecimalDigits,
+          );
+    final changeAmount = _scaledPrice(
+      map['f169'],
+      priceDivisor,
+      priceDecimalDigits: priceDecimalDigits,
+    );
+
+    if (previousClose == 0) {
+      return rawPercent;
     }
-    if (value is String) {
-      final trimmed = value.trim();
-      final parsed = double.tryParse(trimmed);
-      if (parsed != null && trimmed.contains('.')) {
-        return parsed * 100;
-      }
-      return value;
-    }
-    return value;
+
+    final expectedPercent = changeAmount / previousClose * 100;
+    final directDiff = (rawPercent / 100 - expectedPercent).abs();
+    final scaledDiff = (rawPercent - expectedPercent).abs();
+    return scaledDiff < directDiff ? rawPercent * 100 : rawPercent;
   }
 
   List<dynamic>? _extractList(dynamic value) {

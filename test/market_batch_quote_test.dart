@@ -50,5 +50,58 @@ void main() {
 
     expect(quotes, hasLength(2));
     expect(uris.single.toString(), contains('ulist.np/get'));
+    expect(quotes.first.changePercent, 0.67);
+    expect(quotes.last.changePercent, 2.0);
+  });
+
+  test('fetchQuotes normalizes batch percent units from both raw formats', () async {
+    final service = AshareMarketDataService(
+      jsonLoader: (uri) async {
+        if (uri.toString().contains('ulist.np/get')) {
+          return {
+            'data': {
+              'diff': [
+                {
+                  'f12': '600519',
+                  'f14': 'Moutai',
+                  'f18': 12095,
+                  'f43': 12345,
+                  'f169': 250,
+                  'f170': 2.03,
+                  'f46': 12200,
+                  'f44': 12456,
+                  'f45': 12111,
+                  'f47': 1000,
+                  'f59': 2,
+                },
+                {
+                  'f12': '000001',
+                  'f14': 'Ping An Bank',
+                  'f18': 1000,
+                  'f43': 1020,
+                  'f169': 20,
+                  'f170': 200,
+                  'f46': 1000,
+                  'f44': 1020,
+                  'f45': 990,
+                  'f47': 2000,
+                  'f59': 2,
+                },
+              ],
+            },
+          };
+        }
+        throw StateError('unexpected uri: $uri');
+      },
+    );
+
+    final quotes = await service.fetchQuotes(const [
+      StockIdentity(code: '600519', name: 'Moutai', market: 'SH'),
+      StockIdentity(code: '000001', name: 'Ping An Bank', market: 'SZ'),
+    ]);
+
+    expect(quotes, hasLength(2));
+    expect(quotes[0].changePercent, 2.03);
+    expect(quotes[1].changePercent, 2.0);
   });
 }
