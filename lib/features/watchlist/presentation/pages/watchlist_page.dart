@@ -144,7 +144,8 @@ class _WatchlistTile extends StatefulWidget {
 }
 
 class _WatchlistTileState extends State<_WatchlistTile> {
-  static const double _maxRevealOffset = 96;
+  static const double _deleteActionWidth = 120;
+  static const double _maxRevealOffset = _deleteActionWidth;
   double _offset = 0;
 
   bool get _revealed => _offset < -8;
@@ -169,14 +170,17 @@ class _WatchlistTileState extends State<_WatchlistTile> {
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 180),
                     opacity: _revealed ? 1 : 0,
-                    child: FilledButton.tonalIcon(
-                      key: Key('watchlist-delete-${widget.stock.code}'),
-                      onPressed: _revealed ? widget.onRemove : null,
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('删除'),
-                      style: FilledButton.styleFrom(
-                        foregroundColor: const Color(0xFF8B1E1E),
-                        backgroundColor: const Color(0xFFFDECEC),
+                    child: SizedBox(
+                      width: _deleteActionWidth,
+                      child: FilledButton.tonalIcon(
+                        key: Key('watchlist-delete-${widget.stock.code}'),
+                        onPressed: _revealed ? widget.onRemove : null,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('删除'),
+                        style: FilledButton.styleFrom(
+                          foregroundColor: const Color(0xFF8B1E1E),
+                          backgroundColor: const Color(0xFFFDECEC),
+                        ),
                       ),
                     ),
                   ),
@@ -184,33 +188,33 @@ class _WatchlistTileState extends State<_WatchlistTile> {
               ),
             ),
             Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: _revealed ? _close : null,
-                onHorizontalDragUpdate: (details) {
-                  final next = (_offset + details.delta.dx).clamp(
-                    -_maxRevealOffset,
-                    0.0,
-                  );
-                  if (next == _offset) {
-                    return;
-                  }
-                  setState(() {
-                    _offset = next;
-                  });
-                },
-                onHorizontalDragEnd: (details) {
-                  final velocity = details.primaryVelocity ?? 0;
-                  if (velocity < -200 || _offset <= -_maxRevealOffset / 2) {
-                    _open();
-                    return;
-                  }
-                  _close();
-                },
-                child: AnimatedSlide(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  offset: Offset(_offset / 320, 0),
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                offset: Offset(_offset / 320, 0),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: _revealed ? _close : null,
+                  onHorizontalDragUpdate: (details) {
+                    final next = (_offset + details.delta.dx).clamp(
+                      -_maxRevealOffset,
+                      0.0,
+                    );
+                    if (next == _offset) {
+                      return;
+                    }
+                    setState(() {
+                      _offset = next;
+                    });
+                  },
+                  onHorizontalDragEnd: (details) {
+                    final velocity = details.primaryVelocity ?? 0;
+                    if (velocity < -200 || _offset <= -_maxRevealOffset / 2) {
+                      _open();
+                      return;
+                    }
+                    _close();
+                  },
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(

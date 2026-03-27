@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_alert_app/data/models/monitor_status.dart';
@@ -406,7 +406,7 @@ class _FakeMonitorService implements MonitorService {
   Future<void> prepare() async {}
 
   @override
-  Future<MonitorRunResult> refreshWatchlist() {
+  Future<MonitorRunResult> refreshWatchlist({bool forceFetch = false}) {
     throw UnimplementedError();
   }
 

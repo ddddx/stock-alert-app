@@ -253,7 +253,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<bool> _requestAndroidBackgroundAccess({required bool onboarding}) async {
+  Future<bool> _requestAndroidBackgroundAccess(
+      {required bool onboarding}) async {
     final initial =
         await _platformBridgeService.getAndroidBackgroundAccessStatus();
     if (!initial.isAndroid) {
@@ -266,8 +267,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       final shouldRequest = onboarding
           ? await _showChoiceDialog(
               title: '开启通知权限',
-              message:
-                  '后台监控依赖常驻通知。请允许通知权限，安卓 13 及以上系统还需要单独授权通知。',
+              message: '后台监控依赖常驻通知。请允许通知权限，安卓 13 及以上系统还需要单独授权通知。',
               confirmLabel: '去授权',
               cancelLabel: '稍后',
             )
@@ -282,8 +282,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (!status.canPostNotifications) {
       await _showActionDialog(
         title: '通知仍未开启',
-        message:
-              '后台监控的前台服务必须能正常显示通知。请先在系统通知设置中允许本应用通知，再重新开启后台监控。',
+        message: '后台监控的前台服务必须能正常显示通知。请先在系统通知设置中允许本应用通知，再重新开启后台监控。',
         actionLabel: '打开设置',
         onAction: _platformBridgeService.openNotificationSettings,
       );
@@ -295,8 +294,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (status.needsBatteryOptimizationGuidance) {
       await _showActionDialog(
         title: '关闭电池优化',
-        message:
-            '部分机型会因为电池优化而杀死前台服务。建议把本应用加入后台白名单，避免监控和语音播报被系统中断。',
+        message: '部分机型会因为电池优化而杀死前台服务。建议把本应用加入后台白名单，避免监控和语音播报被系统中断。',
         actionLabel: '去设置',
         onAction: _platformBridgeService.openBatteryOptimizationSettings,
       );
@@ -363,7 +361,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     setState(() {
       _refreshing = true;
     });
-    await _monitorService.refreshWatchlist();
+    await _monitorService.refreshWatchlist(forceFetch: true);
     if (!mounted) {
       return;
     }

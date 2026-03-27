@@ -8,7 +8,8 @@ import 'package:stock_alert_app/features/watchlist/presentation/pages/watchlist_
 import 'package:stock_alert_app/services/market/ashare_market_data_service.dart';
 
 void main() {
-  testWidgets('watchlist renders change percent using normalized percent units', (
+  testWidgets('watchlist renders change percent using normalized percent units',
+      (
     tester,
   ) async {
     final repository = _FakeWatchlistRepository(
@@ -85,6 +86,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.widget<FilledButton>(deleteFinder).onPressed, isNotNull);
+    expect(
+      tester.hitTestOnBinding(tester.getCenter(deleteFinder)).path.any(
+            (entry) => entry.target == tester.renderObject(deleteFinder),
+          ),
+      isTrue,
+    );
 
     await tester.tap(deleteFinder);
     await tester.pumpAndSettle();

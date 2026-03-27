@@ -101,7 +101,7 @@ class _RecordingMonitorService implements MonitorService {
   Future<void> prepare() async {}
 
   @override
-  Future<MonitorRunResult> refreshWatchlist() {
+  Future<MonitorRunResult> refreshWatchlist({bool forceFetch = false}) {
     throw UnimplementedError();
   }
 
