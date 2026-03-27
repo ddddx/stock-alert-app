@@ -29,7 +29,7 @@ class MonitorRunResult {
 
 abstract class MonitorService {
   Future<void> prepare();
-  Future<MonitorRunResult> refreshWatchlist();
+  Future<MonitorRunResult> refreshWatchlist({bool forceFetch = false});
   Future<void> start();
   Future<void> stop();
   Future<void> reload();
@@ -104,7 +104,7 @@ class AshareMonitorService implements MonitorService {
   }
 
   @override
-  Future<MonitorRunResult> refreshWatchlist() async {
+  Future<MonitorRunResult> refreshWatchlist({bool forceFetch = false}) async {
     final checkedAt = _now();
     final watchlist = _watchlistRepository.getAll();
     if (watchlist.isEmpty) {
@@ -121,7 +121,7 @@ class AshareMonitorService implements MonitorService {
       );
     }
 
-    if (!_marketHours.isTradingTime(checkedAt)) {
+    if (!forceFetch && !_marketHours.isTradingTime(checkedAt)) {
       final summary = _marketHours.buildClosedMessage(checkedAt);
       await _settingsRepository.markChecked(
         checkedAt: checkedAt,
@@ -139,7 +139,10 @@ class AshareMonitorService implements MonitorService {
     }
 
     try {
-      final quotes = await _marketDataService.fetchQuotes(watchlist);
+      final quotes = await _marketDataService.fetchQuotes(
+        watchlist,
+        preferSingleQuoteRetrieval: true,
+      );
       _latestQuotes = quotes;
       final triggers = _ruleEngine.processQuotes(
         rules: _alertRepository.getEnabledRules(),

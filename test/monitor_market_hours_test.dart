@@ -62,6 +62,29 @@ void main() {
     expect(result.summary, isNot(contains('13:00')));
   });
 
+  test('forced watchlist refresh fetches quotes outside trading hours',
+      () async {
+    final marketDataService = _RecordingMarketDataService();
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(),
+      alertRepository: _FakeAlertRepository(),
+      historyRepository: _FakeHistoryRepository(),
+      settingsRepository: _FakeSettingsRepository(),
+      marketDataService: marketDataService,
+      audioAlertService: _FakeAudioAlertService(),
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: _FakePlatformBridgeService(),
+      now: () => DateTime(2026, 3, 23, 12, 0),
+    );
+
+    final result = await service.refreshWatchlist(forceFetch: true);
+
+    expect(marketDataService.fetchQuotesCalls, 1);
+    expect(result.quotes, hasLength(1));
+    expect(service.latestQuotes, hasLength(1));
+    expect(result.hasError, isFalse);
+  });
+
   test(
       'monitor refresh keeps partial quotes when one fallback stock still fails',
       () async {
@@ -164,9 +187,8 @@ class _RecordingMarketDataService extends AshareMarketDataService {
   int fetchQuotesCalls = 0;
 
   @override
-  Future<List<StockQuoteSnapshot>> fetchQuotes(
-    List<StockIdentity> watchlist,
-  ) async {
+  Future<List<StockQuoteSnapshot>> fetchQuotes(List<StockIdentity> watchlist,
+      {bool preferSingleQuoteRetrieval = false}) async {
     fetchQuotesCalls += 1;
     return [
       StockQuoteSnapshot(

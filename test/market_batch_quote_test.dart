@@ -429,4 +429,122 @@ void main() {
       hasLength(2),
     );
   });
+
+  test(
+      'fetchQuotes falls back to Tencent when Eastmoney single-quote request fails during per-symbol refresh',
+      () async {
+    final uris = <Uri>[];
+    final service = AshareMarketDataService(
+      jsonLoader: (uri) async {
+        uris.add(uri);
+        if (uri.toString().contains('secid=1.600519')) {
+          throw const SocketException('Connection reset by peer');
+        }
+        throw StateError('unexpected uri: $uri');
+      },
+      textLoader: (uri) async {
+        uris.add(uri);
+        if (uri.toString().contains('q=sh600519')) {
+          return 'v_sh600519="1~Moutai~600519~1500.00~1490.00~1492.00~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~10.00~0.67~1500.00~1490.00~0~1000~0";';
+        }
+        throw StateError('unexpected uri: $uri');
+      },
+      sleeper: (_) async {},
+    );
+
+    final quotes = await service.fetchQuotes(
+      const [
+        StockIdentity(code: '600519', name: 'Moutai', market: 'SH'),
+      ],
+      preferSingleQuoteRetrieval: true,
+    );
+
+    expect(quotes, hasLength(1));
+    expect(quotes.single.code, '600519');
+    expect(quotes.single.lastPrice, 1500.0);
+    expect(quotes.single.changePercent, 0.67);
+    expect(
+      uris.where((uri) => uri.toString().contains('ulist.np/get')),
+      isEmpty,
+    );
+    expect(
+      uris.where((uri) => uri.toString().contains('qt/stock/get')),
+      hasLength(3),
+    );
+    expect(
+      uris.where((uri) => uri.toString().contains('qt.gtimg.cn')),
+      hasLength(1),
+    );
+  });
+
+  test(
+      'fetchQuotes keeps partial results and falls back to Tencent during per-symbol refresh',
+      () async {
+    final uris = <Uri>[];
+    final service = AshareMarketDataService(
+      jsonLoader: (uri) async {
+        uris.add(uri);
+        if (uri.toString().contains('secid=1.600519')) {
+          return {
+            'data': {
+              'f57': '600519',
+              'f58': 'Moutai',
+              'f59': 2,
+              'f43': 0,
+              'f169': 0,
+              'f170': 0,
+              'f46': 0,
+              'f44': 0,
+              'f45': 0,
+              'f47': 0,
+              'f60': 0,
+              'f18': 0,
+            },
+          };
+        }
+
+        if (uri.toString().contains('secid=0.000001')) {
+          throw const SocketException('Connection reset by peer');
+        }
+
+        throw StateError('unexpected uri: $uri');
+      },
+      textLoader: (uri) async {
+        uris.add(uri);
+        if (uri.toString().contains('q=sh600519')) {
+          return 'v_sh600519="1~Moutai~600519~1500.00~1490.00~1492.00~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~0~10.00~0.67~1500.00~1490.00~0~1000~0";';
+        }
+        if (uri.toString().contains('q=sz000001')) {
+          throw const HttpException('Request failed: 502');
+        }
+        throw StateError('unexpected uri: $uri');
+      },
+      sleeper: (_) async {},
+    );
+
+    final quotes = await service.fetchQuotes(
+      const [
+        StockIdentity(code: '600519', name: 'Moutai', market: 'SH'),
+        StockIdentity(code: '000001', name: 'Ping An Bank', market: 'SZ'),
+      ],
+      preferSingleQuoteRetrieval: true,
+    );
+
+    expect(quotes, hasLength(1));
+    expect(quotes.single.code, '600519');
+    expect(quotes.single.lastPrice, 1500.0);
+    expect(quotes.single.changePercent, 0.67);
+    expect(
+      uris.where((uri) => uri.toString().contains('ulist.np/get')),
+      isEmpty,
+    );
+    expect(
+      uris.where((uri) => uri.toString().contains('qt/stock/get')),
+      hasLength(4),
+    );
+    expect(
+      uris.where((uri) => uri.toString().contains('qt.gtimg.cn')),
+      hasLength(4),
+    );
+  });
 }

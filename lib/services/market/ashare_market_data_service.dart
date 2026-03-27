@@ -10,9 +10,11 @@ class AshareMarketDataService {
   AshareMarketDataService({
     HttpClient? httpClient,
     Future<dynamic> Function(Uri uri)? jsonLoader,
+    Future<String> Function(Uri uri)? textLoader,
     Future<void> Function(Duration delay)? sleeper,
   })  : _httpClient = httpClient ?? HttpClient(),
         _jsonLoader = jsonLoader,
+        _textLoader = textLoader,
         _sleeper = sleeper ?? _defaultSleeper {
     _httpClient.connectionTimeout = const Duration(seconds: 8);
   }
@@ -22,9 +24,26 @@ class AshareMarketDataService {
     Duration(milliseconds: 250),
     Duration(milliseconds: 500),
   ];
+  static const _tencentQuoteLayouts = [
+    _TencentQuoteLayout(
+      changeAmountIndex: 31,
+      changePercentIndex: 32,
+      highPriceIndex: 33,
+      lowPriceIndex: 34,
+      volumeIndex: 36,
+    ),
+    _TencentQuoteLayout(
+      changeAmountIndex: 30,
+      changePercentIndex: 31,
+      highPriceIndex: 32,
+      lowPriceIndex: 33,
+      volumeIndex: 35,
+    ),
+  ];
 
   final HttpClient _httpClient;
   final Future<dynamic> Function(Uri uri)? _jsonLoader;
+  final Future<String> Function(Uri uri)? _textLoader;
   final Future<void> Function(Duration delay) _sleeper;
 
   Future<List<StockSearchResult>> searchStocks(String keyword) async {
@@ -104,11 +123,14 @@ class AshareMarketDataService {
     return rankSearchResults(results, query);
   }
 
-  Future<List<StockQuoteSnapshot>> fetchQuotes(
-    List<StockIdentity> stocks,
-  ) async {
+  Future<List<StockQuoteSnapshot>> fetchQuotes(List<StockIdentity> stocks,
+      {bool preferSingleQuoteRetrieval = false}) async {
     if (stocks.isEmpty) {
       return const [];
+    }
+
+    if (preferSingleQuoteRetrieval) {
+      return _fetchQuotesIndividually(stocks);
     }
 
     final quotesByCode = <String, StockQuoteSnapshot>{};
@@ -150,7 +172,71 @@ class AshareMarketDataService {
         .toList(growable: false);
   }
 
+  Future<List<StockQuoteSnapshot>> _fetchQuotesIndividually(
+    List<StockIdentity> stocks,
+  ) async {
+    final quotesByCode = <String, StockQuoteSnapshot>{};
+    _SingleQuoteOutcome? lastSingleFailure;
+    final singleOutcomes = await Future.wait(
+      stocks.map(_fetchSingleQuoteOutcome),
+    );
+    for (final outcome in singleOutcomes) {
+      final quote = outcome.quote;
+      if (quote != null) {
+        quotesByCode[quote.code] = quote;
+        continue;
+      }
+      lastSingleFailure = outcome;
+    }
+
+    if (quotesByCode.isEmpty && lastSingleFailure != null) {
+      Error.throwWithStackTrace(
+        lastSingleFailure.error!,
+        lastSingleFailure.stackTrace!,
+      );
+    }
+
+    return stocks
+        .map((stock) => quotesByCode[stock.code])
+        .whereType<StockQuoteSnapshot>()
+        .toList(growable: false);
+  }
+
   Future<StockQuoteSnapshot> _fetchSingleQuote(StockIdentity stock) async {
+    Object? eastmoneyError;
+    StackTrace? eastmoneyStackTrace;
+    try {
+      final eastmoneyQuote = await _fetchEastmoneySingleQuote(stock);
+      if (_isUsableSingleQuote(eastmoneyQuote)) {
+        return eastmoneyQuote;
+      }
+      eastmoneyError =
+          const HttpException('Eastmoney single quote is unusable');
+    } catch (error, stackTrace) {
+      eastmoneyError = error;
+      eastmoneyStackTrace = stackTrace;
+    }
+
+    try {
+      final tencentQuote = await _fetchTencentSingleQuote(stock);
+      if (_isUsableSingleQuote(tencentQuote)) {
+        return tencentQuote;
+      }
+    } catch (_) {
+      // Re-throw the original Eastmoney failure when Tencent also fails.
+    }
+
+    if (eastmoneyError != null) {
+      if (eastmoneyStackTrace != null) {
+        Error.throwWithStackTrace(eastmoneyError, eastmoneyStackTrace);
+      }
+      throw eastmoneyError;
+    }
+    throw const HttpException('Single quote fetch failed');
+  }
+
+  Future<StockQuoteSnapshot> _fetchEastmoneySingleQuote(
+      StockIdentity stock) async {
     final uri = Uri.parse(
       'https://push2.eastmoney.com/api/qt/stock/get'
       '?invt=2'
@@ -168,6 +254,80 @@ class AshareMarketDataService {
     return parseQuoteSnapshot(
       stock: stock,
       map: data.cast<String, dynamic>(),
+      timestamp: DateTime.now(),
+    );
+  }
+
+  Future<StockQuoteSnapshot> _fetchTencentSingleQuote(
+      StockIdentity stock) async {
+    final marketPrefix = stock.normalizedMarket == 'SH' ? 'sh' : 'sz';
+    final uri = Uri.parse('https://qt.gtimg.cn/q=$marketPrefix${stock.code}');
+    final payload = await _getText(uri);
+    final fields = _parseTencentQuoteFields(payload);
+    if (fields.length <= 35) {
+      throw const HttpException('Tencent quote payload is incomplete');
+    }
+
+    for (final layout in _tencentQuoteLayouts) {
+      final quote = _tryParseTencentSingleQuote(
+        stock: stock,
+        fields: fields,
+        layout: layout,
+      );
+      if (quote != null && _isUsableSingleQuote(quote)) {
+        return quote;
+      }
+    }
+
+    throw const HttpException(
+        'Tencent quote payload is missing numeric fields');
+  }
+
+  StockQuoteSnapshot? _tryParseTencentSingleQuote({
+    required StockIdentity stock,
+    required List<String> fields,
+    required _TencentQuoteLayout layout,
+  }) {
+    final lastPrice = _parseTencentNumber(fields, 3);
+    final previousClose = _parseTencentNumber(fields, 4);
+    final openPrice = _parseTencentNumber(fields, 5);
+    final highPrice = _parseTencentNumber(fields, layout.highPriceIndex);
+    final lowPrice = _parseTencentNumber(fields, layout.lowPriceIndex);
+    final changeAmount = _parseTencentNumber(fields, layout.changeAmountIndex);
+    final changePercent = _parseTencentNumber(
+      fields,
+      layout.changePercentIndex,
+    );
+    final volume = _parseTencentNumber(fields, layout.volumeIndex);
+
+    if (lastPrice == null ||
+        previousClose == null ||
+        openPrice == null ||
+        highPrice == null ||
+        lowPrice == null ||
+        changeAmount == null ||
+        changePercent == null ||
+        volume == null) {
+      return null;
+    }
+
+    return StockQuoteSnapshot(
+      code: fields[2].trim().isEmpty ? stock.code : fields[2].trim(),
+      name: fields[1].trim().isEmpty ? stock.name : fields[1].trim(),
+      market: stock.market,
+      securityTypeName: stock.securityTypeName,
+      priceDecimalDigits: SecurityPriceScale.resolvePriceDecimalDigits(
+        code: stock.code,
+        securityTypeName: stock.securityTypeName,
+      ),
+      lastPrice: lastPrice,
+      previousClose: previousClose,
+      changeAmount: changeAmount,
+      changePercent: changePercent,
+      openPrice: openPrice,
+      highPrice: highPrice,
+      lowPrice: lowPrice,
+      volume: volume,
       timestamp: DateTime.now(),
     );
   }
@@ -490,6 +650,32 @@ class AshareMarketDataService {
     throw StateError('Unreachable retry state for $uri');
   }
 
+  Future<String> _getText(Uri uri) async {
+    for (var attempt = 0;
+        attempt <= _requestRetryBackoffs.length;
+        attempt += 1) {
+      try {
+        final loader = _textLoader;
+        if (loader != null) {
+          return await loader(uri);
+        }
+        return await _loadText(uri);
+      } on HttpException catch (error) {
+        if (!_shouldRetryRequest(error, attempt)) {
+          rethrow;
+        }
+      } on SocketException catch (error) {
+        if (!_shouldRetryRequest(error, attempt)) {
+          rethrow;
+        }
+      }
+
+      await _sleeper(_requestRetryBackoffs[attempt]);
+    }
+
+    throw StateError('Unreachable retry state for $uri');
+  }
+
   Future<dynamic> _loadJson(Uri uri) async {
     final request = await _httpClient.getUrl(uri);
     request.headers.set(
@@ -508,6 +694,23 @@ class AshareMarketDataService {
     }
 
     return jsonDecode(body);
+  }
+
+  Future<String> _loadText(Uri uri) async {
+    final request = await _httpClient.getUrl(uri);
+    request.headers.set(HttpHeaders.acceptHeader, 'text/plain, */*');
+    request.headers.set(HttpHeaders.userAgentHeader, 'Mozilla/5.0');
+    request.headers.set(HttpHeaders.refererHeader, 'https://qt.gtimg.cn/');
+    final response = await request.close();
+    final bytes = await response.fold<List<int>>(
+      <int>[],
+      (buffer, chunk) => buffer..addAll(chunk),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException('Request failed: ${response.statusCode}');
+    }
+
+    return latin1.decode(bytes, allowInvalid: true);
   }
 
   static Future<void> _defaultSleeper(Duration delay) {
@@ -824,6 +1027,60 @@ class AshareMarketDataService {
     final text = rawValue.toString().trim();
     return text.contains('.');
   }
+
+  static bool _isUsableSingleQuote(StockQuoteSnapshot quote) {
+    if (quote.lastPrice <= 0 ||
+        quote.previousClose <= 0 ||
+        quote.openPrice <= 0 ||
+        quote.highPrice <= 0 ||
+        quote.lowPrice <= 0 ||
+        quote.volume < 0) {
+      return false;
+    }
+
+    final tickSize = 1 / quote.priceScaleDivisor;
+    final priceTolerance = tickSize * 2;
+    final expectedChangeAmount = quote.lastPrice - quote.previousClose;
+    if ((quote.changeAmount - expectedChangeAmount).abs() > priceTolerance) {
+      return false;
+    }
+
+    if (quote.highPrice + priceTolerance < quote.lowPrice) {
+      return false;
+    }
+
+    if (quote.lastPrice < quote.lowPrice - priceTolerance ||
+        quote.lastPrice > quote.highPrice + priceTolerance ||
+        quote.openPrice < quote.lowPrice - priceTolerance ||
+        quote.openPrice > quote.highPrice + priceTolerance) {
+      return false;
+    }
+
+    final expectedPercent = expectedChangeAmount / quote.previousClose * 100;
+    final percentTolerance = math.max(0.35, expectedPercent.abs() * 0.1);
+    return (quote.changePercent - expectedPercent).abs() <= percentTolerance;
+  }
+
+  static List<String> _parseTencentQuoteFields(String payload) {
+    final start = payload.indexOf('"');
+    final end = payload.lastIndexOf('"');
+    if (start < 0 || end <= start) {
+      throw const HttpException('Tencent quote payload format is invalid');
+    }
+
+    return payload.substring(start + 1, end).split('~');
+  }
+
+  static double? _parseTencentNumber(List<String> fields, int index) {
+    if (index >= fields.length) {
+      return null;
+    }
+    final text = fields[index].trim();
+    if (text.isEmpty) {
+      return null;
+    }
+    return double.tryParse(text);
+  }
 }
 
 class _BatchQuoteResult {
@@ -846,4 +1103,20 @@ class _SingleQuoteOutcome {
   final StockQuoteSnapshot? quote;
   final Object? error;
   final StackTrace? stackTrace;
+}
+
+class _TencentQuoteLayout {
+  const _TencentQuoteLayout({
+    required this.changeAmountIndex,
+    required this.changePercentIndex,
+    required this.highPriceIndex,
+    required this.lowPriceIndex,
+    required this.volumeIndex,
+  });
+
+  final int changeAmountIndex;
+  final int changePercentIndex;
+  final int highPriceIndex;
+  final int lowPriceIndex;
+  final int volumeIndex;
 }
