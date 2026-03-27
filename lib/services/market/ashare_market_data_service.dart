@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import '../../data/models/stock_identity.dart';
 import '../../data/models/stock_quote_snapshot.dart';
@@ -103,16 +104,29 @@ class AshareMarketDataService {
       return const [];
     }
 
+    final quotesByCode = <String, StockQuoteSnapshot>{};
+    var fallbackStocks = List<StockIdentity>.from(stocks);
+
     try {
-      final batchQuotes = await _fetchBatchQuotes(stocks);
-      if (batchQuotes.length == stocks.length) {
-        return batchQuotes;
-      }
+      final batchResult = await _fetchBatchQuotes(stocks);
+      quotesByCode.addAll(batchResult.quotesByCode);
+      fallbackStocks = batchResult.fallbackStocks;
     } catch (_) {
       // Fall back to the legacy per-stock path when the batch payload changes.
     }
 
-    return Future.wait(stocks.map(_fetchSingleQuote));
+    if (fallbackStocks.isNotEmpty) {
+      final singleQuotes =
+          await Future.wait(fallbackStocks.map(_fetchSingleQuote));
+      for (final quote in singleQuotes) {
+        quotesByCode[quote.code] = quote;
+      }
+    }
+
+    return stocks
+        .map((stock) => quotesByCode[stock.code])
+        .whereType<StockQuoteSnapshot>()
+        .toList(growable: false);
   }
 
   Future<StockQuoteSnapshot> _fetchSingleQuote(StockIdentity stock) async {
@@ -137,7 +151,7 @@ class AshareMarketDataService {
     );
   }
 
-  Future<List<StockQuoteSnapshot>> _fetchBatchQuotes(
+  Future<_BatchQuoteResult> _fetchBatchQuotes(
     List<StockIdentity> stocks,
   ) async {
     final uri = Uri.parse(
@@ -164,7 +178,8 @@ class AshareMarketDataService {
     }
 
     final stockByCode = {for (final stock in stocks) stock.code: stock};
-    final quotes = <StockQuoteSnapshot>[];
+    final quotesByCode = <String, StockQuoteSnapshot>{};
+    final batchTimestamp = DateTime.now();
 
     for (final item in diff.whereType<Map>()) {
       final map = item.cast<String, dynamic>();
@@ -174,33 +189,63 @@ class AshareMarketDataService {
         continue;
       }
 
-      final normalizedMap = <String, dynamic>{
-        ...map,
-        'f57': code,
-        'f58': _readStaticString(map, ['f58', 'f14']),
-        'f60': map['f60'] ?? map['f18'],
-        'f170': _normalizeBatchPercent(stock: stock, map: map),
-      };
-
-      quotes.add(
-        parseQuoteSnapshot(
-          stock: stock,
-          map: normalizedMap,
-          timestamp: DateTime.now(),
-        ),
+      final quote = _tryParseBatchQuote(
+        stock: stock,
+        map: map,
+        timestamp: batchTimestamp,
       );
+      if (quote != null) {
+        quotesByCode[stock.code] = quote;
+      }
     }
 
-    if (quotes.isEmpty) {
+    if (quotesByCode.isEmpty) {
       throw const HttpException('Batch quote list resolved to zero quotes');
     }
 
-    quotes.sort((left, right) {
-      return stocks
-          .indexWhere((item) => item.code == left.code)
-          .compareTo(stocks.indexWhere((item) => item.code == right.code));
-    });
-    return quotes;
+    final fallbackStocks =
+        stocks.where((stock) => !quotesByCode.containsKey(stock.code)).toList(
+              growable: false,
+            );
+
+    return _BatchQuoteResult(
+      quotesByCode: quotesByCode,
+      fallbackStocks: fallbackStocks,
+    );
+  }
+
+  StockQuoteSnapshot? _tryParseBatchQuote({
+    required StockIdentity stock,
+    required Map<String, dynamic> map,
+    required DateTime timestamp,
+  }) {
+    if (!_hasUsableBatchField(map, ['f57', 'f12']) ||
+        !_hasUsableBatchField(map, ['f43']) ||
+        !_hasUsableBatchField(map, ['f169']) ||
+        !_hasUsableBatchField(map, ['f170', 'f3']) ||
+        !_hasUsableBatchField(map, ['f46']) ||
+        !_hasUsableBatchField(map, ['f44']) ||
+        !_hasUsableBatchField(map, ['f45']) ||
+        !_hasUsableBatchField(map, ['f47']) ||
+        !_hasUsableBatchField(map, ['f60', 'f18'])) {
+      return null;
+    }
+
+    final normalizedMap = <String, dynamic>{
+      ...map,
+      'f57': _readStaticString(map, ['f57', 'f12']),
+      'f58': _readStaticString(map, ['f58', 'f14']),
+      'f60': _firstUsableValue(map, ['f60', 'f18']),
+      'f170': _normalizeBatchPercent(stock: stock, map: map),
+    };
+
+    final quote = parseQuoteSnapshot(
+      stock: stock,
+      map: normalizedMap,
+      timestamp: timestamp,
+    );
+
+    return _isSaneBatchQuote(quote) ? quote : null;
   }
 
   static StockQuoteSnapshot parseQuoteSnapshot({
@@ -461,6 +506,43 @@ class AshareMarketDataService {
     return scaledDiff < directDiff ? rawPercent * 100 : rawPercent;
   }
 
+  static bool _isSaneBatchQuote(StockQuoteSnapshot quote) {
+    if (quote.lastPrice <= 0 ||
+        quote.previousClose <= 0 ||
+        quote.openPrice < 0 ||
+        quote.highPrice < 0 ||
+        quote.lowPrice < 0 ||
+        quote.volume < 0) {
+      return false;
+    }
+
+    final tickSize = 1 / quote.priceScaleDivisor;
+    final priceTolerance = tickSize * 2;
+    final expectedChangeAmount = quote.lastPrice - quote.previousClose;
+    if ((quote.changeAmount - expectedChangeAmount).abs() > priceTolerance) {
+      return false;
+    }
+
+    if (quote.highPrice + priceTolerance < quote.lowPrice) {
+      return false;
+    }
+
+    if (quote.lastPrice < quote.lowPrice - priceTolerance ||
+        quote.lastPrice > quote.highPrice + priceTolerance ||
+        quote.openPrice < quote.lowPrice - priceTolerance ||
+        quote.openPrice > quote.highPrice + priceTolerance) {
+      return false;
+    }
+
+    final expectedPercent = expectedChangeAmount / quote.previousClose * 100;
+    final percentTolerance = math.max(0.35, expectedPercent.abs() * 0.1);
+    if ((quote.changePercent - expectedPercent).abs() > percentTolerance) {
+      return false;
+    }
+
+    return true;
+  }
+
   List<dynamic>? _extractList(dynamic value) {
     if (value is List) {
       return value;
@@ -552,6 +634,35 @@ class AshareMarketDataService {
     return '';
   }
 
+  static bool _hasUsableBatchField(
+      Map<String, dynamic> map, List<String> keys) {
+    return _firstUsableValue(map, keys) != null;
+  }
+
+  static dynamic _firstUsableValue(
+      Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      if (!map.containsKey(key)) {
+        continue;
+      }
+
+      final value = map[key];
+      if (_isDirtyPlaceholder(value)) {
+        continue;
+      }
+
+      return value;
+    }
+    return null;
+  }
+
+  static bool _isDirtyPlaceholder(dynamic value) {
+    if (value == null) {
+      return true;
+    }
+    return value is String && value.trim() == '-';
+  }
+
   static double _scaledPrice(
     dynamic value,
     double divisor, {
@@ -595,4 +706,14 @@ class AshareMarketDataService {
     final text = rawValue.toString().trim();
     return text.contains('.');
   }
+}
+
+class _BatchQuoteResult {
+  const _BatchQuoteResult({
+    required this.quotesByCode,
+    required this.fallbackStocks,
+  });
+
+  final Map<String, StockQuoteSnapshot> quotesByCode;
+  final List<StockIdentity> fallbackStocks;
 }

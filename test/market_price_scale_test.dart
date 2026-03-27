@@ -162,7 +162,8 @@ void main() {
     );
   });
 
-  test('f59 overrides stale ETF milli-price scaling when quote says 2 decimals', () {
+  test('f59 overrides stale ETF milli-price scaling when quote says 2 decimals',
+      () {
     final quote = AshareMarketDataService.parseQuoteSnapshot(
       stock: const StockIdentity(
         code: '510300',
@@ -287,7 +288,8 @@ void main() {
     expect(text, contains('0.015'));
   });
 
-  test('quote-side f59 overrides stale equity classification for ETF-like code', () {
+  test('quote-side f59 overrides stale equity classification for ETF-like code',
+      () {
     final quote = AshareMarketDataService.parseQuoteSnapshot(
       stock: const StockIdentity(
         code: '159001',
