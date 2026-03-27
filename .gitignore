@@ -27,7 +27,7 @@ Thumbs.db
 *.keystore
 
 # Local-only notes and temporary files
-LOCAL_NOTES.md
-*.local.txt
+*.local.md
+*.notes.txt
 *.draft.txt
 .tmp-notes/

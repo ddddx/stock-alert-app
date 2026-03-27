@@ -1,10 +1,10 @@
 # LOCAL_NOTES.example.md
 
-本文件是本地开发说明模板，只给当前机器/当前开发者使用，不建议提交真实本机信息。
+本文件是本地开发说明模板，用于记录当前开发环境中的非通用信息。真实本机信息建议只保留在未提交的本地文件中。
 
-你可以在本地复制为 `LOCAL_NOTES.md`，并填写以下内容：
+如有需要，可在本地复制为任意私有文件名（例如 `dev.local.md`），并填写以下内容：
 
-## Flutter / Android SDK
+## SDK / Toolchain
 
 - Flutter 路径：
 - Android SDK 路径：
