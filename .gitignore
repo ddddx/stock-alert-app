@@ -31,3 +31,8 @@ Thumbs.db
 *.notes.txt
 *.draft.txt
 .tmp-notes/
+.flutter_sdk_mirror/
+.gitconfig
+.gitconfig.codex
+.tmp/
+build_gradle.log
