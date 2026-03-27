@@ -268,4 +268,86 @@ void main() {
       isEmpty,
     );
   });
+
+  test(
+      'fetchQuotes falls back only for stocks missing from an incomplete batch payload',
+      () async {
+    final uris = <Uri>[];
+    final service = AshareMarketDataService(
+      jsonLoader: (uri) async {
+        uris.add(uri);
+        if (uri.toString().contains('ulist.np/get')) {
+          return {
+            'data': {
+              'diff': [
+                {
+                  'f12': '000001',
+                  'f14': 'Ping An Bank',
+                  'f18': 1000,
+                  'f43': 1020,
+                  'f169': 20,
+                  'f170': 200,
+                  'f46': 1000,
+                  'f44': 1020,
+                  'f45': 990,
+                  'f47': 2000,
+                  'f59': 2,
+                },
+              ],
+            },
+          };
+        }
+
+        expect(uri.toString(), contains('qt/stock/get'));
+        expect(uri.toString(), contains('secid=1.600519'));
+        return {
+          'data': {
+            'f57': '600519',
+            'f58': 'Moutai',
+            'f59': 2,
+            'f43': 150000,
+            'f169': 1000,
+            'f170': 67,
+            'f46': 149200,
+            'f44': 150000,
+            'f45': 149000,
+            'f47': 1000,
+            'f60': 149000,
+            'f18': 149000,
+          },
+        };
+      },
+    );
+
+    final quotes = await service.fetchQuotes(const [
+      StockIdentity(code: '600519', name: 'Moutai', market: 'SH'),
+      StockIdentity(code: '000001', name: 'Ping An Bank', market: 'SZ'),
+    ]);
+
+    expect(quotes, hasLength(2));
+    expect(quotes[0].code, '600519');
+    expect(quotes[0].changePercent, 0.67);
+    expect(quotes[1].code, '000001');
+    expect(quotes[1].changePercent, 2.0);
+    expect(
+      uris.where((uri) => uri.toString().contains('ulist.np/get')),
+      hasLength(1),
+    );
+    expect(
+      uris.where(
+        (uri) =>
+            uri.toString().contains('qt/stock/get') &&
+            uri.toString().contains('secid=1.600519'),
+      ),
+      hasLength(1),
+    );
+    expect(
+      uris.where(
+        (uri) =>
+            uri.toString().contains('qt/stock/get') &&
+            uri.toString().contains('secid=0.000001'),
+      ),
+      isEmpty,
+    );
+  });
 }

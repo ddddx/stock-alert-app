@@ -220,14 +220,14 @@ class AshareMarketDataService {
     required DateTime timestamp,
   }) {
     if (!_hasUsableBatchField(map, ['f57', 'f12']) ||
-        !_hasUsableBatchField(map, ['f43']) ||
-        !_hasUsableBatchField(map, ['f169']) ||
-        !_hasUsableBatchField(map, ['f170', 'f3']) ||
-        !_hasUsableBatchField(map, ['f46']) ||
-        !_hasUsableBatchField(map, ['f44']) ||
-        !_hasUsableBatchField(map, ['f45']) ||
-        !_hasUsableBatchField(map, ['f47']) ||
-        !_hasUsableBatchField(map, ['f60', 'f18'])) {
+        !_hasUsableBatchNumber(map, ['f43']) ||
+        !_hasUsableBatchNumber(map, ['f169']) ||
+        !_hasUsableBatchNumber(map, ['f170', 'f3']) ||
+        !_hasUsableBatchNumber(map, ['f46']) ||
+        !_hasUsableBatchNumber(map, ['f44']) ||
+        !_hasUsableBatchNumber(map, ['f45']) ||
+        !_hasUsableBatchNumber(map, ['f47']) ||
+        !_hasUsableBatchNumber(map, ['f60', 'f18'])) {
       return null;
     }
 
@@ -238,6 +238,9 @@ class AshareMarketDataService {
       'f60': _firstUsableValue(map, ['f60', 'f18']),
       'f170': _normalizeBatchPercent(stock: stock, map: map),
     };
+    if (!_hasUsableBatchNumber(normalizedMap, ['f170'])) {
+      return null;
+    }
 
     final quote = parseQuoteSnapshot(
       stock: stock,
@@ -639,6 +642,13 @@ class AshareMarketDataService {
     return _firstUsableValue(map, keys) != null;
   }
 
+  static bool _hasUsableBatchNumber(
+    Map<String, dynamic> map,
+    List<String> keys,
+  ) {
+    return _tryParseFiniteNumber(_firstUsableValue(map, keys)) != null;
+  }
+
   static dynamic _firstUsableValue(
       Map<String, dynamic> map, List<String> keys) {
     for (final key in keys) {
@@ -660,7 +670,28 @@ class AshareMarketDataService {
     if (value == null) {
       return true;
     }
-    return value is String && value.trim() == '-';
+    if (value is! String) {
+      return false;
+    }
+
+    final trimmed = value.trim();
+    return trimmed.isEmpty || trimmed == '-';
+  }
+
+  static double? _tryParseFiniteNumber(dynamic value) {
+    if (_isDirtyPlaceholder(value)) {
+      return null;
+    }
+    if (value is num) {
+      final number = value.toDouble();
+      return number.isFinite ? number : null;
+    }
+
+    final parsed = double.tryParse(value.toString().trim());
+    if (parsed == null || !parsed.isFinite) {
+      return null;
+    }
+    return parsed;
   }
 
   static double _scaledPrice(
