@@ -21,7 +21,7 @@ void main() {
   assert(nextSession.minute == 30);
 
   final message = marketHours.buildClosedMessage(DateTime(2026, 3, 28, 10, 0));
-  assert(message.contains('Outside A-share trading hours'));
+  assert(message.contains('当前不在A股交易时段'));
   assert(message.contains('09:30'));
 
   print('monitoring_policy_check: ok');
