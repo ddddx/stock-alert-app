@@ -34,7 +34,7 @@ void main() {
 
     expect(marketDataService.fetchQuotesCalls, 0);
     expect(result.triggers, isEmpty);
-    expect(result.summary, contains('Monitoring paused'));
+    expect(result.summary, contains('监控已暂停'));
     expect(result.summary, contains('13:00'));
   });
 
@@ -55,7 +55,7 @@ void main() {
     final result = await service.refreshWatchlist();
 
     expect(marketDataService.fetchQuotesCalls, 1);
-    expect(result.summary, isNot(contains('Monitoring paused')));
+    expect(result.summary, isNot(contains('监控已暂停')));
   });
 }
 

@@ -30,7 +30,7 @@ void main() {
     expect(nextSession.minute, 30);
 
     final message = marketHours.buildClosedMessage(saturday);
-    expect(message, contains('Outside A-share trading hours'));
+    expect(message, contains('当前不在A股交易时段'));
     expect(message, contains('09:30'));
   });
 }

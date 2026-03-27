@@ -100,11 +100,11 @@ class FlutterTtsAudioAlertService implements AudioAlertService {
     if (message != null && message.isNotEmpty) {
       final normalized = message.toLowerCase();
       if (normalized.contains('packageinfo is null')) {
-        return '语音插件初始化失败：Flutter 插件上下文未准备好，请先回到应用前台后重试。';
+        return '语音插件初始化失败：应用语音插件上下文未准备好，请先回到应用前台后重试。';
       }
       if (normalized.contains('not bound to an engine') ||
           normalized.contains('detached from native')) {
-        return '语音插件当前未绑定到 Flutter 引擎，请回到应用前台后重试。';
+        return '语音插件当前未绑定到应用引擎，请回到应用前台后重试。';
       }
       return '语音插件调用失败：$message';
     }

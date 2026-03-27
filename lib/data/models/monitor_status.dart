@@ -16,7 +16,7 @@ class MonitorStatus {
       lastCheckAt: json['lastCheckAt'] == null
           ? null
           : DateTime.tryParse(json['lastCheckAt'] as String),
-      lastMessage: json['lastMessage'] as String? ?? '等待首次刷新 A 股行情。',
+      lastMessage: json['lastMessage'] as String? ?? '等待首次刷新A股行情。',
       androidOnboardingShown: json['androidOnboardingShown'] as bool? ?? false,
     );
   }

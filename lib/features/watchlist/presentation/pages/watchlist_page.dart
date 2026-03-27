@@ -342,7 +342,7 @@ class _StockSearchSheetState extends State<_StockSearchSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '搜索 A 股',
+                  '搜索A股',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),

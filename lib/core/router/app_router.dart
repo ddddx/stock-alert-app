@@ -267,7 +267,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           ? await _showChoiceDialog(
               title: '开启通知权限',
               message:
-                  '后台监控依赖常驻通知。请允许通知权限，Android 13 及以上还需要显式授权 POST_NOTIFICATIONS。',
+                  '后台监控依赖常驻通知。请允许通知权限，安卓 13 及以上系统还需要单独授权通知。',
               confirmLabel: '去授权',
               cancelLabel: '稍后',
             )
@@ -283,7 +283,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       await _showActionDialog(
         title: '通知仍未开启',
         message:
-            '后台监控的前台服务必须能正常显示通知。请在系统通知设置中允许本应用通知后，再重新开启后台监控。',
+              '后台监控的前台服务必须能正常显示通知。请先在系统通知设置中允许本应用通知，再重新开启后台监控。',
         actionLabel: '打开设置',
         onAction: _platformBridgeService.openNotificationSettings,
       );

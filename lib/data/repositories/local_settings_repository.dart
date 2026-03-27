@@ -12,7 +12,7 @@ class LocalSettingsRepository implements SettingsRepository {
     soundEnabled: true,
     pollIntervalSeconds: 20,
     lastCheckAt: null,
-    lastMessage: '等待首次刷新 A 股行情。',
+    lastMessage: '等待首次刷新A股行情。',
     androidOnboardingShown: false,
   );
 

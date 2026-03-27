@@ -231,6 +231,31 @@ void main() {
     expect(ranked.first.code, '161226');
   });
 
+  test('subtitle localizes visible security type labels to Chinese', () {
+    const etf = StockIdentity(
+      code: '510300',
+      name: 'CSI300 ETF',
+      market: 'SH',
+      securityTypeName: 'ETF FUND',
+    );
+    const equity = StockIdentity(
+      code: '600519',
+      name: 'Moutai',
+      market: 'SH',
+      securityTypeName: 'AShare',
+    );
+    const bond = StockIdentity(
+      code: '113001',
+      name: 'Convertible Bond',
+      market: 'SH',
+      securityTypeName: 'CONVERTIBLE BOND',
+    );
+
+    expect(etf.subtitle, contains('ETF基金'));
+    expect(equity.subtitle, contains('股票'));
+    expect(bond.subtitle, contains('可转债'));
+  });
+
   test('preview text keeps milli-price precision for ETF quotes', () {
     final quote = AshareMarketDataService.parseQuoteSnapshot(
       stock: const StockIdentity(

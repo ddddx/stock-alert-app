@@ -41,7 +41,7 @@ class AshareMarketHours {
 
   String buildClosedMessage(DateTime moment) {
     final nextSession = _toShanghai(nextSessionStart(moment));
-    return 'Outside A-share trading hours. Monitoring paused until ${_formatShanghaiLabel(nextSession)}.';
+    return '当前不在A股交易时段，监控已暂停，将于${_formatShanghaiLabel(nextSession)}恢复。';
   }
 
   DateTime _nextSessionStartInShanghai(DateTime shanghaiMoment) {
@@ -117,13 +117,13 @@ class AshareMarketHours {
 
   String _formatShanghaiLabel(DateTime shanghaiMoment) {
     const weekdays = <int, String>{
-      DateTime.monday: 'Mon',
-      DateTime.tuesday: 'Tue',
-      DateTime.wednesday: 'Wed',
-      DateTime.thursday: 'Thu',
-      DateTime.friday: 'Fri',
-      DateTime.saturday: 'Sat',
-      DateTime.sunday: 'Sun',
+      DateTime.monday: '周一',
+      DateTime.tuesday: '周二',
+      DateTime.wednesday: '周三',
+      DateTime.thursday: '周四',
+      DateTime.friday: '周五',
+      DateTime.saturday: '周六',
+      DateTime.sunday: '周日',
     };
     final month = _twoDigits(shanghaiMoment.month);
     final day = _twoDigits(shanghaiMoment.day);

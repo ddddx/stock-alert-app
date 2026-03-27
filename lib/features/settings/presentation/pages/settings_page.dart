@@ -145,7 +145,7 @@ class _SettingsPageState extends State<SettingsPage> {
         SectionCard(
           title: '后台监控',
           subtitle:
-              'Android 端已接入前台服务、常驻通知和系统设置跳转。首次使用前，请先完成通知授权和电池优化引导。',
+              '安卓端已接入前台服务、常驻通知和系统设置跳转。首次使用前，请先完成通知授权和电池优化引导。',
           child: Column(
             children: [
               SwitchListTile(
@@ -166,7 +166,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 decoration: const InputDecoration(
                   labelText: '后台轮询间隔',
                   border: OutlineInputBorder(),
-                  helperText: '允许 1 到 300 秒。低于 15 秒也可用，但会更耗电；仅在 A 股交易时段监控。',
+                  helperText: '允许 1 到 300 秒。低于 15 秒也可用，但会更耗电；仅在A股交易时段监控。',
                   suffixIcon: Icon(Icons.timer_outlined),
                 ),
                 onFieldSubmitted: (_) async => _applyPollInterval(),
@@ -242,7 +242,7 @@ class _SettingsPageState extends State<SettingsPage> {
         SectionCard(
           title: '语音提醒',
           subtitle:
-              '试播与前台可见时的播报共用同一条 Flutter TTS 链路；后台原生轮询阶段暂保留前台服务和通知能力。',
+              '试播与前台可见时的播报共用同一条应用内语音播报链路；后台原生轮询阶段暂保留前台服务和通知能力。',
           child: Column(
             children: [
               SwitchListTile(
@@ -266,7 +266,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     final played = await widget.audioService.speak(text);
                     final message = played
                         ? '已试播：$text'
-                        : '试播失败：${widget.audioService.lastErrorMessage ?? '语音插件未完成初始化、设备缺少可用 TTS 服务，或当前媒体音量过低。'} 文案为：$text';
+                        : '试播失败：${widget.audioService.lastErrorMessage ?? '语音插件未完成初始化、设备缺少可用语音服务，或当前媒体音量过低。'} 文案为：$text';
                     _showFeedback(message);
                   },
                   icon: const Icon(Icons.volume_up_outlined),
@@ -296,7 +296,7 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 8),
               const Text('本地数据已持久化，重启应用后会保留自选、规则、历史和设置。'),
               const SizedBox(height: 8),
-              const Text('监控仅在 A 股交易时段运行：工作日 09:30-11:30、13:00-15:00；午休和收市后会暂停。'),
+              const Text('监控仅在A股交易时段运行：工作日 09:30-11:30、13:00-15:00；午休和收市后会暂停。'),
               const SizedBox(height: 8),
               const Text('如果系统强杀进程，前台服务会尽量维持；设备重启或应用更新后，需要重新打开应用并确认权限。'),
               if (_toast != null) ...[

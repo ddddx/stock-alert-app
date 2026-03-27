@@ -62,7 +62,42 @@ class StockIdentity {
   String get displayName => '$name ($code)';
   String get subtitle => securityTypeName.isEmpty
       ? '$normalizedMarket 证券'
-      : '$normalizedMarket 证券 · $securityTypeName';
+      : '$normalizedMarket 证券 · ${localizedSecurityTypeName}';
+  String get localizedSecurityTypeName {
+    final normalizedType = SecurityPriceScale.normalizeSecurityTypeName(
+      securityTypeName,
+    );
+    if (normalizedType.isEmpty) {
+      return '证券';
+    }
+    if (normalizedType.contains('ETF')) {
+      return 'ETF基金';
+    }
+    if (normalizedType.contains('LOF')) {
+      return 'LOF基金';
+    }
+    if (normalizedType.contains('REIT')) {
+      return 'REIT基金';
+    }
+    if (normalizedType.contains('CONVERTIBLE') ||
+        normalizedType.contains('可转债') ||
+        normalizedType.contains('转债')) {
+      return '可转债';
+    }
+    if (normalizedType.contains('BOND') || normalizedType.contains('债')) {
+      return '债券';
+    }
+    if (normalizedType.contains('ASHARE') ||
+        normalizedType.contains('STOCK') ||
+        normalizedType.contains('EQUITY') ||
+        normalizedType.contains('股票')) {
+      return '股票';
+    }
+    if (normalizedType.contains('FUND') || normalizedType.contains('基金')) {
+      return '基金';
+    }
+    return securityTypeName.trim();
+  }
   int get priceScaleDivisor => SecurityPriceScale.divisorFor(
         code: code,
         securityTypeName: securityTypeName,
@@ -206,6 +241,8 @@ class SecurityPriceScale {
   static String _normalize(String value) {
     return value.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
   }
+
+  static String normalizeSecurityTypeName(String value) => _normalize(value);
 
   static int? _parsePriceDecimalDigits(dynamic value) {
     final digits = switch (value) {

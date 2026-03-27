@@ -100,7 +100,7 @@ class AshareMonitorService implements MonitorService {
       await _settingsRepository.markPrepared('语音播报预热失败：$reason');
       return;
     }
-    await _settingsRepository.markPrepared('已完成语音播报预热，可执行 A 股扫描。');
+    await _settingsRepository.markPrepared('已完成语音播报预热，可执行A股扫描。');
   }
 
   @override
@@ -157,8 +157,8 @@ class AshareMonitorService implements MonitorService {
       }
 
       final summary = triggers.isEmpty
-          ? '已刷新 ${quotes.length} 只 A 股，暂无规则触发。'
-          : '已刷新 ${quotes.length} 只 A 股，触发 ${triggers.length} 条提醒。';
+          ? '已刷新 ${quotes.length} 只A股，暂无规则触发。'
+          : '已刷新 ${quotes.length} 只A股，触发 ${triggers.length} 条提醒。';
       await _settingsRepository.markChecked(
           checkedAt: checkedAt, message: summary);
       await _platformBridgeService.updateForegroundMonitorSummary(
