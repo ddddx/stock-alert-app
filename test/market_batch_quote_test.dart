@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/services/market/ashare_market_data_service.dart';
@@ -348,6 +350,83 @@ void main() {
             uri.toString().contains('secid=0.000001'),
       ),
       isEmpty,
+    );
+  });
+
+  test('fetchQuotes retries a transient single-quote failure and recovers',
+      () async {
+    final uris = <Uri>[];
+    var singleAttempts = 0;
+    var retrySleeps = 0;
+    final service = AshareMarketDataService(
+      sleeper: (_) async {
+        retrySleeps += 1;
+      },
+      jsonLoader: (uri) async {
+        uris.add(uri);
+        if (uri.toString().contains('ulist.np/get')) {
+          return {
+            'data': {
+              'diff': [
+                {
+                  'f12': '600519',
+                  'f14': 'Moutai',
+                  'f18': 149000,
+                  'f43': '-',
+                  'f169': '-',
+                  'f170': '-',
+                  'f46': '-',
+                  'f44': '-',
+                  'f45': '-',
+                  'f47': '-',
+                  'f59': 2,
+                },
+              ],
+            },
+          };
+        }
+
+        singleAttempts += 1;
+        if (singleAttempts == 1) {
+          throw const HttpException(
+            'Connection closed before full header was received',
+          );
+        }
+
+        return {
+          'data': {
+            'f57': '600519',
+            'f58': 'Moutai',
+            'f59': 2,
+            'f43': 150000,
+            'f169': 1000,
+            'f170': 67,
+            'f46': 149200,
+            'f44': 150000,
+            'f45': 149000,
+            'f47': 1000,
+            'f60': 149000,
+            'f18': 149000,
+          },
+        };
+      },
+    );
+
+    final quotes = await service.fetchQuotes(const [
+      StockIdentity(code: '600519', name: 'Moutai', market: 'SH'),
+    ]);
+
+    expect(quotes, hasLength(1));
+    expect(quotes.single.lastPrice, 1500.0);
+    expect(singleAttempts, 2);
+    expect(retrySleeps, 1);
+    expect(
+      uris.where((uri) => uri.toString().contains('ulist.np/get')),
+      hasLength(1),
+    );
+    expect(
+      uris.where((uri) => uri.toString().contains('qt/stock/get')),
+      hasLength(2),
     );
   });
 }

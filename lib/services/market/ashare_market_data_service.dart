@@ -10,15 +10,22 @@ class AshareMarketDataService {
   AshareMarketDataService({
     HttpClient? httpClient,
     Future<dynamic> Function(Uri uri)? jsonLoader,
+    Future<void> Function(Duration delay)? sleeper,
   })  : _httpClient = httpClient ?? HttpClient(),
-        _jsonLoader = jsonLoader {
+        _jsonLoader = jsonLoader,
+        _sleeper = sleeper ?? _defaultSleeper {
     _httpClient.connectionTimeout = const Duration(seconds: 8);
   }
 
   static const _searchToken = 'D43BF722C8E33BDC906FB84D85E326E8';
+  static const _requestRetryBackoffs = [
+    Duration(milliseconds: 250),
+    Duration(milliseconds: 500),
+  ];
 
   final HttpClient _httpClient;
   final Future<dynamic> Function(Uri uri)? _jsonLoader;
+  final Future<void> Function(Duration delay) _sleeper;
 
   Future<List<StockSearchResult>> searchStocks(String keyword) async {
     final query = keyword.trim();
@@ -116,10 +123,24 @@ class AshareMarketDataService {
     }
 
     if (fallbackStocks.isNotEmpty) {
-      final singleQuotes =
-          await Future.wait(fallbackStocks.map(_fetchSingleQuote));
-      for (final quote in singleQuotes) {
-        quotesByCode[quote.code] = quote;
+      _SingleQuoteOutcome? lastSingleFailure;
+      final singleOutcomes = await Future.wait(
+        fallbackStocks.map(_fetchSingleQuoteOutcome),
+      );
+      for (final outcome in singleOutcomes) {
+        final quote = outcome.quote;
+        if (quote != null) {
+          quotesByCode[quote.code] = quote;
+          continue;
+        }
+        lastSingleFailure = outcome;
+      }
+
+      if (quotesByCode.isEmpty && lastSingleFailure != null) {
+        Error.throwWithStackTrace(
+          lastSingleFailure.error!,
+          lastSingleFailure.stackTrace!,
+        );
       }
     }
 
@@ -149,6 +170,16 @@ class AshareMarketDataService {
       map: data.cast<String, dynamic>(),
       timestamp: DateTime.now(),
     );
+  }
+
+  Future<_SingleQuoteOutcome> _fetchSingleQuoteOutcome(
+    StockIdentity stock,
+  ) async {
+    try {
+      return _SingleQuoteOutcome.success(await _fetchSingleQuote(stock));
+    } catch (error, stackTrace) {
+      return _SingleQuoteOutcome.failure(error, stackTrace);
+    }
   }
 
   Future<_BatchQuoteResult> _fetchBatchQuotes(
@@ -434,10 +465,32 @@ class AshareMarketDataService {
   }
 
   Future<dynamic> _getJson(Uri uri) async {
-    final loader = _jsonLoader;
-    if (loader != null) {
-      return loader(uri);
+    for (var attempt = 0;
+        attempt <= _requestRetryBackoffs.length;
+        attempt += 1) {
+      try {
+        final loader = _jsonLoader;
+        if (loader != null) {
+          return await loader(uri);
+        }
+        return await _loadJson(uri);
+      } on HttpException catch (error) {
+        if (!_shouldRetryRequest(error, attempt)) {
+          rethrow;
+        }
+      } on SocketException catch (error) {
+        if (!_shouldRetryRequest(error, attempt)) {
+          rethrow;
+        }
+      }
+
+      await _sleeper(_requestRetryBackoffs[attempt]);
     }
+
+    throw StateError('Unreachable retry state for $uri');
+  }
+
+  Future<dynamic> _loadJson(Uri uri) async {
     final request = await _httpClient.getUrl(uri);
     request.headers.set(
       HttpHeaders.acceptHeader,
@@ -455,6 +508,40 @@ class AshareMarketDataService {
     }
 
     return jsonDecode(body);
+  }
+
+  static Future<void> _defaultSleeper(Duration delay) {
+    return Future<void>.delayed(delay);
+  }
+
+  static bool _shouldRetryRequest(Object error, int attempt) {
+    if (attempt >= _requestRetryBackoffs.length) {
+      return false;
+    }
+    if (error is SocketException) {
+      return true;
+    }
+    if (error is! HttpException) {
+      return false;
+    }
+
+    final message = error.message.toLowerCase();
+    if (message.contains('connection closed') ||
+        message.contains('connection reset') ||
+        message.contains('connection terminated') ||
+        message.contains('timed out') ||
+        message.contains('timeout')) {
+      return true;
+    }
+
+    final statusMatch = RegExp(r'request failed: (\d{3})').firstMatch(message);
+    final statusCode = int.tryParse(statusMatch?.group(1) ?? '');
+    return statusCode == 408 ||
+        statusCode == 429 ||
+        statusCode == 500 ||
+        statusCode == 502 ||
+        statusCode == 503 ||
+        statusCode == 504;
   }
 
   static dynamic _normalizeBatchPercent({
@@ -747,4 +834,16 @@ class _BatchQuoteResult {
 
   final Map<String, StockQuoteSnapshot> quotesByCode;
   final List<StockIdentity> fallbackStocks;
+}
+
+class _SingleQuoteOutcome {
+  const _SingleQuoteOutcome.success(this.quote)
+      : error = null,
+        stackTrace = null;
+
+  const _SingleQuoteOutcome.failure(this.error, this.stackTrace) : quote = null;
+
+  final StockQuoteSnapshot? quote;
+  final Object? error;
+  final StackTrace? stackTrace;
 }

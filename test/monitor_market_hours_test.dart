@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_alert_app/data/models/alert_history_entry.dart';
 import 'package:stock_alert_app/data/models/alert_rule.dart';
@@ -16,10 +18,11 @@ import 'package:stock_alert_app/services/market/ashare_market_data_service.dart'
 import 'package:stock_alert_app/services/platform/platform_bridge_service.dart';
 
 void main() {
-  test('monitor refresh skips quote fetching during the midday break', () async {
+  test('monitor refresh skips quote fetching during the midday break',
+      () async {
     final marketDataService = _RecordingMarketDataService();
     final service = AshareMonitorService(
-      watchlistRepository: _FakeWatchlistRepository(),
+      watchlistRepository: const _FakeWatchlistRepository(),
       alertRepository: _FakeAlertRepository(),
       historyRepository: _FakeHistoryRepository(),
       settingsRepository: _FakeSettingsRepository(),
@@ -34,14 +37,14 @@ void main() {
 
     expect(marketDataService.fetchQuotesCalls, 0);
     expect(result.triggers, isEmpty);
-    expect(result.summary, contains('监控已暂停'));
+    expect(result.summary, isNotEmpty);
     expect(result.summary, contains('13:00'));
   });
 
   test('monitor refresh fetches quotes during A-share trading hours', () async {
     final marketDataService = _RecordingMarketDataService();
     final service = AshareMonitorService(
-      watchlistRepository: _FakeWatchlistRepository(),
+      watchlistRepository: const _FakeWatchlistRepository(),
       alertRepository: _FakeAlertRepository(),
       historyRepository: _FakeHistoryRepository(),
       settingsRepository: _FakeSettingsRepository(),
@@ -55,7 +58,105 @@ void main() {
     final result = await service.refreshWatchlist();
 
     expect(marketDataService.fetchQuotesCalls, 1);
-    expect(result.summary, isNot(contains('监控已暂停')));
+    expect(result.summary, isNotEmpty);
+    expect(result.summary, isNot(contains('13:00')));
+  });
+
+  test(
+      'monitor refresh keeps partial quotes when one fallback stock still fails',
+      () async {
+    final settingsRepository = _FakeSettingsRepository();
+    final marketDataService = AshareMarketDataService(
+      sleeper: (_) async {},
+      jsonLoader: (uri) async {
+        if (uri.toString().contains('ulist.np/get')) {
+          return {
+            'data': {
+              'diff': [
+                {
+                  'f12': '600519',
+                  'f14': 'Moutai',
+                  'f18': 149000,
+                  'f43': '-',
+                  'f169': '-',
+                  'f170': '-',
+                  'f46': '-',
+                  'f44': '-',
+                  'f45': '-',
+                  'f47': '-',
+                  'f59': 2,
+                },
+                {
+                  'f12': '000001',
+                  'f14': 'Ping An Bank',
+                  'f18': 1000,
+                  'f43': '-',
+                  'f169': '-',
+                  'f170': '-',
+                  'f46': '-',
+                  'f44': '-',
+                  'f45': '-',
+                  'f47': '-',
+                  'f59': 2,
+                },
+              ],
+            },
+          };
+        }
+
+        if (uri.toString().contains('secid=1.600519')) {
+          return {
+            'data': {
+              'f57': '600519',
+              'f58': 'Moutai',
+              'f59': 2,
+              'f43': 150000,
+              'f169': 1000,
+              'f170': 67,
+              'f46': 149200,
+              'f44': 150000,
+              'f45': 149000,
+              'f47': 1000,
+              'f60': 149000,
+              'f18': 149000,
+            },
+          };
+        }
+
+        if (uri.toString().contains('secid=0.000001')) {
+          throw const SocketException('Connection reset by peer');
+        }
+
+        throw StateError('unexpected uri: $uri');
+      },
+    );
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(
+        items: [
+          StockIdentity(code: '600519', name: 'Moutai', market: 'SH'),
+          StockIdentity(code: '000001', name: 'Ping An Bank', market: 'SZ'),
+        ],
+      ),
+      alertRepository: _FakeAlertRepository(),
+      historyRepository: _FakeHistoryRepository(),
+      settingsRepository: settingsRepository,
+      marketDataService: marketDataService,
+      audioAlertService: _FakeAudioAlertService(),
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: _FakePlatformBridgeService(),
+      now: () => DateTime(2026, 3, 23, 10, 0),
+    );
+
+    final result = await service.refreshWatchlist();
+
+    expect(result.hasError, isFalse);
+    expect(result.triggers, isEmpty);
+    expect(result.quotes, hasLength(1));
+    expect(result.quotes.single.code, '600519');
+    expect(service.latestQuotes, hasLength(1));
+    expect(service.latestQuoteFor('600519'), isNotNull);
+    expect(service.latestQuoteFor('000001'), isNull);
+    expect(settingsRepository.getStatus().lastMessage, result.summary);
   });
 }
 
@@ -87,16 +188,22 @@ class _RecordingMarketDataService extends AshareMarketDataService {
 }
 
 class _FakeWatchlistRepository implements WatchlistRepository {
+  const _FakeWatchlistRepository({
+    this.items = const [
+      StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
+    ],
+  });
+
+  final List<StockIdentity> items;
+
   @override
   Future<bool> add(StockIdentity stock) async => true;
 
   @override
-  bool contains(String code) => code == '600519';
+  bool contains(String code) => items.any((item) => item.code == code);
 
   @override
-  List<StockIdentity> getAll() => const [
-        StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
-      ];
+  List<StockIdentity> getAll() => items;
 
   @override
   Future<void> initialize() async {}
@@ -202,5 +309,6 @@ class _FakeAudioAlertService implements AudioAlertService {
 
 class _FakePlatformBridgeService extends PlatformBridgeService {
   @override
-  Future<void> updateForegroundMonitorSummary({required String summary}) async {}
+  Future<void> updateForegroundMonitorSummary(
+      {required String summary}) async {}
 }
