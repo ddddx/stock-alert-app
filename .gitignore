@@ -25,3 +25,9 @@ Thumbs.db
 **/key.properties
 *.jks
 *.keystore
+
+# Local-only notes and temporary files
+LOCAL_NOTES.md
+local_followup_audit.txt
+*.draft.txt
+.tmp-notes/
