@@ -28,6 +28,6 @@ Thumbs.db
 
 # Local-only notes and temporary files
 LOCAL_NOTES.md
-local_followup_audit.txt
+*.local.txt
 *.draft.txt
 .tmp-notes/

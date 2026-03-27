@@ -12,10 +12,10 @@
 
 建议验证顺序：
 
-```powershell
-flutter pub get --offline
-flutter analyze --no-pub
-flutter test --no-pub
-flutter build apk --debug --no-pub
-flutter build apk --release --no-pub
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --debug
+flutter build apk --release
 ```
