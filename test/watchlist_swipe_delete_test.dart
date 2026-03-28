@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stock_alert_app/data/models/monitor_status.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/models/stock_quote_snapshot.dart';
 import 'package:stock_alert_app/data/models/stock_search_result.dart';
+import 'package:stock_alert_app/data/models/watchlist_sort_order.dart';
+import 'package:stock_alert_app/data/models/webdav_config.dart';
 import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
 import 'package:stock_alert_app/features/watchlist/presentation/pages/watchlist_page.dart';
 import 'package:stock_alert_app/services/market/ashare_market_data_service.dart';
@@ -41,7 +44,9 @@ void main() {
               timestamp: DateTime(2026, 3, 27, 9, 30),
             ),
           ],
+          monitorStatus: _monitoringStatus,
           onRefresh: () async {},
+          onSortOrderChanged: (_) async {},
         ),
       ),
     );
@@ -65,7 +70,9 @@ void main() {
           repository: repository,
           marketDataService: _FakeMarketDataService(),
           quotes: const [],
+          monitorStatus: _monitoringStatus,
           onRefresh: () async {},
+          onSortOrderChanged: (_) async {},
         ),
       ),
     );
@@ -123,6 +130,13 @@ class _FakeWatchlistRepository implements WatchlistRepository {
   Future<void> remove(String code) async {
     _items.removeWhere((item) => item.code == code);
   }
+
+  @override
+  Future<void> replaceAll(List<StockIdentity> stocks) async {
+    _items
+      ..clear()
+      ..addAll(stocks);
+  }
 }
 
 class _FakeMarketDataService extends AshareMarketDataService {
@@ -131,3 +145,14 @@ class _FakeMarketDataService extends AshareMarketDataService {
     return const [];
   }
 }
+
+const _monitoringStatus = MonitorStatus(
+  serviceEnabled: true,
+  soundEnabled: true,
+  pollIntervalSeconds: 20,
+  lastCheckAt: null,
+  lastMessage: 'ready',
+  androidOnboardingShown: false,
+  watchlistSortOrder: WatchlistSortOrder.none,
+  webDavConfig: WebDavConfig(endpoint: '', username: ''),
+);

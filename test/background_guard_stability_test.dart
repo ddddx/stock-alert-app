@@ -5,6 +5,8 @@ import 'package:stock_alert_app/data/models/alert_rule.dart';
 import 'package:stock_alert_app/data/models/monitor_status.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/models/stock_quote_snapshot.dart';
+import 'package:stock_alert_app/data/models/watchlist_sort_order.dart';
+import 'package:stock_alert_app/data/models/webdav_config.dart';
 import 'package:stock_alert_app/data/repositories/alert_repository.dart';
 import 'package:stock_alert_app/data/repositories/history_repository.dart';
 import 'package:stock_alert_app/data/repositories/settings_repository.dart';
@@ -129,6 +131,8 @@ class _FakeSettingsRepository implements SettingsRepository {
           lastCheckAt: null,
           lastMessage: 'ready',
           androidOnboardingShown: false,
+          watchlistSortOrder: WatchlistSortOrder.none,
+          webDavConfig: const WebDavConfig(endpoint: '', username: ''),
         );
 
   MonitorStatus _status;
@@ -160,6 +164,16 @@ class _FakeSettingsRepository implements SettingsRepository {
   @override
   Future<void> updatePollIntervalSeconds(int seconds) async {
     _status = _status.copyWith(pollIntervalSeconds: seconds);
+  }
+
+  @override
+  Future<void> updateWatchlistSortOrder(WatchlistSortOrder order) async {
+    _status = _status.copyWith(watchlistSortOrder: order);
+  }
+
+  @override
+  Future<void> updateWebDavConfig(WebDavConfig config) async {
+    _status = _status.copyWith(webDavConfig: config);
   }
 
   @override
@@ -219,6 +233,9 @@ class _FakeWatchlistRepository implements WatchlistRepository {
 
   @override
   Future<void> remove(String code) async {}
+
+  @override
+  Future<void> replaceAll(List<StockIdentity> stocks) async {}
 }
 
 class _FakeAlertRepository implements AlertRepository {
@@ -242,6 +259,9 @@ class _FakeAlertRepository implements AlertRepository {
 
   @override
   Future<void> toggle(String id, bool enabled) async {}
+
+  @override
+  Future<void> replaceAll(List<AlertRule> rules) async {}
 }
 
 class _FakeHistoryRepository implements HistoryRepository {

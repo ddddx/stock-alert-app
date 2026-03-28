@@ -1,0 +1,64 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:stock_alert_app/data/models/alert_rule.dart';
+import 'package:stock_alert_app/data/models/stock_quote_snapshot.dart';
+import 'package:stock_alert_app/services/alerts/alert_message_builder.dart';
+
+void main() {
+  final builder = AlertMessageBuilder();
+  final quote = StockQuoteSnapshot(
+    code: '600519',
+    name: '贵州茅台',
+    market: 'SH',
+    lastPrice: 1688.00,
+    previousClose: 1650.00,
+    changeAmount: 38.00,
+    changePercent: 2.30,
+    openPrice: 1660.00,
+    highPrice: 1690.00,
+    lowPrice: 1658.00,
+    volume: 1000,
+    timestamp: DateTime(2026, 3, 29, 9, 45),
+  );
+
+  test('short window message mentions stock, direction and trigger reason', () {
+    final text = builder.buildShortWindowMessage(
+      rule: AlertRule.shortWindowMove(
+        id: 'rule-1',
+        moveThresholdPercent: 1.2,
+        lookbackMinutes: 5,
+        moveDirection: MoveDirection.either,
+        enabled: true,
+        createdAt: DateTime(2026, 3, 29),
+      ),
+      current: quote,
+      changeAmount: 25.5,
+      changePercent: 1.55,
+    );
+
+    expect(text, contains('贵州茅台（600519）'));
+    expect(text, contains('短时波动提醒'));
+    expect(text, contains('上涨1.55%'));
+  });
+
+  test('step message mentions ladder trigger and current movement', () {
+    final text = builder.buildStepAlertMessage(
+      rule: AlertRule.stepAlert(
+        id: 'rule-2',
+        stepValue: 0.5,
+        stepMetric: StepMetric.percent,
+        enabled: true,
+        createdAt: DateTime(2026, 3, 29),
+      ),
+      current: quote,
+      previousIndex: 3,
+      currentIndex: 4,
+      referenceValue: 1650,
+      crossedAmount: 38,
+      crossedPercent: 2.30,
+    );
+
+    expect(text, contains('阶梯提醒'));
+    expect(text, contains('越过2.00%台阶'));
+    expect(text, contains('当前涨跌幅+2.30%'));
+  });
+}

@@ -128,8 +128,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(alertRepository.rules, isEmpty);
-    expect(find.text('还没有提醒规则，添加一条后即可开始监控。'),
-        findsOneWidget);
+    expect(find.text('还没有提醒规则，添加一条后即可开始监控。'), findsOneWidget);
   });
 }
 
@@ -180,6 +179,13 @@ class _FakeAlertRepository implements AlertRepository {
     }
     rules[index] = rule;
   }
+
+  @override
+  Future<void> replaceAll(List<AlertRule> nextRules) async {
+    rules
+      ..clear()
+      ..addAll(nextRules);
+  }
 }
 
 class _FakeWatchlistRepository implements WatchlistRepository {
@@ -205,5 +211,12 @@ class _FakeWatchlistRepository implements WatchlistRepository {
   @override
   Future<void> remove(String code) async {
     _items.removeWhere((item) => item.code == code);
+  }
+
+  @override
+  Future<void> replaceAll(List<StockIdentity> stocks) async {
+    _items
+      ..clear()
+      ..addAll(stocks);
   }
 }

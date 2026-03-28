@@ -5,6 +5,8 @@ import 'package:stock_alert_app/data/models/monitor_status.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/models/stock_quote_snapshot.dart';
 import 'package:stock_alert_app/data/models/stock_search_result.dart';
+import 'package:stock_alert_app/data/models/watchlist_sort_order.dart';
+import 'package:stock_alert_app/data/models/webdav_config.dart';
 import 'package:stock_alert_app/data/repositories/settings_repository.dart';
 import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
 import 'package:stock_alert_app/features/settings/presentation/pages/settings_page.dart';
@@ -21,6 +23,7 @@ void main() {
   testWidgets('search sheet triggers search after typing', (tester) async {
     final marketDataService = _FakeMarketDataService();
     final watchlistRepository = _FakeWatchlistRepository();
+    final settingsRepository = _FakeSettingsRepository();
 
     await tester.pumpWidget(
       buildTestApp(
@@ -28,7 +31,9 @@ void main() {
           repository: watchlistRepository,
           marketDataService: marketDataService,
           quotes: const [],
+          monitorStatus: settingsRepository.getStatus(),
           onRefresh: () async {},
+          onSortOrderChanged: (_) async {},
         ),
       ),
     );
@@ -64,6 +69,8 @@ void main() {
           onChanged: () {},
           onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
               true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
         ),
       ),
     );
@@ -93,6 +100,8 @@ void main() {
           onChanged: () {},
           onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
               true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
         ),
       ),
     );
@@ -127,6 +136,8 @@ void main() {
             preflightCalls += 1;
             return false;
           },
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
         ),
       ),
     );
@@ -158,6 +169,8 @@ void main() {
           onChanged: () {},
           onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
               true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
         ),
       ),
     );
@@ -282,6 +295,13 @@ class _FakeWatchlistRepository implements WatchlistRepository {
   Future<void> remove(String code) async {
     _items.removeWhere((item) => item.code == code);
   }
+
+  @override
+  Future<void> replaceAll(List<StockIdentity> stocks) async {
+    _items
+      ..clear()
+      ..addAll(stocks);
+  }
 }
 
 class _FakeMarketDataService extends AshareMarketDataService {
@@ -311,6 +331,8 @@ class _FakeSettingsRepository implements SettingsRepository {
     lastCheckAt: null,
     lastMessage: 'ready',
     androidOnboardingShown: false,
+    watchlistSortOrder: WatchlistSortOrder.none,
+    webDavConfig: WebDavConfig(endpoint: '', username: ''),
   );
 
   @override
@@ -340,6 +362,16 @@ class _FakeSettingsRepository implements SettingsRepository {
   @override
   Future<void> updatePollIntervalSeconds(int seconds) async {
     _status = _status.copyWith(pollIntervalSeconds: seconds);
+  }
+
+  @override
+  Future<void> updateWatchlistSortOrder(WatchlistSortOrder order) async {
+    _status = _status.copyWith(watchlistSortOrder: order);
+  }
+
+  @override
+  Future<void> updateWebDavConfig(WebDavConfig config) async {
+    _status = _status.copyWith(webDavConfig: config);
   }
 
   @override
