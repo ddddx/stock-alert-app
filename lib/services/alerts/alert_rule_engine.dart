@@ -64,12 +64,14 @@ class AlertRuleEngine {
     }
 
     final now = DateTime.now();
-    final enabledRules = rules.where((item) => item.enabled).toList(growable: false);
+    final enabledRules =
+        rules.where((item) => item.enabled).toList(growable: false);
     final liveStateKeys = <String>{};
     final triggers = <AlertTrigger>[];
 
     for (final rule in enabledRules) {
-      for (final quote in quotes.where((item) => rule.appliesToCode(item.code))) {
+      for (final quote
+          in quotes.where((item) => rule.appliesToCode(item.code))) {
         final stateKey = rule.stateKeyFor(quote.code);
         liveStateKeys.add(stateKey);
         final state =
@@ -97,7 +99,8 @@ class AlertRuleEngine {
   }
 
   void removeRule(String ruleId) {
-    _states.removeWhere((key, _) => key == ruleId || key.startsWith('$ruleId:'));
+    _states
+        .removeWhere((key, _) => key == ruleId || key.startsWith('$ruleId:'));
   }
 
   void replaceRule(AlertRule previousRule, AlertRule nextRule) {
@@ -109,10 +112,11 @@ class AlertRuleEngine {
     final previousTargets = previousRule.applyToAllWatchlist
         ? const <String>['*']
         : previousRule.targetStocks.map((item) => item.code).toList()
-          ..sort();
+      ..sort();
     final nextTargets = nextRule.applyToAllWatchlist
         ? const <String>['*']
-        : nextRule.targetStocks.map((item) => item.code).toList()..sort();
+        : nextRule.targetStocks.map((item) => item.code).toList()
+      ..sort();
 
     if (previousRule.type != nextRule.type ||
         previousRule.moveThresholdPercent != nextRule.moveThresholdPercent ||
@@ -125,6 +129,11 @@ class AlertRuleEngine {
         previousTargets.join(',') != nextTargets.join(',')) {
       removeRule(previousRule.id);
     }
+  }
+
+  void reset() {
+    _historyByCode.clear();
+    _states.clear();
   }
 
   void _appendHistory(StockQuoteSnapshot quote) {
@@ -225,9 +234,8 @@ class AlertRuleEngine {
         : (rule.anchorPriceFor(current.code) ?? current.lastPrice);
     final previousIndex = state.lastStepIndex!;
     final crossedAmount = current.lastPrice - referenceValue;
-    final crossedPercent = referenceValue == 0
-        ? 0.0
-        : crossedAmount / referenceValue * 100.0;
+    final crossedPercent =
+        referenceValue == 0 ? 0.0 : crossedAmount / referenceValue * 100.0;
     final message = _messageBuilder.buildStepAlertMessage(
       rule: rule,
       current: current,

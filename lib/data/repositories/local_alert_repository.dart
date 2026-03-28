@@ -92,6 +92,14 @@ class LocalAlertRepository implements AlertRepository {
     await _persist();
   }
 
+  @override
+  Future<void> replaceAll(List<AlertRule> rules) async {
+    _rules
+      ..clear()
+      ..addAll(rules);
+    await _persist();
+  }
+
   Future<void> _persist() {
     return _store.writeJson(
       _rules.map((item) => item.toJson()).toList(growable: false),

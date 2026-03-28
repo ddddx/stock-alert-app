@@ -1,4 +1,6 @@
 import '../models/monitor_status.dart';
+import '../models/watchlist_sort_order.dart';
+import '../models/webdav_config.dart';
 import '../../services/background/monitoring_policy.dart';
 import '../../services/storage/json_file_store.dart';
 import 'settings_repository.dart';
@@ -14,6 +16,8 @@ class LocalSettingsRepository implements SettingsRepository {
     lastCheckAt: null,
     lastMessage: '等待首次刷新A股行情。',
     androidOnboardingShown: false,
+    watchlistSortOrder: WatchlistSortOrder.none,
+    webDavConfig: WebDavConfig(endpoint: '', username: ''),
   );
 
   @override
@@ -52,6 +56,18 @@ class LocalSettingsRepository implements SettingsRepository {
   Future<void> updatePollIntervalSeconds(int seconds) async {
     final normalized = normalizeMonitorPollIntervalSeconds(seconds);
     _status = _status.copyWith(pollIntervalSeconds: normalized);
+    await _persist();
+  }
+
+  @override
+  Future<void> updateWatchlistSortOrder(WatchlistSortOrder order) async {
+    _status = _status.copyWith(watchlistSortOrder: order);
+    await _persist();
+  }
+
+  @override
+  Future<void> updateWebDavConfig(WebDavConfig config) async {
+    _status = _status.copyWith(webDavConfig: config);
     await _persist();
   }
 

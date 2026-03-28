@@ -1,3 +1,6 @@
+import 'watchlist_sort_order.dart';
+import 'webdav_config.dart';
+
 class MonitorStatus {
   const MonitorStatus({
     required this.serviceEnabled,
@@ -6,6 +9,8 @@ class MonitorStatus {
     required this.lastCheckAt,
     required this.lastMessage,
     required this.androidOnboardingShown,
+    required this.watchlistSortOrder,
+    required this.webDavConfig,
   });
 
   factory MonitorStatus.fromJson(Map<String, dynamic> json) {
@@ -18,6 +23,17 @@ class MonitorStatus {
           : DateTime.tryParse(json['lastCheckAt'] as String),
       lastMessage: json['lastMessage'] as String? ?? '等待首次刷新A股行情。',
       androidOnboardingShown: json['androidOnboardingShown'] as bool? ?? false,
+      watchlistSortOrder: WatchlistSortOrderX.fromName(
+        json['watchlistSortOrder'] as String?,
+      ),
+      webDavConfig: WebDavConfig.fromJson(
+        switch (json['webDavConfig']) {
+          Map<String, dynamic>() =>
+            json['webDavConfig'] as Map<String, dynamic>,
+          Map() => (json['webDavConfig'] as Map).cast<String, dynamic>(),
+          _ => null,
+        },
+      ),
     );
   }
 
@@ -28,6 +44,8 @@ class MonitorStatus {
     DateTime? lastCheckAt,
     String? lastMessage,
     bool? androidOnboardingShown,
+    WatchlistSortOrder? watchlistSortOrder,
+    WebDavConfig? webDavConfig,
   }) {
     return MonitorStatus(
       serviceEnabled: serviceEnabled ?? this.serviceEnabled,
@@ -37,6 +55,8 @@ class MonitorStatus {
       lastMessage: lastMessage ?? this.lastMessage,
       androidOnboardingShown:
           androidOnboardingShown ?? this.androidOnboardingShown,
+      watchlistSortOrder: watchlistSortOrder ?? this.watchlistSortOrder,
+      webDavConfig: webDavConfig ?? this.webDavConfig,
     );
   }
 
@@ -46,6 +66,8 @@ class MonitorStatus {
   final DateTime? lastCheckAt;
   final String lastMessage;
   final bool androidOnboardingShown;
+  final WatchlistSortOrder watchlistSortOrder;
+  final WebDavConfig webDavConfig;
 
   Map<String, dynamic> toJson() {
     return {
@@ -55,6 +77,8 @@ class MonitorStatus {
       'lastCheckAt': lastCheckAt?.toIso8601String(),
       'lastMessage': lastMessage,
       'androidOnboardingShown': androidOnboardingShown,
+      'watchlistSortOrder': watchlistSortOrder.name,
+      'webDavConfig': webDavConfig.toJson(),
     };
   }
 }

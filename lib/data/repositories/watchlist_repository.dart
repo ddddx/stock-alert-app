@@ -5,5 +5,6 @@ abstract class WatchlistRepository {
   List<StockIdentity> getAll();
   Future<bool> add(StockIdentity stock);
   Future<void> remove(String code);
+  Future<void> replaceAll(List<StockIdentity> stocks);
   bool contains(String code);
 }

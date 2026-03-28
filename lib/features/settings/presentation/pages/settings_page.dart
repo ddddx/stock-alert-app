@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/utils/formatters.dart';
 import '../../../../data/models/stock_quote_snapshot.dart';
+import '../../../../data/models/webdav_config.dart';
 import '../../../../data/repositories/settings_repository.dart';
 import '../../../../services/alerts/alert_message_builder.dart';
 import '../../../../services/audio/audio_alert_service.dart';
 import '../../../../services/background/monitor_service.dart';
 import '../../../../services/background/monitoring_policy.dart';
 import '../../../../services/platform/platform_bridge_service.dart';
+import '../../../../services/webdav/webdav_backup_service.dart';
 import '../../../../shared/widgets/section_card.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -23,6 +25,8 @@ class SettingsPage extends StatefulWidget {
     required this.onRefresh,
     required this.onChanged,
     required this.onRequestAndroidBackgroundAccess,
+    required this.onExportToWebDav,
+    required this.onImportFromWebDav,
   });
 
   final SettingsRepository repository;
@@ -35,6 +39,9 @@ class SettingsPage extends StatefulWidget {
   final VoidCallback onChanged;
   final Future<bool> Function({required bool onboarding})
       onRequestAndroidBackgroundAccess;
+  final Future<String> Function(WebDavCredentials credentials) onExportToWebDav;
+  final Future<String> Function(WebDavCredentials credentials)
+      onImportFromWebDav;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -42,6 +49,11 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _intervalController;
+  late final TextEditingController _webDavEndpointController;
+  late final TextEditingController _webDavUsernameController;
+  late final TextEditingController _webDavPasswordController;
+
+  bool _webDavBusy = false;
   String? _toast;
 
   @override
@@ -50,11 +62,20 @@ class _SettingsPageState extends State<SettingsPage> {
     _intervalController = TextEditingController(
       text: widget.repository.getStatus().pollIntervalSeconds.toString(),
     );
+    final webDavConfig = widget.repository.getStatus().webDavConfig;
+    _webDavEndpointController =
+        TextEditingController(text: webDavConfig.endpoint);
+    _webDavUsernameController =
+        TextEditingController(text: webDavConfig.username);
+    _webDavPasswordController = TextEditingController();
   }
 
   @override
   void dispose() {
     _intervalController.dispose();
+    _webDavEndpointController.dispose();
+    _webDavUsernameController.dispose();
+    _webDavPasswordController.dispose();
     super.dispose();
   }
 
@@ -62,7 +83,8 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
     setState(() {
       _toast = message;
     });
@@ -77,6 +99,96 @@ class _SettingsPageState extends State<SettingsPage> {
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
     );
+  }
+
+  void _syncWebDavControllers(WebDavConfig config) {
+    if (_webDavEndpointController.text != config.endpoint) {
+      _webDavEndpointController.value = TextEditingValue(
+        text: config.endpoint,
+        selection: TextSelection.collapsed(offset: config.endpoint.length),
+      );
+    }
+    if (_webDavUsernameController.text != config.username) {
+      _webDavUsernameController.value = TextEditingValue(
+        text: config.username,
+        selection: TextSelection.collapsed(offset: config.username.length),
+      );
+    }
+  }
+
+  Future<void> _rememberWebDavConfig() async {
+    await widget.repository.updateWebDavConfig(
+      WebDavConfig(
+        endpoint: _webDavEndpointController.text.trim(),
+        username: _webDavUsernameController.text.trim(),
+      ),
+    );
+    widget.onChanged();
+  }
+
+  WebDavCredentials? _buildWebDavCredentials() {
+    final endpoint = _webDavEndpointController.text.trim();
+    final username = _webDavUsernameController.text.trim();
+    final password = _webDavPasswordController.text;
+    if (endpoint.isEmpty || username.isEmpty || password.isEmpty) {
+      _showFeedback('请完整填写 WebDAV 地址、用户名和密码。');
+      return null;
+    }
+    return WebDavCredentials(
+      endpoint: endpoint,
+      username: username,
+      password: password,
+    );
+  }
+
+  Future<void> _runWebDavAction({
+    required Future<String> Function(WebDavCredentials credentials) action,
+  }) async {
+    final credentials = _buildWebDavCredentials();
+    if (credentials == null) {
+      return;
+    }
+
+    await _rememberWebDavConfig();
+    setState(() {
+      _webDavBusy = true;
+    });
+    try {
+      final message = await action(credentials);
+      _showFeedback(message);
+      widget.onChanged();
+    } catch (error) {
+      _showFeedback('WebDAV 操作失败：$error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _webDavBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<bool> _confirmImport() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('确认导入配置'),
+          content: const Text('导入会覆盖当前自选、规则和核心偏好设置，是否继续？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('继续导入'),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
   }
 
   Future<void> _applyPollInterval() async {
@@ -138,14 +250,14 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final status = widget.repository.getStatus();
     _syncIntervalController(status.pollIntervalSeconds);
+    _syncWebDavControllers(status.webDavConfig);
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         SectionCard(
           title: '后台监控',
-          subtitle:
-              '安卓端已接入前台服务、常驻通知和系统设置跳转。首次使用前，请先完成通知授权和电池优化引导。',
+          subtitle: '安卓端已接入前台服务、常驻通知和系统设置跳转。首次使用前，请先完成通知授权和电池优化引导。',
           child: Column(
             children: [
               SwitchListTile(
@@ -216,9 +328,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             .openNotificationSettings();
                       }
                       _showFeedback(
-                        granted
-                            ? '通知权限已授予。'
-                            : '未能直接获取通知权限，已打开系统通知设置，请确认允许通知。',
+                        granted ? '通知权限已授予。' : '未能直接获取通知权限，已打开系统通知设置，请确认允许通知。',
                       );
                     },
                     icon: const Icon(Icons.notifications_active_outlined),
@@ -241,8 +351,7 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 12),
         SectionCard(
           title: '语音提醒',
-          subtitle:
-              '试播与前台可见时的播报共用同一条应用内语音播报链路；后台原生轮询阶段暂保留前台服务和通知能力。',
+          subtitle: '试播与前台可见时的播报共用同一条应用内语音播报链路；后台原生轮询阶段暂保留前台服务和通知能力。',
           child: Column(
             children: [
               SwitchListTile(
@@ -278,6 +387,87 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 12),
         SectionCard(
+          title: 'WebDAV 导入导出',
+          subtitle: '用于备份自选、规则和核心偏好。密码只用于本次连接，不会写入本地配置。',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextFormField(
+                controller: _webDavEndpointController,
+                keyboardType: TextInputType.url,
+                decoration: const InputDecoration(
+                  labelText: 'WebDAV 文件地址',
+                  border: OutlineInputBorder(),
+                  hintText:
+                      'https://dav.example.com/stock-alert-app/backup.json',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _webDavUsernameController,
+                decoration: const InputDecoration(
+                  labelText: '用户名',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _webDavPasswordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: '密码',
+                  border: OutlineInputBorder(),
+                  helperText: '密码仅本次使用，不会保存在本地。',
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text('MVP 当前覆盖：自选、提醒规则、语音开关、轮询间隔和自选排序偏好。'),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _webDavBusy
+                        ? null
+                        : () async {
+                            await _rememberWebDavConfig();
+                            _showFeedback('已保存 WebDAV 地址和用户名。');
+                          },
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('保存连接信息'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _webDavBusy
+                        ? null
+                        : () => _runWebDavAction(
+                              action: widget.onExportToWebDav,
+                            ),
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    label: Text(_webDavBusy ? '处理中...' : '导出到 WebDAV'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: _webDavBusy
+                        ? null
+                        : () async {
+                            final confirmed = await _confirmImport();
+                            if (!confirmed) {
+                              return;
+                            }
+                            await _runWebDavAction(
+                              action: widget.onImportFromWebDav,
+                            );
+                          },
+                    icon: const Icon(Icons.cloud_download_outlined),
+                    label: const Text('从 WebDAV 导入'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
           title: '当前状态',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,9 +477,7 @@ class _SettingsPageState extends State<SettingsPage> {
               Text('最近检查：${Formatters.compactDateTime(status.lastCheckAt)}'),
               const SizedBox(height: 8),
               Text(
-                status.serviceEnabled
-                    ? '后台守护：已开启常驻通知和原生后台轮询'
-                    : '后台守护：未开启',
+                status.serviceEnabled ? '后台守护：已开启常驻通知和原生后台轮询' : '后台守护：未开启',
               ),
               const SizedBox(height: 8),
               Text('轮询间隔：${status.pollIntervalSeconds} 秒'),

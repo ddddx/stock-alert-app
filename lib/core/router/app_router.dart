@@ -7,6 +7,7 @@ import '../../data/repositories/local_history_repository.dart';
 import '../../data/repositories/local_settings_repository.dart';
 import '../../data/repositories/local_watchlist_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/models/app_backup_payload.dart';
 import '../../features/alerts/presentation/pages/alerts_page.dart';
 import '../../features/history/presentation/pages/history_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
@@ -18,6 +19,7 @@ import '../../services/background/monitor_service.dart';
 import '../../services/market/ashare_market_data_service.dart';
 import '../../services/platform/platform_bridge_service.dart';
 import '../../services/storage/json_file_store.dart';
+import '../../services/webdav/webdav_backup_service.dart';
 
 Future<void> restoreBackgroundMonitorOnLaunch({
   required SettingsRepository settingsRepository,
@@ -56,6 +58,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   final _marketDataService = AshareMarketDataService();
   final _messageBuilder = AlertMessageBuilder();
   final _audioService = FlutterTtsAudioAlertService();
+  final _webDavBackupService = WebDavBackupService();
   late final _ruleEngine = AlertRuleEngine(messageBuilder: _messageBuilder);
   late final _monitorService = AshareMonitorService(
     watchlistRepository: _watchlistRepository,
@@ -119,7 +122,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         repository: _watchlistRepository,
         marketDataService: _marketDataService,
         quotes: _monitorService.latestQuotes,
+        monitorStatus: _settingsRepository.getStatus(),
         onRefresh: _refreshQuotes,
+        onSortOrderChanged: (order) async {
+          await _settingsRepository.updateWatchlistSortOrder(order);
+          _markDirty();
+        },
       ),
       AlertsPage(
         repository: _alertRepository,
@@ -145,6 +153,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         onRefresh: _refreshQuotes,
         onChanged: _markDirty,
         onRequestAndroidBackgroundAccess: _requestAndroidBackgroundAccess,
+        onExportToWebDav: _exportToWebDav,
+        onImportFromWebDav: _importFromWebDav,
       ),
     ];
 
@@ -368,6 +378,52 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     setState(() {
       _refreshing = false;
     });
+  }
+
+  Future<String> _exportToWebDav(WebDavCredentials credentials) async {
+    final status = _settingsRepository.getStatus();
+    final payload = AppBackupPayload(
+      schemaVersion: WebDavBackupService.schemaVersion,
+      exportedAt: DateTime.now(),
+      watchlist: _watchlistRepository.getAll(),
+      alertRules: _alertRepository.getAll(),
+      preferences: AppBackupPreferences(
+        soundEnabled: status.soundEnabled,
+        pollIntervalSeconds: status.pollIntervalSeconds,
+        watchlistSortOrder: status.watchlistSortOrder,
+      ),
+    );
+    await _webDavBackupService.exportPayload(
+      credentials: credentials,
+      payload: payload,
+    );
+    return '已导出 ${payload.watchlist.length} 只自选和 ${payload.alertRules.length} 条规则到 WebDAV。';
+  }
+
+  Future<String> _importFromWebDav(WebDavCredentials credentials) async {
+    final payload = await _webDavBackupService.importPayload(
+      credentials: credentials,
+    );
+    await _watchlistRepository.replaceAll(payload.watchlist);
+    await _alertRepository.replaceAll(payload.alertRules);
+    _ruleEngine.reset();
+    await _settingsRepository.updateSound(payload.preferences.soundEnabled);
+    await _settingsRepository.updatePollIntervalSeconds(
+      payload.preferences.pollIntervalSeconds,
+    );
+    await _settingsRepository.updateWatchlistSortOrder(
+      payload.preferences.watchlistSortOrder,
+    );
+    await _settingsRepository.markChecked(
+      checkedAt: DateTime.now(),
+      message: '已从 WebDAV 导入自选、规则和核心偏好。',
+    );
+    if (_settingsRepository.getStatus().serviceEnabled) {
+      await _monitorService.reload();
+    }
+    await _refreshQuotes();
+    _markDirty();
+    return '已从 WebDAV 恢复 ${payload.watchlist.length} 只自选和 ${payload.alertRules.length} 条规则。';
   }
 
   Future<void> _handleResume() async {

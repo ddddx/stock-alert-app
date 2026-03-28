@@ -52,11 +52,20 @@ class LocalWatchlistRepository implements WatchlistRepository {
   }
 
   @override
+  Future<void> replaceAll(List<StockIdentity> stocks) async {
+    _items
+      ..clear()
+      ..addAll(stocks);
+    await _persist();
+  }
+
+  @override
   bool contains(String code) {
     return _items.any((item) => item.code == code);
   }
 
   Future<void> _persist() {
-    return _store.writeJson(_items.map((item) => item.toJson()).toList(growable: false));
+    return _store
+        .writeJson(_items.map((item) => item.toJson()).toList(growable: false));
   }
 }

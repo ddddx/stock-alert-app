@@ -8,4 +8,5 @@ abstract class AlertRepository {
   Future<void> update(AlertRule rule);
   Future<void> delete(String id);
   Future<void> toggle(String id, bool enabled);
+  Future<void> replaceAll(List<AlertRule> rules);
 }

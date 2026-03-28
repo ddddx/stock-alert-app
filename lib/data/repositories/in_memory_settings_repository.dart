@@ -1,4 +1,6 @@
 import '../models/monitor_status.dart';
+import '../models/watchlist_sort_order.dart';
+import '../models/webdav_config.dart';
 import '../../services/background/monitoring_policy.dart';
 
 class InMemorySettingsRepository {
@@ -9,6 +11,8 @@ class InMemorySettingsRepository {
     lastCheckAt: null,
     lastMessage: '等待首次刷新A股行情。',
     androidOnboardingShown: false,
+    watchlistSortOrder: WatchlistSortOrder.none,
+    webDavConfig: WebDavConfig(endpoint: '', username: ''),
   );
 
   MonitorStatus getStatus() => _status;

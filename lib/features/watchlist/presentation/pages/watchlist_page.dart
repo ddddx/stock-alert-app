@@ -3,12 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/formatters.dart';
+import '../../../../data/models/monitor_status.dart';
 import '../../../../data/models/stock_identity.dart';
 import '../../../../data/models/stock_quote_snapshot.dart';
 import '../../../../data/models/stock_search_result.dart';
+import '../../../../data/models/watchlist_sort_order.dart';
 import '../../../../data/repositories/watchlist_repository.dart';
+import '../../../../services/background/monitoring_policy.dart';
 import '../../../../services/market/ashare_market_data_service.dart';
 import '../../../../shared/widgets/section_card.dart';
+import '../watchlist_display_resolver.dart';
 
 class WatchlistPage extends StatefulWidget {
   const WatchlistPage({
@@ -16,25 +20,36 @@ class WatchlistPage extends StatefulWidget {
     required this.repository,
     required this.marketDataService,
     required this.quotes,
+    required this.monitorStatus,
     required this.onRefresh,
+    required this.onSortOrderChanged,
   });
 
   final WatchlistRepository repository;
   final AshareMarketDataService marketDataService;
   final List<StockQuoteSnapshot> quotes;
+  final MonitorStatus monitorStatus;
   final Future<void> Function() onRefresh;
+  final Future<void> Function(WatchlistSortOrder order) onSortOrderChanged;
 
   @override
   State<WatchlistPage> createState() => _WatchlistPageState();
 }
 
 class _WatchlistPageState extends State<WatchlistPage> {
+  static const _displayResolver = WatchlistDisplayResolver();
+
   bool _adding = false;
 
   @override
   Widget build(BuildContext context) {
     final items = widget.repository.getAll();
-    final quoteByCode = {for (final quote in widget.quotes) quote.code: quote};
+    final displayItems = _displayResolver.buildItems(
+      watchlist: items,
+      quotes: widget.quotes,
+      monitorStatus: widget.monitorStatus,
+      isTradingTime: const AshareMarketHours().isTradingTime(DateTime.now()),
+    );
 
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
@@ -65,14 +80,43 @@ class _WatchlistPageState extends State<WatchlistPage> {
                     child: Text('当前还没有自选股，点击“添加”开始关注股票。'),
                   )
                 : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final item in items)
+                      Text(
+                        '显示顺序',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final order in WatchlistSortOrder.values)
+                            ChoiceChip(
+                              label: Text(order.label),
+                              selected:
+                                  widget.monitorStatus.watchlistSortOrder ==
+                                      order,
+                              onSelected: (selected) async {
+                                if (!selected ||
+                                    widget.monitorStatus.watchlistSortOrder ==
+                                        order) {
+                                  return;
+                                }
+                                await widget.onSortOrderChanged(order);
+                              },
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      for (final item in displayItems)
                         _WatchlistTile(
-                          key: ValueKey('watchlist-${item.code}'),
-                          stock: item,
-                          quote: quoteByCode[item.code],
+                          key: ValueKey('watchlist-${item.stock.code}'),
+                          stock: item.stock,
+                          quote: item.quote,
+                          status: item.status,
                           onRemove: () async {
-                            await widget.repository.remove(item.code);
+                            await widget.repository.remove(item.stock.code);
                             if (mounted) {
                               setState(() {});
                             }
@@ -132,11 +176,13 @@ class _WatchlistTile extends StatefulWidget {
     super.key,
     required this.stock,
     required this.quote,
+    required this.status,
     required this.onRemove,
   });
 
   final StockIdentity stock;
   final StockQuoteSnapshot? quote;
+  final WatchlistItemStatus status;
   final Future<void> Function() onRemove;
 
   @override
@@ -155,11 +201,19 @@ class _WatchlistTileState extends State<_WatchlistTile> {
     final quote = widget.quote;
     final positive = (quote?.changeAmount ?? 0) >= 0;
     final color = positive ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
+    final statusColor = switch (widget.status) {
+      WatchlistItemStatus.monitoring => const Color(0xFF1565C0),
+      WatchlistItemStatus.paused => const Color(0xFF6A1B9A),
+      WatchlistItemStatus.offHours => const Color(0xFF546E7A),
+      WatchlistItemStatus.refreshFailed => const Color(0xFFC62828),
+      WatchlistItemStatus.dataAbnormal => const Color(0xFFEF6C00),
+      WatchlistItemStatus.waitingRefresh => const Color(0xFF00838F),
+    };
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: SizedBox(
-        height: 116,
+        height: 132,
         child: Stack(
           children: [
             Positioned.fill(
@@ -234,10 +288,29 @@ class _WatchlistTileState extends State<_WatchlistTile> {
                               const SizedBox(height: 4),
                               Text(widget.stock.subtitle),
                               const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  widget.status.label,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelMedium
+                                      ?.copyWith(
+                                        color: statusColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
                               Text(
-                                quote == null
-                                    ? '暂无行情数据，请下拉刷新后重试。'
-                                    : '今开 ${Formatters.priceForSecurity(quote.openPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  最高 ${Formatters.priceForSecurity(quote.highPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  最低 ${Formatters.priceForSecurity(quote.lowPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}',
+                                _buildDetailText(quote),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
@@ -281,6 +354,20 @@ class _WatchlistTileState extends State<_WatchlistTile> {
         ),
       ),
     );
+  }
+
+  String _buildDetailText(StockQuoteSnapshot? quote) {
+    if (widget.status == WatchlistItemStatus.refreshFailed || quote == null) {
+      return widget.status.detail;
+    }
+    if (widget.status == WatchlistItemStatus.dataAbnormal) {
+      return '涨跌幅字段缺失或异常，暂不参与当前排序。';
+    }
+    if (widget.status == WatchlistItemStatus.paused ||
+        widget.status == WatchlistItemStatus.offHours) {
+      return widget.status.detail;
+    }
+    return '今开 ${Formatters.priceForSecurity(quote.openPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  最高 ${Formatters.priceForSecurity(quote.highPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}  最低 ${Formatters.priceForSecurity(quote.lowPrice, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)}';
   }
 
   void _open() {
