@@ -20,7 +20,7 @@ class AshareMarketHours {
   static const int _afternoonSessionEndMinutes = 15 * 60;
 
   bool isTradingTime(DateTime moment) {
-    final shanghaiMoment = _toShanghai(moment);
+    final shanghaiMoment = _toShanghaiClock(moment);
     if (_isWeekend(shanghaiMoment.weekday)) {
       return false;
     }
@@ -34,13 +34,13 @@ class AshareMarketHours {
   }
 
   DateTime nextSessionStart(DateTime moment) {
-    final shanghaiMoment = _toShanghai(moment);
+    final shanghaiMoment = _toShanghaiClock(moment);
     final nextSession = _nextSessionStartInShanghai(shanghaiMoment);
-    return _fromShanghai(nextSession);
+    return _fromShanghaiClock(nextSession, outputUtc: moment.isUtc);
   }
 
   String buildClosedMessage(DateTime moment) {
-    final nextSession = _toShanghai(nextSessionStart(moment));
+    final nextSession = _toShanghaiClock(nextSessionStart(moment));
     return '当前不在A股交易时段，监控已暂停，将于${_formatShanghaiLabel(nextSession)}恢复。';
   }
 
@@ -93,18 +93,59 @@ class AshareMarketHours {
     );
   }
 
-  DateTime _toShanghai(DateTime moment) {
-    return DateTime.fromMillisecondsSinceEpoch(
-      moment.toUtc().millisecondsSinceEpoch + _shanghaiOffset.inMilliseconds,
-      isUtc: true,
+  DateTime _toShanghaiClock(DateTime moment) {
+    if (moment.isUtc) {
+      final shanghaiMoment = moment.add(_shanghaiOffset);
+      return DateTime.utc(
+        shanghaiMoment.year,
+        shanghaiMoment.month,
+        shanghaiMoment.day,
+        shanghaiMoment.hour,
+        shanghaiMoment.minute,
+        shanghaiMoment.second,
+        shanghaiMoment.millisecond,
+        shanghaiMoment.microsecond,
+      );
+    }
+
+    return DateTime.utc(
+      moment.year,
+      moment.month,
+      moment.day,
+      moment.hour,
+      moment.minute,
+      moment.second,
+      moment.millisecond,
+      moment.microsecond,
     );
   }
 
-  DateTime _fromShanghai(DateTime shanghaiMoment) {
-    return DateTime.fromMillisecondsSinceEpoch(
-      shanghaiMoment.millisecondsSinceEpoch - _shanghaiOffset.inMilliseconds,
-      isUtc: true,
-    ).toLocal();
+  DateTime _fromShanghaiClock(DateTime shanghaiMoment,
+      {required bool outputUtc}) {
+    if (outputUtc) {
+      final utcMoment = shanghaiMoment.subtract(_shanghaiOffset);
+      return DateTime.utc(
+        utcMoment.year,
+        utcMoment.month,
+        utcMoment.day,
+        utcMoment.hour,
+        utcMoment.minute,
+        utcMoment.second,
+        utcMoment.millisecond,
+        utcMoment.microsecond,
+      );
+    }
+
+    return DateTime(
+      shanghaiMoment.year,
+      shanghaiMoment.month,
+      shanghaiMoment.day,
+      shanghaiMoment.hour,
+      shanghaiMoment.minute,
+      shanghaiMoment.second,
+      shanghaiMoment.millisecond,
+      shanghaiMoment.microsecond,
+    );
   }
 
   int _minutesSinceMidnight(DateTime shanghaiMoment) {
