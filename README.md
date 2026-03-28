@@ -22,15 +22,15 @@
 
 ## 页面截图
 
-当前仓库只包含设置页实拍图，其余页面使用明确标注的占位图，避免误导。
+当前仓库展示 4 个主要页面的真实截图：自选、规则、历史、设置。
 
 | 自选 | 规则 |
 |---|---|
-| ![自选页占位图](docs/images/watchlist-placeholder.svg) | ![规则页占位图](docs/images/alerts-placeholder.svg) |
+| ![自选页](docs/images/app-watchlist.jpg) | ![规则页](docs/images/app-alerts.jpg) |
 
 | 历史 | 设置 |
 |---|---|
-| ![历史页占位图](docs/images/history-placeholder.svg) | ![设置页](docs/images/app-settings.jpg) |
+| ![历史页](docs/images/app-history.jpg) | ![设置页](docs/images/app-settings-2.jpg) |
 
 ## 提醒规则
 
