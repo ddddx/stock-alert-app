@@ -6,6 +6,8 @@ import 'package:stock_alert_app/data/repositories/alert_repository.dart';
 import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
 import 'package:stock_alert_app/features/alerts/presentation/pages/alerts_page.dart';
 
+import 'support/test_app.dart';
+
 void main() {
   testWidgets(
       'alerts page can add a generic global rule without watchlist stocks', (
@@ -132,9 +134,7 @@ void main() {
 }
 
 MaterialApp _buildApp(Widget child) {
-  return MaterialApp(
-    home: Scaffold(body: child),
-  );
+  return buildTestApp(child);
 }
 
 class _FakeAlertRepository implements AlertRepository {

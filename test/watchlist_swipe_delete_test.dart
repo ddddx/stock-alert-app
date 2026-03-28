@@ -7,6 +7,8 @@ import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
 import 'package:stock_alert_app/features/watchlist/presentation/pages/watchlist_page.dart';
 import 'package:stock_alert_app/services/market/ashare_market_data_service.dart';
 
+import 'support/test_app.dart';
+
 void main() {
   testWidgets('watchlist renders change percent using normalized percent units',
       (
@@ -19,29 +21,27 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: WatchlistPage(
-            repository: repository,
-            marketDataService: _FakeMarketDataService(),
-            quotes: const [
-              StockQuoteSnapshot(
-                code: '600519',
-                name: 'Alpha',
-                market: 'SH',
-                lastPrice: 10.20,
-                previousClose: 10.0,
-                changeAmount: 0.20,
-                changePercent: 2.0,
-                openPrice: 10.0,
-                highPrice: 10.3,
-                lowPrice: 9.9,
-                volume: 1000,
-                timestamp: DateTime(2026, 3, 27, 9, 30),
-              ),
-            ],
-            onRefresh: () async {},
-          ),
+      buildTestApp(
+        WatchlistPage(
+          repository: repository,
+          marketDataService: _FakeMarketDataService(),
+          quotes: [
+            StockQuoteSnapshot(
+              code: '600519',
+              name: 'Alpha',
+              market: 'SH',
+              lastPrice: 10.20,
+              previousClose: 10.0,
+              changeAmount: 0.20,
+              changePercent: 2.0,
+              openPrice: 10.0,
+              highPrice: 10.3,
+              lowPrice: 9.9,
+              volume: 1000,
+              timestamp: DateTime(2026, 3, 27, 9, 30),
+            ),
+          ],
+          onRefresh: () async {},
         ),
       ),
     );
@@ -60,14 +60,12 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: WatchlistPage(
-            repository: repository,
-            marketDataService: _FakeMarketDataService(),
-            quotes: const [],
-            onRefresh: () async {},
-          ),
+      buildTestApp(
+        WatchlistPage(
+          repository: repository,
+          marketDataService: _FakeMarketDataService(),
+          quotes: const [],
+          onRefresh: () async {},
         ),
       ),
     );

@@ -15,20 +15,20 @@ import 'package:stock_alert_app/services/background/monitor_service.dart';
 import 'package:stock_alert_app/services/market/ashare_market_data_service.dart';
 import 'package:stock_alert_app/services/platform/platform_bridge_service.dart';
 
+import 'support/test_app.dart';
+
 void main() {
   testWidgets('search sheet triggers search after typing', (tester) async {
     final marketDataService = _FakeMarketDataService();
     final watchlistRepository = _FakeWatchlistRepository();
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: WatchlistPage(
-            repository: watchlistRepository,
-            marketDataService: marketDataService,
-            quotes: const [],
-            onRefresh: () async {},
-          ),
+      buildTestApp(
+        WatchlistPage(
+          repository: watchlistRepository,
+          marketDataService: marketDataService,
+          quotes: const [],
+          onRefresh: () async {},
         ),
       ),
     );
@@ -52,20 +52,18 @@ void main() {
     final audioService = _FakeAudioAlertService(shouldSucceed: true);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SettingsPage(
-            repository: settingsRepository,
-            monitorService: _FakeMonitorService(),
-            audioService: audioService,
-            messageBuilder: AlertMessageBuilder(),
-            platformBridgeService: _FakePlatformBridgeService(),
-            previewQuote: _sampleQuote(),
-            onRefresh: () async {},
-            onChanged: () {},
-            onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
-                true,
-          ),
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: _FakeMonitorService(),
+          audioService: audioService,
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
         ),
       ),
     );
@@ -83,20 +81,18 @@ void main() {
     final audioService = _FakeAudioAlertService(shouldSucceed: false);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SettingsPage(
-            repository: settingsRepository,
-            monitorService: _FakeMonitorService(),
-            audioService: audioService,
-            messageBuilder: AlertMessageBuilder(),
-            platformBridgeService: _FakePlatformBridgeService(),
-            previewQuote: _sampleQuote(),
-            onRefresh: () async {},
-            onChanged: () {},
-            onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
-                true,
-          ),
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: _FakeMonitorService(),
+          audioService: audioService,
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
         ),
       ),
     );
@@ -117,22 +113,20 @@ void main() {
     var preflightCalls = 0;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SettingsPage(
-            repository: settingsRepository,
-            monitorService: monitorService,
-            audioService: _FakeAudioAlertService(shouldSucceed: true),
-            messageBuilder: AlertMessageBuilder(),
-            platformBridgeService: _FakePlatformBridgeService(),
-            previewQuote: _sampleQuote(),
-            onRefresh: () async {},
-            onChanged: () {},
-            onRequestAndroidBackgroundAccess: ({required onboarding}) async {
-              preflightCalls += 1;
-              return false;
-            },
-          ),
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: monitorService,
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async {
+            preflightCalls += 1;
+            return false;
+          },
         ),
       ),
     );
@@ -152,20 +146,18 @@ void main() {
     final monitorService = _FakeMonitorService();
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SettingsPage(
-            repository: settingsRepository,
-            monitorService: monitorService,
-            audioService: _FakeAudioAlertService(shouldSucceed: true),
-            messageBuilder: AlertMessageBuilder(),
-            platformBridgeService: _FakePlatformBridgeService(),
-            previewQuote: _sampleQuote(),
-            onRefresh: () async {},
-            onChanged: () {},
-            onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
-                true,
-          ),
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: monitorService,
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
         ),
       ),
     );

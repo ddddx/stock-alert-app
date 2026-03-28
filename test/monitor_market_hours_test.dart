@@ -152,6 +152,9 @@ void main() {
 
         throw StateError('unexpected uri: $uri');
       },
+      textLoader: (uri) async {
+        throw const SocketException('Connection reset by peer');
+      },
     );
     final service = AshareMonitorService(
       watchlistRepository: const _FakeWatchlistRepository(
