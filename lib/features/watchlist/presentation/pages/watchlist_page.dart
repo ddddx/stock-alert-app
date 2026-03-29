@@ -62,6 +62,21 @@ class _WatchlistPageState extends State<WatchlistPage> {
             trailing: Wrap(
               spacing: 8,
               children: [
+                if (items.isNotEmpty)
+                  IconButton.filledTonal(
+                    key: const Key('watchlist-sort-button'),
+                    onPressed: () async {
+                      await widget.onSortOrderChanged(
+                        _nextSortOrder(widget.monitorStatus.watchlistSortOrder),
+                      );
+                    },
+                    icon: Icon(
+                      _sortOrderIcon(widget.monitorStatus.watchlistSortOrder),
+                    ),
+                    tooltip: _sortOrderTooltip(
+                      widget.monitorStatus.watchlistSortOrder,
+                    ),
+                  ),
                 IconButton.filledTonal(
                   onPressed: widget.onRefresh,
                   icon: const Icon(Icons.refresh),
@@ -82,33 +97,6 @@ class _WatchlistPageState extends State<WatchlistPage> {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '显示顺序',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final order in WatchlistSortOrder.values)
-                            ChoiceChip(
-                              label: Text(order.label),
-                              selected:
-                                  widget.monitorStatus.watchlistSortOrder ==
-                                      order,
-                              onSelected: (selected) async {
-                                if (!selected ||
-                                    widget.monitorStatus.watchlistSortOrder ==
-                                        order) {
-                                  return;
-                                }
-                                await widget.onSortOrderChanged(order);
-                              },
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
                       for (final item in displayItems)
                         _WatchlistTile(
                           key: ValueKey('watchlist-${item.stock.code}'),
@@ -168,6 +156,39 @@ class _WatchlistPageState extends State<WatchlistPage> {
     setState(() {
       _adding = false;
     });
+  }
+
+  WatchlistSortOrder _nextSortOrder(WatchlistSortOrder order) {
+    switch (order) {
+      case WatchlistSortOrder.none:
+        return WatchlistSortOrder.changePercentAsc;
+      case WatchlistSortOrder.changePercentAsc:
+        return WatchlistSortOrder.changePercentDesc;
+      case WatchlistSortOrder.changePercentDesc:
+        return WatchlistSortOrder.none;
+    }
+  }
+
+  IconData _sortOrderIcon(WatchlistSortOrder order) {
+    switch (order) {
+      case WatchlistSortOrder.none:
+        return Icons.sort;
+      case WatchlistSortOrder.changePercentAsc:
+        return Icons.trending_up;
+      case WatchlistSortOrder.changePercentDesc:
+        return Icons.trending_down;
+    }
+  }
+
+  String _sortOrderTooltip(WatchlistSortOrder order) {
+    switch (order) {
+      case WatchlistSortOrder.none:
+        return '排序：默认，点击切换为涨跌幅升序';
+      case WatchlistSortOrder.changePercentAsc:
+        return '排序：涨跌幅升序，点击切换为涨跌幅降序';
+      case WatchlistSortOrder.changePercentDesc:
+        return '排序：涨跌幅降序，点击切换为默认';
+    }
   }
 }
 

@@ -54,6 +54,74 @@ void main() {
     expect(find.text('+¥0.20 / +2.00%'), findsOneWidget);
   });
 
+  testWidgets('watchlist sort button cycles sort order states', (tester) async {
+    final changedOrders = <WatchlistSortOrder>[];
+
+    await tester.pumpWidget(
+      buildTestApp(
+        _SortOrderHarness(
+          onOrderChanged: changedOrders.add,
+        ),
+      ),
+    );
+
+    final sortButton = find.byKey(const Key('watchlist-sort-button'));
+
+    expect(sortButton, findsOneWidget);
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(
+      find.descendant(of: sortButton, matching: find.byIcon(Icons.sort)),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('排序：默认，点击切换为涨跌幅升序'), findsOneWidget);
+
+    await tester.tap(sortButton);
+    await tester.pumpAndSettle();
+
+    expect(changedOrders, [WatchlistSortOrder.changePercentAsc]);
+    expect(
+      find.descendant(of: sortButton, matching: find.byIcon(Icons.trending_up)),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('排序：涨跌幅升序，点击切换为涨跌幅降序'), findsOneWidget);
+
+    await tester.tap(sortButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      changedOrders,
+      [
+        WatchlistSortOrder.changePercentAsc,
+        WatchlistSortOrder.changePercentDesc,
+      ],
+    );
+    expect(
+      find.descendant(
+        of: sortButton,
+        matching: find.byIcon(Icons.trending_down),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('排序：涨跌幅降序，点击切换为默认'), findsOneWidget);
+
+    await tester.tap(sortButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      changedOrders,
+      [
+        WatchlistSortOrder.changePercentAsc,
+        WatchlistSortOrder.changePercentDesc,
+        WatchlistSortOrder.none,
+      ],
+    );
+    expect(
+      find.descendant(of: sortButton, matching: find.byIcon(Icons.sort)),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('排序：默认，点击切换为涨跌幅升序'), findsOneWidget);
+  });
+
   testWidgets(
       'watchlist delete stays hidden until swipe-left then deletes on tap', (
     tester,
@@ -143,6 +211,44 @@ class _FakeMarketDataService extends AshareMarketDataService {
   @override
   Future<List<StockSearchResult>> searchStocks(String keyword) async {
     return const [];
+  }
+}
+
+class _SortOrderHarness extends StatefulWidget {
+  const _SortOrderHarness({
+    required this.onOrderChanged,
+  });
+
+  final ValueChanged<WatchlistSortOrder> onOrderChanged;
+
+  @override
+  State<_SortOrderHarness> createState() => _SortOrderHarnessState();
+}
+
+class _SortOrderHarnessState extends State<_SortOrderHarness> {
+  final _repository = _FakeWatchlistRepository(
+    items: const [
+      StockIdentity(code: '600519', name: 'Alpha', market: 'SH'),
+    ],
+  );
+
+  var _monitorStatus = _monitoringStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return WatchlistPage(
+      repository: _repository,
+      marketDataService: _FakeMarketDataService(),
+      quotes: const [],
+      monitorStatus: _monitorStatus,
+      onRefresh: () async {},
+      onSortOrderChanged: (order) async {
+        widget.onOrderChanged(order);
+        setState(() {
+          _monitorStatus = _monitorStatus.copyWith(watchlistSortOrder: order);
+        });
+      },
+    );
   }
 }
 
