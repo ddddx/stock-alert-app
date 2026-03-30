@@ -48,6 +48,8 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  static const List<int> _commonPollIntervals = [5, 10, 15, 30, 60];
+
   late final TextEditingController _intervalController;
   late final TextEditingController _webDavEndpointController;
   late final TextEditingController _webDavUsernameController;
@@ -194,9 +196,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _applyPollInterval() async {
     final rawValue = _intervalController.text.trim();
     final parsed = int.tryParse(rawValue);
+    final statusBeforeUpdate = widget.repository.getStatus();
     if (parsed == null) {
-      final current = widget.repository.getStatus().pollIntervalSeconds;
-      _syncIntervalController(current);
+      _syncIntervalController(statusBeforeUpdate.pollIntervalSeconds);
       _showFeedback(
         '请输入 $minMonitorPollIntervalSeconds 到 $maxMonitorPollIntervalSeconds 秒之间的整数。',
       );
@@ -207,13 +209,16 @@ class _SettingsPageState extends State<SettingsPage> {
         .clamp(minMonitorPollIntervalSeconds, maxMonitorPollIntervalSeconds)
         .toInt();
     await widget.repository.updatePollIntervalSeconds(normalized);
-    if (widget.repository.getStatus().serviceEnabled) {
+    if (statusBeforeUpdate.serviceEnabled) {
       await widget.monitorService.reload();
     }
     _syncIntervalController(normalized);
-    final feedback = parsed == normalized
-        ? '后台轮询间隔已更新为 $normalized 秒。'
-        : '输入值超出允许范围，已自动调整为 $normalized 秒。';
+
+    final intervalText =
+        parsed == normalized ? '$normalized 秒' : '$normalized 秒（已自动校正）';
+    final feedback = statusBeforeUpdate.serviceEnabled
+        ? '后台轮询间隔已更新为 $intervalText，后台监控会按新间隔继续执行。'
+        : '轮询间隔已保存为 $intervalText，开启后台监控后会按该频率执行。';
     _showFeedback(feedback);
     widget.onChanged();
   }
@@ -257,7 +262,7 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         SectionCard(
           title: '后台监控',
-          subtitle: '安卓端已接入前台服务、常驻通知和系统设置跳转。首次使用前，请先完成通知授权和电池优化引导。',
+          subtitle: '后台监控开关、轮询间隔和系统权限入口统一集中在这里。首次使用前，建议先完成通知授权与电池优化设置。',
           child: Column(
             children: [
               SwitchListTile(
@@ -268,6 +273,31 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 value: status.serviceEnabled,
                 onChanged: _handleServiceToggle,
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFD),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      status.serviceEnabled ? '后台监控已开启' : '后台监控未开启',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text('轮询间隔：${status.pollIntervalSeconds} 秒'),
+                    const SizedBox(height: 4),
+                    Text(
+                      status.serviceEnabled
+                          ? '原生前台服务会按当前间隔持续轮询，并同步更新常驻通知。'
+                          : '当前仅保存监控配置；应用退到后台后不会持续轮询，开启后台监控后才会按当前间隔执行。',
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
               TextFormField(
@@ -282,6 +312,22 @@ class _SettingsPageState extends State<SettingsPage> {
                   suffixIcon: Icon(Icons.timer_outlined),
                 ),
                 onFieldSubmitted: (_) async => _applyPollInterval(),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _commonPollIntervals.map((seconds) {
+                  final isSelected = status.pollIntervalSeconds == seconds;
+                  return ChoiceChip(
+                    label: Text('$seconds 秒'),
+                    selected: isSelected,
+                    onSelected: (_) async {
+                      _syncIntervalController(seconds);
+                      await _applyPollInterval();
+                    },
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 8),
               Align(
@@ -314,7 +360,11 @@ class _SettingsPageState extends State<SettingsPage> {
                       await widget.onRefresh();
                       if (status.serviceEnabled) {
                         await widget.monitorService.requestBackgroundRefresh();
+                        _showFeedback('已发起一次前台 + 后台联动刷新。');
+                      } else {
+                        _showFeedback('已执行一次前台刷新；如需持续后台轮询，请先开启后台监控。');
                       }
+                      widget.onChanged();
                     },
                     icon: const Icon(Icons.refresh),
                     label: const Text('立即刷新'),
@@ -477,10 +527,8 @@ class _SettingsPageState extends State<SettingsPage> {
               Text('最近检查：${Formatters.compactDateTime(status.lastCheckAt)}'),
               const SizedBox(height: 8),
               Text(
-                status.serviceEnabled ? '后台守护：已开启常驻通知和原生后台轮询' : '后台守护：未开启',
+                '后台监控：${status.serviceEnabled ? '已开启' : '未开启'} · 轮询 ${status.pollIntervalSeconds} 秒',
               ),
-              const SizedBox(height: 8),
-              Text('轮询间隔：${status.pollIntervalSeconds} 秒'),
               const SizedBox(height: 8),
               const Text('本地数据已持久化，重启应用后会保留自选、规则、历史和设置。'),
               const SizedBox(height: 8),

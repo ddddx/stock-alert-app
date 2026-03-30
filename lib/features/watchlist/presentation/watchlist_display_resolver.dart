@@ -5,6 +5,7 @@ import '../../../data/models/watchlist_sort_order.dart';
 
 enum WatchlistItemStatus {
   monitoring,
+  disabled,
   paused,
   offHours,
   refreshFailed,
@@ -17,6 +18,8 @@ extension WatchlistItemStatusX on WatchlistItemStatus {
     switch (this) {
       case WatchlistItemStatus.monitoring:
         return '监控中';
+      case WatchlistItemStatus.disabled:
+        return '未监控';
       case WatchlistItemStatus.paused:
         return '已暂停';
       case WatchlistItemStatus.offHours:
@@ -34,6 +37,8 @@ extension WatchlistItemStatusX on WatchlistItemStatus {
     switch (this) {
       case WatchlistItemStatus.monitoring:
         return '当前处于可监控状态。';
+      case WatchlistItemStatus.disabled:
+        return '已关闭单股监控，不参与后台轮询和提醒。';
       case WatchlistItemStatus.paused:
         return '后台监控已暂停，可在设置页重新开启。';
       case WatchlistItemStatus.offHours:
@@ -91,6 +96,7 @@ class WatchlistDisplayResolver {
           stock: stock,
           quote: quote,
           status: _resolveStatus(
+            stock: stock,
             quote: quote,
             monitorStatus: monitorStatus,
             isTradingTime: isTradingTime,
@@ -110,6 +116,7 @@ class WatchlistDisplayResolver {
     final trailing = <WatchlistDisplayItem>[];
     for (final item in items) {
       if (item.status == WatchlistItemStatus.refreshFailed ||
+          item.status == WatchlistItemStatus.disabled ||
           item.quote == null ||
           !item.hasSortablePercent) {
         trailing.add(item);
@@ -135,6 +142,7 @@ class WatchlistDisplayResolver {
   }
 
   WatchlistItemStatus _resolveStatus({
+    required StockIdentity stock,
     required StockQuoteSnapshot? quote,
     required MonitorStatus monitorStatus,
     required bool isTradingTime,
@@ -142,6 +150,9 @@ class WatchlistDisplayResolver {
   }) {
     if (hasRefreshError) {
       return WatchlistItemStatus.refreshFailed;
+    }
+    if (!stock.monitoringEnabled) {
+      return WatchlistItemStatus.disabled;
     }
     if (!monitorStatus.serviceEnabled) {
       return WatchlistItemStatus.paused;

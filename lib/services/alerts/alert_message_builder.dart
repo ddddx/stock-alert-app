@@ -20,11 +20,9 @@ class AlertMessageBuilder {
     required double changePercent,
   }) {
     final direction = _directionLabel(changeAmount);
-    final action = changeAmount >= 0 ? '拉升' : '回落';
     return '${_stockSubject(current)}触发短时波动提醒，'
         '${rule.lookbackMinutes}分钟内$direction${changePercent.abs().toStringAsFixed(2)}%，'
-        '$action${Formatters.signedPriceForSecurity(changeAmount, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}，'
-        '最新价${Formatters.priceForSecurity(current.lastPrice, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}。';
+        '当前涨跌幅${Formatters.percent(current.changePercent)}。';
   }
 
   String buildStepAlertMessage({
@@ -36,29 +34,25 @@ class AlertMessageBuilder {
     required double crossedAmount,
     required double crossedPercent,
   }) {
-    final direction = _directionLabel(crossedAmount);
+    final stepValue = rule.stepValue ?? 0;
     if (rule.stepMetric == StepMetric.percent) {
       return '${_stockSubject(current)}触发阶梯提醒，'
-          '涨跌幅已越过${(currentIndex * (rule.stepValue ?? 0)).toStringAsFixed(2)}%台阶，'
-          '累计$direction${Formatters.percent(crossedPercent).replaceFirst('+', '').replaceFirst('-', '')}，'
-          '对应变动${Formatters.signedPriceForSecurity(crossedAmount, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}，'
-          '当前涨跌幅${Formatters.percent(current.changePercent)}，'
-          '最新价${Formatters.priceForSecurity(current.lastPrice, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}。';
+          '涨跌幅已越过${(currentIndex * stepValue).toStringAsFixed(2)}%台阶，'
+          '当前涨跌幅${Formatters.percent(current.changePercent)}。';
     }
 
     return '${_stockSubject(current)}触发阶梯提醒，'
-        '价格从${Formatters.priceForSecurity(referenceValue + previousIndex * (rule.stepValue ?? 0), code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}跨到'
-        '${Formatters.priceForSecurity(referenceValue + currentIndex * (rule.stepValue ?? 0), code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}这一档，'
-        '累计$direction${Formatters.percent(crossedPercent).replaceFirst('+', '').replaceFirst('-', '')}，'
-        '对应变动${Formatters.signedPriceForSecurity(crossedAmount, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}，'
+        '价格从${Formatters.priceForSecurity(referenceValue + previousIndex * stepValue, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}跨到'
+        '${Formatters.priceForSecurity(referenceValue + currentIndex * stepValue, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}这一档，'
         '最新价${Formatters.priceForSecurity(current.lastPrice, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}。';
   }
 
   String _stockSubject(StockQuoteSnapshot quote) {
-    if (quote.code.trim().isEmpty) {
-      return quote.name;
+    final name = quote.name.trim();
+    if (name.isNotEmpty) {
+      return name;
     }
-    return '${quote.name}（${quote.code}）';
+    return quote.code.trim();
   }
 
   String _directionLabel(double value) {

@@ -211,8 +211,8 @@ class _WatchlistTile extends StatefulWidget {
 }
 
 class _WatchlistTileState extends State<_WatchlistTile> {
-  static const double _deleteActionWidth = 120;
-  static const double _maxRevealOffset = _deleteActionWidth;
+  static const double _actionPanelWidth = 120;
+  static const double _maxRevealOffset = _actionPanelWidth;
   double _offset = 0;
 
   bool get _revealed => _offset < -8;
@@ -224,6 +224,7 @@ class _WatchlistTileState extends State<_WatchlistTile> {
     final color = positive ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
     final statusColor = switch (widget.status) {
       WatchlistItemStatus.monitoring => const Color(0xFF1565C0),
+      WatchlistItemStatus.disabled => const Color(0xFF616161),
       WatchlistItemStatus.paused => const Color(0xFF6A1B9A),
       WatchlistItemStatus.offHours => const Color(0xFF546E7A),
       WatchlistItemStatus.refreshFailed => const Color(0xFFC62828),
@@ -246,10 +247,18 @@ class _WatchlistTileState extends State<_WatchlistTile> {
                     duration: const Duration(milliseconds: 180),
                     opacity: _revealed ? 1 : 0,
                     child: SizedBox(
-                      width: _deleteActionWidth,
+                      width: _actionPanelWidth,
                       child: FilledButton.tonalIcon(
                         key: Key('watchlist-delete-${widget.stock.code}'),
-                        onPressed: _revealed ? widget.onRemove : null,
+                        onPressed: _revealed
+                            ? () async {
+                                await widget.onRemove();
+                                if (!mounted) {
+                                  return;
+                                }
+                                _close();
+                              }
+                            : null,
                         icon: const Icon(Icons.delete_outline),
                         label: const Text('删除'),
                         style: FilledButton.styleFrom(
@@ -384,7 +393,8 @@ class _WatchlistTileState extends State<_WatchlistTile> {
     if (widget.status == WatchlistItemStatus.dataAbnormal) {
       return '涨跌幅字段缺失或异常，暂不参与当前排序。';
     }
-    if (widget.status == WatchlistItemStatus.paused ||
+    if (widget.status == WatchlistItemStatus.disabled ||
+        widget.status == WatchlistItemStatus.paused ||
         widget.status == WatchlistItemStatus.offHours) {
       return widget.status.detail;
     }

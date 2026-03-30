@@ -55,6 +55,29 @@ void main() {
       isTrue,
     );
   });
+
+  test('disabled monitoring items are marked disabled and sorted to the end', () {
+    final items = resolver.buildItems(
+      watchlist: const [
+        StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
+        StockIdentity(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          monitoringEnabled: false,
+        ),
+      ],
+      quotes: [
+        _quote(code: '600519', percent: -1.20),
+        _quote(code: '000001', percent: 2.36),
+      ],
+      monitorStatus: _status(order: WatchlistSortOrder.changePercentDesc),
+      isTradingTime: true,
+    );
+
+    expect(items.map((item) => item.stock.code), ['600519', '000001']);
+    expect(items.last.status, WatchlistItemStatus.disabled);
+  });
 }
 
 const _watchlist = [

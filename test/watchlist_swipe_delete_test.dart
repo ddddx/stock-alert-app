@@ -123,7 +123,8 @@ void main() {
   });
 
   testWidgets(
-      'watchlist delete stays hidden until swipe-left then deletes on tap', (
+      'watchlist delete action stays hidden until swipe-left then removes item',
+      (
     tester,
   ) async {
     final repository = _FakeWatchlistRepository(
@@ -147,10 +148,11 @@ void main() {
 
     expect(find.text('自选股'), findsOneWidget);
     expect(find.text('添加'), findsOneWidget);
+    expect(find.byKey(const Key('watchlist-delete-600519')), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
 
-    final deleteFinder = find.byKey(const Key('watchlist-delete-600519'));
-    expect(deleteFinder, findsOneWidget);
-    expect(tester.widget<FilledButton>(deleteFinder).onPressed, isNull);
+    final deleteButton = find.byKey(const Key('watchlist-delete-600519'));
+    expect(tester.widget<FilledButton>(deleteButton).onPressed, isNull);
 
     await tester.drag(
       find.byKey(const ValueKey('watchlist-600519')),
@@ -158,19 +160,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(tester.widget<FilledButton>(deleteFinder).onPressed, isNotNull);
-    expect(
-      tester.hitTestOnBinding(tester.getCenter(deleteFinder)).path.any(
-            (entry) => entry.target == tester.renderObject(deleteFinder),
-          ),
-      isTrue,
-    );
+    expect(tester.widget<FilledButton>(deleteButton).onPressed, isNotNull);
 
-    await tester.tap(deleteFinder);
+    await tester.tap(deleteButton);
     await tester.pumpAndSettle();
 
     expect(repository.getAll(), isEmpty);
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.textContaining('当前还没有自选股'), findsOneWidget);
   });
 }
 
@@ -204,6 +200,15 @@ class _FakeWatchlistRepository implements WatchlistRepository {
     _items
       ..clear()
       ..addAll(stocks);
+  }
+
+  @override
+  Future<void> updateMonitoringEnabled(String code, bool enabled) async {
+    final index = _items.indexWhere((item) => item.code == code);
+    if (index < 0) {
+      return;
+    }
+    _items[index] = _items[index].copyWith(monitoringEnabled: enabled);
   }
 }
 

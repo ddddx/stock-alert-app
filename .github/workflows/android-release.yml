@@ -1,9 +1,6 @@
 name: Android Release
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -16,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -34,32 +33,102 @@ jobs:
         run: flutter pub get
 
       - name: Run tests
-        run: flutter test
+        shell: pwsh
+        run: |
+          flutter test 2>&1 | Tee-Object -FilePath flutter-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-test-log
+          path: flutter-test.log
+          if-no-files-found: warn
+
+      - name: Prepare Android release keystore
+        if: success()
+        shell: pwsh
+        run: |
+          if (-not "${{ secrets.ANDROID_KEYSTORE_BASE64 }}") {
+            Write-Host "ANDROID_KEYSTORE_BASE64 not set; building with debug signing."
+            return
+          }
+
+          $bytes = [Convert]::FromBase64String("${{ secrets.ANDROID_KEYSTORE_BASE64 }}")
+          $keystorePath = "$env:HOME\\stock-pulse-release-signing.jks"
+          [IO.File]::WriteAllBytes($keystorePath, $bytes)
+
+          $keyPropsPath = "android/app/key.properties"
+          @(
+            "storeFile=$keystorePath"
+            "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+            "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}"
+            "keyPassword=${{ secrets.ANDROID_KEY_ALIAS_PASSWORD }}"
+          ) | Set-Content -Path $keyPropsPath -Encoding UTF8
+
+          Write-Host "Wrote keystore to $keystorePath"
+          Write-Host "Wrote key.properties to $keyPropsPath"
 
       - name: Build split APKs
         run: flutter build apk --release --split-per-abi
 
       - name: Upload workflow artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: android-release-apks
           path: build/app/outputs/flutter-apk/*.apk
 
+      - name: Read app version
+        id: app_version
+        shell: pwsh
+        run: |
+          $pubspec = Get-Content pubspec.yaml
+          $versionLine = $pubspec | Where-Object { $_ -match '^version:' } | Select-Object -First 1
+          $version = ($versionLine -replace '^version:\s*', '').Trim()
+          "app_version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        shell: pwsh
+        run: |
+          $version = '${{ steps.app_version.outputs.app_version }}'
+          $tag = "v$version"
+          $previousTag = git tag --sort=-creatordate | Where-Object { $_ -ne $tag } | Select-Object -First 1
+          if ($previousTag) {
+            $changes = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)"
+          } else {
+            $changes = git log -n 10 --pretty=format:"- %s (%h)"
+          }
+          if (-not $changes) {
+            $changes = '- 无可提取的提交说明'
+          }
+          $notes = @"
+          Android 手动构建包
+
+          版本：$version
+          提交：${{ github.sha }}
+
+          更新内容：
+          $changes
+
+          构建产物：
+          - app-armeabi-v7a-release.apk
+          - app-arm64-v8a-release.apk
+          - app-x86_64-release.apk
+          "@
+          $notes | Out-File -FilePath release-notes.txt -Encoding utf8
+
       - name: Publish rolling release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest-build
-          name: Latest Build
+          tag_name: v${{ steps.app_version.outputs.app_version }}
+          name: v${{ steps.app_version.outputs.app_version }}
           prerelease: true
           make_latest: false
           files: |
             build/app/outputs/flutter-apk/*.apk
-          body: |
-            Automated Android release build from commit ${{ github.sha }}.
-
-            Included artifacts:
-            - app-armeabi-v7a-release.apk
-            - app-arm64-v8a-release.apk
-            - app-x86_64-release.apk
+          body_path: release-notes.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

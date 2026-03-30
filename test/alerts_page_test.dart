@@ -219,4 +219,13 @@ class _FakeWatchlistRepository implements WatchlistRepository {
       ..clear()
       ..addAll(stocks);
   }
+
+  @override
+  Future<void> updateMonitoringEnabled(String code, bool enabled) async {
+    final index = _items.indexWhere((item) => item.code == code);
+    if (index < 0) {
+      return;
+    }
+    _items[index] = _items[index].copyWith(monitoringEnabled: enabled);
+  }
 }

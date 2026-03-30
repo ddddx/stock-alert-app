@@ -21,6 +21,14 @@ class InMemoryWatchlistRepository {
     _items.removeWhere((item) => item.code == code);
   }
 
+  void updateMonitoringEnabled(String code, bool enabled) {
+    final index = _items.indexWhere((item) => item.code == code);
+    if (index < 0) {
+      return;
+    }
+    _items[index] = _items[index].copyWith(monitoringEnabled: enabled);
+  }
+
   bool contains(String code) {
     return _items.any((item) => item.code == code);
   }

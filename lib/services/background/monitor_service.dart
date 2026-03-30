@@ -121,6 +121,27 @@ class AshareMonitorService implements MonitorService {
       );
     }
 
+    final monitoredWatchlist = watchlist
+        .where((stock) => stock.monitoringEnabled)
+        .toList(growable: false);
+    if (monitoredWatchlist.isEmpty) {
+      const summary = '自选中暂无开启监控的股票，未执行行情刷新。';
+      _latestQuotes = const [];
+      await _settingsRepository.markChecked(
+        checkedAt: checkedAt,
+        message: summary,
+      );
+      await _platformBridgeService.updateForegroundMonitorSummary(
+        summary: summary,
+      );
+      return MonitorRunResult(
+        quotes: const [],
+        triggers: const [],
+        checkedAt: checkedAt,
+        summary: summary,
+      );
+    }
+
     if (!forceFetch && !_marketHours.isTradingTime(checkedAt)) {
       final summary = _marketHours.buildClosedMessage(checkedAt);
       await _settingsRepository.markChecked(
@@ -140,7 +161,7 @@ class AshareMonitorService implements MonitorService {
 
     try {
       final quotes = await _marketDataService.fetchQuotes(
-        watchlist,
+        monitoredWatchlist,
         preferSingleQuoteRetrieval: true,
       );
       _latestQuotes = quotes;

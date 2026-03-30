@@ -5,7 +5,7 @@ import 'package:stock_alert_app/services/alerts/alert_message_builder.dart';
 import 'package:stock_alert_app/services/alerts/alert_rule_engine.dart';
 
 void main() {
-  test('short-window alert message includes stock and both amount and percent', () {
+  test('short-window alert message stays on percent-only speech', () {
     final engine = AlertRuleEngine(messageBuilder: AlertMessageBuilder());
     final rule = AlertRule.shortWindowMove(
       id: 'rule-short',
@@ -62,12 +62,13 @@ void main() {
     expect(firstPass, isEmpty);
     expect(secondPass, hasLength(1));
     expect(secondPass.first.message, contains('贵州茅台'));
-    expect(secondPass.first.message, contains('1520'));
-    expect(secondPass.first.message, contains('1.33%'));
-    expect(secondPass.first.message, contains('¥20.00'));
+    expect(secondPass.first.message, contains('上涨1.33%'));
+    expect(secondPass.first.message, contains('当前涨跌幅+2.01%'));
+    expect(secondPass.first.message, isNot(contains('600519')));
+    expect(secondPass.first.message, isNot(contains('最新价')));
   });
 
-  test('price step alert message includes crossed amount and percent', () {
+  test('price step alert message stays on price-only speech', () {
     final engine = AlertRuleEngine(messageBuilder: AlertMessageBuilder());
     final rule = AlertRule.stepAlert(
       id: 'rule-step-price',
@@ -124,7 +125,9 @@ void main() {
     expect(firstPass, isEmpty);
     expect(secondPass, hasLength(1));
     expect(secondPass.first.message, contains('平安银行'));
-    expect(secondPass.first.message, contains('¥0.60'));
-    expect(secondPass.first.message, contains('上涨6.00%'));
+    expect(secondPass.first.message, contains('价格从'));
+    expect(secondPass.first.message, contains('最新价¥10.60'));
+    expect(secondPass.first.message, isNot(contains('%')));
+    expect(secondPass.first.message, isNot(contains('000001')));
   });
 }

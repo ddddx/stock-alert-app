@@ -43,6 +43,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   bool _refreshing = false;
   bool _bootstrapping = true;
   bool _androidOnboardingRunning = false;
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+  Timer? _foregroundRefreshTimer;
 
   final _platformBridgeService = PlatformBridgeService();
   final _watchlistStore = JsonFileStore(fileName: 'watchlist.json');
@@ -87,6 +89,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           });
         }
       }
+      _syncForegroundRefreshTimer();
       await _runAndroidFirstLaunchOnboarding();
       await _refreshQuotes();
     });
@@ -94,23 +97,27 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _foregroundRefreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
     if (_bootstrapping) {
       return;
     }
     switch (state) {
       case AppLifecycleState.resumed:
+        _syncForegroundRefreshTimer();
         unawaited(_handleResume());
         break;
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
+        _foregroundRefreshTimer?.cancel();
         break;
     }
   }
@@ -364,14 +371,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     return result ?? false;
   }
 
-  Future<void> _refreshQuotes() async {
+  Future<void> _refreshQuotes({bool forceFetch = true}) async {
     if (_refreshing || _bootstrapping) {
       return;
     }
     setState(() {
       _refreshing = true;
     });
-    await _monitorService.refreshWatchlist(forceFetch: true);
+    await _monitorService.refreshWatchlist(forceFetch: forceFetch);
     if (!mounted) {
       return;
     }
@@ -429,14 +436,33 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Future<void> _handleResume() async {
     await _settingsRepository.initialize();
     await _historyRepository.initialize();
+    _syncForegroundRefreshTimer();
     if (mounted) {
       setState(() {});
     }
   }
 
   void _markDirty() {
+    _syncForegroundRefreshTimer();
     if (mounted) {
       setState(() {});
     }
+  }
+
+  void _syncForegroundRefreshTimer() {
+    _foregroundRefreshTimer?.cancel();
+    if (_bootstrapping || _lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+
+    final status = _settingsRepository.getStatus();
+    if (status.serviceEnabled) {
+      return;
+    }
+
+    _foregroundRefreshTimer = Timer.periodic(
+      Duration(seconds: status.pollIntervalSeconds),
+      (_) => unawaited(_refreshQuotes(forceFetch: false)),
+    );
   }
 }

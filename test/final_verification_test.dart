@@ -53,6 +53,11 @@ void main() {
   });
 
   testWidgets('preview playback shows success feedback', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final settingsRepository = _FakeSettingsRepository();
     final audioService = _FakeAudioAlertService(shouldSucceed: true);
 
@@ -75,7 +80,13 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byIcon(Icons.volume_up_outlined));
+    final previewButton = find.widgetWithText(FilledButton, '试播真实文案');
+    await tester.scrollUntilVisible(
+      previewButton,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(previewButton);
     await tester.pumpAndSettle();
 
     expect(audioService.preloadCalls, 1);
@@ -84,6 +95,11 @@ void main() {
   });
 
   testWidgets('preview playback shows failure feedback', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final settingsRepository = _FakeSettingsRepository();
     final audioService = _FakeAudioAlertService(shouldSucceed: false);
 
@@ -106,7 +122,13 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byIcon(Icons.volume_up_outlined));
+    final previewButton = find.widgetWithText(FilledButton, '试播真实文案');
+    await tester.scrollUntilVisible(
+      previewButton,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(previewButton);
     await tester.pumpAndSettle();
 
     expect(audioService.preloadCalls, 1);
@@ -181,6 +203,140 @@ void main() {
 
     expect(settingsRepository.getStatus().pollIntervalSeconds, 5);
     expect(find.textContaining('5 秒'), findsWidgets);
+  });
+
+  testWidgets('settings page quick poll interval chip updates setting', (
+    tester,
+  ) async {
+    final settingsRepository = _FakeSettingsRepository();
+    final monitorService = _FakeMonitorService();
+
+    await tester.pumpWidget(
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: monitorService,
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(ChoiceChip, '30 秒'));
+    await tester.pumpAndSettle();
+
+    expect(settingsRepository.getStatus().pollIntervalSeconds, 30);
+    expect(find.textContaining('30 秒'), findsWidgets);
+  });
+
+  testWidgets('manual refresh shows foreground-only feedback when guard is off',
+      (
+    tester,
+  ) async {
+    final settingsRepository = _FakeSettingsRepository();
+    final monitorService = _FakeMonitorService();
+
+    await tester.pumpWidget(
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: monitorService,
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '立即刷新'));
+    await tester.pumpAndSettle();
+
+    expect(monitorService.backgroundRefreshCalls, 0);
+    expect(find.textContaining('已执行一次前台刷新'), findsWidgets);
+  });
+
+  testWidgets('manual refresh triggers background refresh when guard is on', (
+    tester,
+  ) async {
+    final settingsRepository = _FakeSettingsRepository();
+    await settingsRepository.updateService(true);
+    final monitorService = _FakeMonitorService();
+
+    await tester.pumpWidget(
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: monitorService,
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, '立即刷新'));
+    await tester.pumpAndSettle();
+
+    expect(monitorService.backgroundRefreshCalls, 1);
+    expect(find.textContaining('前台 + 后台联动刷新'), findsWidgets);
+  });
+
+  testWidgets('poll preset updates interval and current summary together', (
+    tester,
+  ) async {
+    final settingsRepository = _FakeSettingsRepository();
+    await settingsRepository.updateService(true);
+    final monitorService = _FakeMonitorService();
+
+    await tester.pumpWidget(
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: monitorService,
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ChoiceChip, '5 秒'));
+    await tester.pumpAndSettle();
+
+    expect(settingsRepository.getStatus().pollIntervalSeconds, 5);
+    expect(monitorService.reloadCalls, 1);
+    expect(find.textContaining('后台轮询间隔已更新为 5 秒'), findsWidgets);
   });
 
   test('flutter TTS preload returns plugin setup result', () async {
@@ -302,6 +458,15 @@ class _FakeWatchlistRepository implements WatchlistRepository {
       ..clear()
       ..addAll(stocks);
   }
+
+  @override
+  Future<void> updateMonitoringEnabled(String code, bool enabled) async {
+    final index = _items.indexWhere((item) => item.code == code);
+    if (index < 0) {
+      return;
+    }
+    _items[index] = _items[index].copyWith(monitoringEnabled: enabled);
+  }
 }
 
 class _FakeMarketDataService extends AshareMarketDataService {
@@ -416,6 +581,7 @@ class _FakeAudioAlertService implements AudioAlertService {
 class _FakeMonitorService implements MonitorService {
   int startCalls = 0;
   int reloadCalls = 0;
+  int backgroundRefreshCalls = 0;
 
   @override
   bool get isRunning => false;
@@ -440,7 +606,9 @@ class _FakeMonitorService implements MonitorService {
   }
 
   @override
-  Future<void> requestBackgroundRefresh() async {}
+  Future<void> requestBackgroundRefresh() async {
+    backgroundRefreshCalls += 1;
+  }
 
   @override
   Future<void> start() async {

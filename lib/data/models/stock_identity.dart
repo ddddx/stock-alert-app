@@ -4,6 +4,7 @@ class StockIdentity {
     required this.name,
     required this.market,
     this.securityTypeName = '',
+    this.monitoringEnabled = true,
   });
 
   factory StockIdentity.fromJson(Map<String, dynamic> json) {
@@ -13,6 +14,7 @@ class StockIdentity {
       name: json['name'] as String? ?? '',
       market: normalizeMarket(json['market'] as String?, code: code),
       securityTypeName: json['securityTypeName'] as String? ?? '',
+      monitoringEnabled: json['monitoringEnabled'] as bool? ?? true,
     );
   }
 
@@ -108,6 +110,7 @@ class StockIdentity {
     String? name,
     String? market,
     String? securityTypeName,
+    bool? monitoringEnabled,
   }) {
     final nextCode = code ?? this.code;
     return StockIdentity(
@@ -115,6 +118,7 @@ class StockIdentity {
       name: name ?? this.name,
       market: normalizeMarket(market ?? this.market, code: nextCode),
       securityTypeName: securityTypeName ?? this.securityTypeName,
+      monitoringEnabled: monitoringEnabled ?? this.monitoringEnabled,
     );
   }
 
@@ -122,6 +126,7 @@ class StockIdentity {
   final String name;
   final String market;
   final String securityTypeName;
+  final bool monitoringEnabled;
 
   Map<String, dynamic> toJson() {
     return {
@@ -129,6 +134,7 @@ class StockIdentity {
       'name': name,
       'market': normalizedMarket,
       'securityTypeName': securityTypeName,
+      'monitoringEnabled': monitoringEnabled,
     };
   }
 }

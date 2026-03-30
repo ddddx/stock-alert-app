@@ -236,6 +236,9 @@ class _FakeWatchlistRepository implements WatchlistRepository {
 
   @override
   Future<void> replaceAll(List<StockIdentity> stocks) async {}
+
+  @override
+  Future<void> updateMonitoringEnabled(String code, bool enabled) async {}
 }
 
 class _FakeAlertRepository implements AlertRepository {

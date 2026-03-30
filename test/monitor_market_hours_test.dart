@@ -60,8 +60,40 @@ void main() {
     final result = await service.refreshWatchlist();
 
     expect(marketDataService.fetchQuotesCalls, 1);
+    expect(marketDataService.lastRequestedCodes, ['600519']);
     expect(result.summary, isNotEmpty);
     expect(result.summary, isNot(contains('13:00')));
+  });
+
+  test('monitor refresh filters out stocks with monitoring disabled', () async {
+    final marketDataService = _RecordingMarketDataService();
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(
+        items: [
+          StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
+          StockIdentity(
+            code: '000001',
+            name: '平安银行',
+            market: 'SZ',
+            monitoringEnabled: false,
+          ),
+        ],
+      ),
+      alertRepository: _FakeAlertRepository(),
+      historyRepository: _FakeHistoryRepository(),
+      settingsRepository: _FakeSettingsRepository(),
+      marketDataService: marketDataService,
+      audioAlertService: _FakeAudioAlertService(),
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: _FakePlatformBridgeService(),
+      now: () => DateTime(2026, 3, 23, 10, 0),
+    );
+
+    final result = await service.refreshWatchlist();
+
+    expect(marketDataService.fetchQuotesCalls, 1);
+    expect(marketDataService.lastRequestedCodes, ['600519']);
+    expect(result.summary, contains('1 只A股'));
   });
 
   test('forced watchlist refresh fetches quotes outside trading hours',
@@ -190,11 +222,13 @@ void main() {
 
 class _RecordingMarketDataService extends AshareMarketDataService {
   int fetchQuotesCalls = 0;
+  List<String> lastRequestedCodes = const [];
 
   @override
   Future<List<StockQuoteSnapshot>> fetchQuotes(List<StockIdentity> watchlist,
       {bool preferSingleQuoteRetrieval = false}) async {
     fetchQuotesCalls += 1;
+    lastRequestedCodes = watchlist.map((item) => item.code).toList();
     return [
       StockQuoteSnapshot(
         code: '600519',
@@ -240,6 +274,9 @@ class _FakeWatchlistRepository implements WatchlistRepository {
 
   @override
   Future<void> replaceAll(List<StockIdentity> stocks) async {}
+
+  @override
+  Future<void> updateMonitoringEnabled(String code, bool enabled) async {}
 }
 
 class _FakeAlertRepository implements AlertRepository {

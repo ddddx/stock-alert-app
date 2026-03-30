@@ -50,6 +50,10 @@ void main() {
     final decoded = jsonDecode(requestBody!) as Map<String, dynamic>;
     expect(decoded['schemaVersion'], 1);
     expect((decoded['watchlist'] as List).length, 2);
+    expect(
+      ((decoded['watchlist'] as List)[1] as Map<String, dynamic>)['monitoringEnabled'],
+      false,
+    );
     expect((decoded['alertRules'] as List).length, 1);
   });
 
@@ -74,6 +78,7 @@ void main() {
     );
 
     expect(imported.watchlist.map((item) => item.code), ['600519', '000001']);
+    expect(imported.watchlist.last.monitoringEnabled, isFalse);
     expect(imported.alertRules.single.type, AlertRuleType.shortWindowMove);
     expect(imported.preferences.watchlistSortOrder,
         WatchlistSortOrder.changePercentDesc);
@@ -90,7 +95,12 @@ AppBackupPayload _samplePayload() {
     exportedAt: DateTime(2026, 3, 29, 2),
     watchlist: const [
       StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
-      StockIdentity(code: '000001', name: '平安银行', market: 'SZ'),
+      StockIdentity(
+        code: '000001',
+        name: '平安银行',
+        market: 'SZ',
+        monitoringEnabled: false,
+      ),
     ],
     alertRules: [
       AlertRule.shortWindowMove(
