@@ -175,16 +175,16 @@ jobs:
           $tag = "v$version"
           $previousTag = git tag --sort=-creatordate | Where-Object { $_ -ne $tag } | Select-Object -First 1
           if ($previousTag) {
-            $changes = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)"
+            $changes = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)%n"
           } else {
-            $changes = git log -n 10 --pretty=format:"- %s (%h)"
+            $changes = git log -n 10 --pretty=format:"- %s (%h)%n"
           }
           if (-not $changes) {
             $changes = '- No commits found since the previous tag.'
           }
 
           $notes = @"
-          Android rolling prerelease
+          Android release build
           Version: $version
           Commit: ${{ github.sha }}
 
@@ -203,8 +203,8 @@ jobs:
         with:
           tag_name: v${{ steps.app_version.outputs.app_version }}
           name: v${{ steps.app_version.outputs.app_version }}
-          prerelease: true
-          make_latest: false
+          prerelease: false
+          make_latest: true
           fail_on_unmatched_files: true
           files: |
             build/app/outputs/flutter-apk/*.apk
