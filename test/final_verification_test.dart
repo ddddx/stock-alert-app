@@ -339,6 +339,52 @@ void main() {
     expect(find.textContaining('后台轮询间隔已更新为 5 秒'), findsWidgets);
   });
 
+  testWidgets('webdav draft survives rebuild before save', (tester) async {
+    final settingsRepository = _FakeSettingsRepository();
+
+    await tester.pumpWidget(
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: _FakeMonitorService(),
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
+        ),
+      ),
+    );
+
+    final endpointField = find.byKey(const Key('webdav-endpoint-input'));
+    final usernameField = find.byKey(const Key('webdav-username-input'));
+    final exportButton = find.ancestor(
+      of: find.byIcon(Icons.cloud_upload_outlined),
+      matching: find.byType(FilledButton),
+    );
+
+    await tester.scrollUntilVisible(
+      endpointField,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.enterText(endpointField, 'https://dav.example.com/backup.json');
+    await tester.enterText(usernameField, 'alice');
+
+    await tester.tap(exportButton.first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('https://dav.example.com/backup.json'), findsOneWidget);
+    expect(find.text('alice'), findsOneWidget);
+    expect(settingsRepository.getStatus().webDavConfig.endpoint, isEmpty);
+    expect(settingsRepository.getStatus().webDavConfig.username, isEmpty);
+  });
+
   test('flutter TTS preload returns plugin setup result', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     const channel = MethodChannel('flutter_tts');

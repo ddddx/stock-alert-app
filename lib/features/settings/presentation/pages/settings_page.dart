@@ -54,6 +54,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _webDavEndpointController;
   late final TextEditingController _webDavUsernameController;
   late final TextEditingController _webDavPasswordController;
+  late WebDavConfig _lastSyncedWebDavConfig;
 
   bool _webDavBusy = false;
   String? _toast;
@@ -70,6 +71,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _webDavUsernameController =
         TextEditingController(text: webDavConfig.username);
     _webDavPasswordController = TextEditingController();
+    _lastSyncedWebDavConfig = webDavConfig;
   }
 
   @override
@@ -116,15 +118,27 @@ class _SettingsPageState extends State<SettingsPage> {
         selection: TextSelection.collapsed(offset: config.username.length),
       );
     }
+    _lastSyncedWebDavConfig = config;
+  }
+
+  bool _sameWebDavConfig(WebDavConfig left, WebDavConfig right) {
+    return left.endpoint == right.endpoint && left.username == right.username;
+  }
+
+  void _syncWebDavControllersIfNeeded(WebDavConfig config) {
+    if (_sameWebDavConfig(_lastSyncedWebDavConfig, config)) {
+      return;
+    }
+    _syncWebDavControllers(config);
   }
 
   Future<void> _rememberWebDavConfig() async {
-    await widget.repository.updateWebDavConfig(
-      WebDavConfig(
-        endpoint: _webDavEndpointController.text.trim(),
-        username: _webDavUsernameController.text.trim(),
-      ),
+    final config = WebDavConfig(
+      endpoint: _webDavEndpointController.text.trim(),
+      username: _webDavUsernameController.text.trim(),
     );
+    await widget.repository.updateWebDavConfig(config);
+    _lastSyncedWebDavConfig = config;
     widget.onChanged();
   }
 
@@ -255,7 +269,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final status = widget.repository.getStatus();
     _syncIntervalController(status.pollIntervalSeconds);
-    _syncWebDavControllers(status.webDavConfig);
+    _syncWebDavControllersIfNeeded(status.webDavConfig);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -443,6 +457,7 @@ class _SettingsPageState extends State<SettingsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextFormField(
+                key: const Key('webdav-endpoint-input'),
                 controller: _webDavEndpointController,
                 keyboardType: TextInputType.url,
                 decoration: const InputDecoration(
@@ -454,6 +469,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 8),
               TextFormField(
+                key: const Key('webdav-username-input'),
                 controller: _webDavUsernameController,
                 decoration: const InputDecoration(
                   labelText: '用户名',
@@ -462,6 +478,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 8),
               TextFormField(
+                key: const Key('webdav-password-input'),
                 controller: _webDavPasswordController,
                 obscureText: true,
                 decoration: const InputDecoration(
