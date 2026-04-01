@@ -29,8 +29,33 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Flutter doctor
+        shell: pwsh
+        run: |
+          flutter doctor -v 2>&1 | Tee-Object -FilePath flutter-doctor.log
+          exit 0
+
+      - name: Upload environment log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-environment-log
+          path: flutter-doctor.log
+          if-no-files-found: warn
+
       - name: Install dependencies
-        run: flutter pub get
+        shell: pwsh
+        run: |
+          flutter pub get 2>&1 | Tee-Object -FilePath flutter-pub-get.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload dependency log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-pub-get-log
+          path: flutter-pub-get.log
+          if-no-files-found: warn
 
       - name: Run tests
         shell: pwsh
@@ -56,12 +81,23 @@ jobs:
           }
 
           $bytes = [Convert]::FromBase64String("${{ secrets.ANDROID_KEYSTORE_BASE64 }}")
-          $keystorePath = "$env:HOME\\stock-pulse-release-signing.jks"
+          $keystoreDir = if ($env:RUNNER_TEMP) {
+            $env:RUNNER_TEMP
+          } elseif ($env:TEMP) {
+            $env:TEMP
+          } elseif ($env:USERPROFILE) {
+            $env:USERPROFILE
+          } else {
+            (Get-Location).Path
+          }
+          $keystorePath = Join-Path $keystoreDir "stock-pulse-release-signing.jks"
+          $keystorePathForGradle = $keystorePath -replace '\\', '/'
+          New-Item -ItemType Directory -Path $keystoreDir -Force | Out-Null
           [IO.File]::WriteAllBytes($keystorePath, $bytes)
 
-          $keyPropsPath = "android/app/key.properties"
+          $keyPropsPath = "android/key.properties"
           @(
-            "storeFile=$keystorePath"
+            "storeFile=$keystorePathForGradle"
             "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
             "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}"
             "keyPassword=${{ secrets.ANDROID_KEY_ALIAS_PASSWORD }}"
@@ -71,14 +107,52 @@ jobs:
           Write-Host "Wrote key.properties to $keyPropsPath"
 
       - name: Build split APKs
-        run: flutter build apk --release --split-per-abi
+        shell: pwsh
+        run: |
+          flutter build apk --release --split-per-abi 2>&1 | Tee-Object -FilePath flutter-build-release.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Collect release outputs
+        if: always()
+        shell: pwsh
+        run: |
+          $outputDir = "build/app/outputs/flutter-apk"
+          if (-not (Test-Path $outputDir)) {
+            "No output directory found: $outputDir" | Set-Content -Path android-release-artifacts.txt -Encoding utf8
+            exit 0
+          }
+
+          $files = Get-ChildItem -Path $outputDir -File | Sort-Object Name
+          if (-not $files) {
+            "No files found in: $outputDir" | Set-Content -Path android-release-artifacts.txt -Encoding utf8
+            exit 0
+          }
+
+          $lines = foreach ($file in $files) {
+            "{0}`t{1} bytes" -f $file.Name, $file.Length
+          }
+          $lines | Set-Content -Path android-release-artifacts.txt -Encoding utf8
+          $files | Format-Table Name, Length, LastWriteTime -AutoSize
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-build-release-log
+          path: |
+            flutter-build-release.log
+            android-release-artifacts.txt
+          if-no-files-found: warn
 
       - name: Upload workflow artifacts
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: android-release-apks
-          path: build/app/outputs/flutter-apk/*.apk
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/flutter-apk/output-metadata.json
+          if-no-files-found: error
 
       - name: Read app version
         id: app_version
@@ -86,6 +160,10 @@ jobs:
         run: |
           $pubspec = Get-Content pubspec.yaml
           $versionLine = $pubspec | Where-Object { $_ -match '^version:' } | Select-Object -First 1
+          if (-not $versionLine) {
+            Write-Error "Failed to read version from pubspec.yaml"
+            exit 1
+          }
           $version = ($versionLine -replace '^version:\s*', '').Trim()
           "app_version=$version" >> $env:GITHUB_OUTPUT
 
@@ -102,18 +180,18 @@ jobs:
             $changes = git log -n 10 --pretty=format:"- %s (%h)"
           }
           if (-not $changes) {
-            $changes = '- 无可提取的提交说明'
+            $changes = '- No commits found since the previous tag.'
           }
+
           $notes = @"
-          Android 手动构建包
+          Android rolling prerelease
+          Version: $version
+          Commit: ${{ github.sha }}
 
-          版本：$version
-          提交：${{ github.sha }}
-
-          更新内容：
+          Changes:
           $changes
 
-          构建产物：
+          Artifacts:
           - app-armeabi-v7a-release.apk
           - app-arm64-v8a-release.apk
           - app-x86_64-release.apk
@@ -127,6 +205,7 @@ jobs:
           name: v${{ steps.app_version.outputs.app_version }}
           prerelease: true
           make_latest: false
+          fail_on_unmatched_files: true
           files: |
             build/app/outputs/flutter-apk/*.apk
           body_path: release-notes.txt

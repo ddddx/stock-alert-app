@@ -1,3 +1,5 @@
+import '../../core/utils/stock_text_sanitizer.dart';
+
 class StockIdentity {
   const StockIdentity({
     required this.code,
@@ -11,7 +13,10 @@ class StockIdentity {
     final code = json['code'] as String? ?? '';
     return StockIdentity(
       code: code,
-      name: json['name'] as String? ?? '',
+      name: StockTextSanitizer.sanitizeStockName(
+        json['name'] as String?,
+        stockCode: code,
+      ),
       market: normalizeMarket(json['market'] as String?, code: code),
       securityTypeName: json['securityTypeName'] as String? ?? '',
       monitoringEnabled: json['monitoringEnabled'] as bool? ?? true,
@@ -31,7 +36,7 @@ class StockIdentity {
         normalized == 'XSHG' ||
         normalized.startsWith('SH') ||
         normalized.contains('SHANGHAI') ||
-        rawMarket!.contains('沪')) {
+        (rawMarket ?? '').contains('沪')) {
       return 'SH';
     }
 
@@ -42,7 +47,7 @@ class StockIdentity {
         normalized == 'XSHE' ||
         normalized.startsWith('SZ') ||
         normalized.contains('SHENZHEN') ||
-        rawMarket!.contains('深')) {
+        (rawMarket ?? '').contains('深')) {
       return 'SZ';
     }
 
@@ -61,10 +66,14 @@ class StockIdentity {
 
   String get normalizedMarket => normalizeMarket(market, code: code);
   String get secId => '${normalizedMarket == 'SH' ? '1' : '0'}.$code';
-  String get displayName => '$name ($code)';
+  String get readableName => StockTextSanitizer.sanitizeStockName(
+        name,
+        stockCode: code,
+      );
+  String get displayName => '$readableName ($code)';
   String get subtitle => securityTypeName.isEmpty
       ? '$normalizedMarket 证券'
-      : '$normalizedMarket 证券 · ${localizedSecurityTypeName}';
+      : '$normalizedMarket 证券 · $localizedSecurityTypeName';
   String get localizedSecurityTypeName {
     final normalizedType = SecurityPriceScale.normalizeSecurityTypeName(
       securityTypeName,
@@ -115,7 +124,10 @@ class StockIdentity {
     final nextCode = code ?? this.code;
     return StockIdentity(
       code: nextCode,
-      name: name ?? this.name,
+      name: StockTextSanitizer.sanitizeStockName(
+        name ?? this.name,
+        stockCode: nextCode,
+      ),
       market: normalizeMarket(market ?? this.market, code: nextCode),
       securityTypeName: securityTypeName ?? this.securityTypeName,
       monitoringEnabled: monitoringEnabled ?? this.monitoringEnabled,
@@ -131,7 +143,7 @@ class StockIdentity {
   Map<String, dynamic> toJson() {
     return {
       'code': code,
-      'name': name,
+      'name': readableName,
       'market': normalizedMarket,
       'securityTypeName': securityTypeName,
       'monitoringEnabled': monitoringEnabled,

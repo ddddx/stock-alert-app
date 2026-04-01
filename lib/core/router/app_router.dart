@@ -41,6 +41,8 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _refreshing = false;
+  bool _refreshQueued = false;
+  bool _queuedForceFetch = false;
   bool _bootstrapping = true;
   bool _androidOnboardingRunning = false;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
@@ -372,19 +374,35 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   Future<void> _refreshQuotes({bool forceFetch = true}) async {
-    if (_refreshing || _bootstrapping) {
+    if (_bootstrapping) {
+      return;
+    }
+    if (_refreshing) {
+      _refreshQueued = true;
+      _queuedForceFetch = _queuedForceFetch || forceFetch;
       return;
     }
     setState(() {
       _refreshing = true;
     });
-    await _monitorService.refreshWatchlist(forceFetch: forceFetch);
-    if (!mounted) {
-      return;
+    try {
+      await _monitorService.refreshWatchlist(forceFetch: forceFetch);
+    } finally {
+      final shouldRunAgain = _refreshQueued;
+      final nextForceFetch = _queuedForceFetch;
+      _refreshQueued = false;
+      _queuedForceFetch = false;
+      if (mounted) {
+        setState(() {
+          _refreshing = false;
+        });
+      }
+      if (mounted &&
+          shouldRunAgain &&
+          _lifecycleState == AppLifecycleState.resumed) {
+        unawaited(_refreshQuotes(forceFetch: nextForceFetch));
+      }
     }
-    setState(() {
-      _refreshing = false;
-    });
   }
 
   Future<String> _exportToWebDav(WebDavCredentials credentials) async {
@@ -440,6 +458,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (mounted) {
       setState(() {});
     }
+    final status = _settingsRepository.getStatus();
+    if (status.serviceEnabled) {
+      await _monitorService.requestBackgroundRefresh();
+      return;
+    }
+    await _refreshQuotes();
   }
 
   void _markDirty() {

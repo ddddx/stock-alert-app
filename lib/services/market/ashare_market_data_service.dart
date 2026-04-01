@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import '../../core/utils/stock_text_sanitizer.dart';
 import '../../data/models/stock_identity.dart';
 import '../../data/models/stock_quote_snapshot.dart';
 import '../../data/models/stock_search_result.dart';
@@ -24,6 +25,8 @@ class AshareMarketDataService {
     Duration(milliseconds: 250),
     Duration(milliseconds: 500),
   ];
+  static const _singleQuoteTimeout = Duration(seconds: 5);
+  static const _batchQuoteTimeout = Duration(seconds: 6);
   static const _tencentQuoteLayouts = [
     _TencentQuoteLayout(
       changeAmountIndex: 31,
@@ -108,7 +111,10 @@ class AshareMarketDataService {
         results.add(
           StockSearchResult(
             code: code,
-            name: name,
+            name: StockTextSanitizer.sanitizeStockName(
+              name,
+              stockCode: code,
+            ),
             market: market,
             securityTypeName: securityTypeName,
             pinyin: _readString(
@@ -137,7 +143,9 @@ class AshareMarketDataService {
     var fallbackStocks = List<StockIdentity>.from(stocks);
 
     try {
-      final batchResult = await _fetchBatchQuotes(stocks);
+      final batchResult = await _fetchBatchQuotes(stocks).timeout(
+        _batchQuoteTimeout,
+      );
       quotesByCode.addAll(batchResult.quotesByCode);
       fallbackStocks = batchResult.fallbackStocks;
     } catch (_) {
@@ -226,13 +234,10 @@ class AshareMarketDataService {
       // Re-throw the original Eastmoney failure when Tencent also fails.
     }
 
-    if (eastmoneyError != null) {
-      if (eastmoneyStackTrace != null) {
-        Error.throwWithStackTrace(eastmoneyError, eastmoneyStackTrace);
-      }
-      throw eastmoneyError;
+    if (eastmoneyStackTrace != null) {
+      Error.throwWithStackTrace(eastmoneyError, eastmoneyStackTrace);
     }
-    throw const HttpException('Single quote fetch failed');
+    throw eastmoneyError;
   }
 
   Future<StockQuoteSnapshot> _fetchEastmoneySingleQuote(
@@ -313,7 +318,11 @@ class AshareMarketDataService {
 
     return StockQuoteSnapshot(
       code: fields[2].trim().isEmpty ? stock.code : fields[2].trim(),
-      name: fields[1].trim().isEmpty ? stock.name : fields[1].trim(),
+      name: StockTextSanitizer.sanitizeStockName(
+        fields[1].trim().isEmpty ? null : fields[1].trim(),
+        fallbackName: stock.readableName,
+        stockCode: stock.code,
+      ),
       market: stock.market,
       securityTypeName: stock.securityTypeName,
       priceDecimalDigits: SecurityPriceScale.resolvePriceDecimalDigits(
@@ -336,7 +345,9 @@ class AshareMarketDataService {
     StockIdentity stock,
   ) async {
     try {
-      return _SingleQuoteOutcome.success(await _fetchSingleQuote(stock));
+      return _SingleQuoteOutcome.success(
+        await _fetchSingleQuote(stock).timeout(_singleQuoteTimeout),
+      );
     } catch (error, stackTrace) {
       return _SingleQuoteOutcome.failure(error, stackTrace);
     }
@@ -476,9 +487,11 @@ class AshareMarketDataService {
 
     return StockQuoteSnapshot(
       code: resolvedCode,
-      name: _readStaticString(map, ['f58']).isEmpty
-          ? stock.name
-          : _readStaticString(map, ['f58']),
+      name: StockTextSanitizer.sanitizeStockName(
+        _readStaticString(map, ['f58']),
+        fallbackName: stock.readableName,
+        stockCode: resolvedCode,
+      ),
       market: stock.market,
       securityTypeName: stock.securityTypeName,
       priceDecimalDigits: priceDecimalDigits,
@@ -1022,7 +1035,7 @@ class AshareMarketDataService {
       return false;
     }
     if (rawValue is num) {
-      return rawValue is double || rawValue is num && rawValue % 1 != 0;
+      return rawValue is double || rawValue % 1 != 0;
     }
     final text = rawValue.toString().trim();
     return text.contains('.');

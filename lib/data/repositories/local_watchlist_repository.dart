@@ -23,13 +23,20 @@ class LocalWatchlistRepository implements WatchlistRepository {
       return;
     }
 
+    var migrated = false;
     _items
       ..clear()
       ..addAll(
-        payload.whereType<Map>().map(
-              (item) => StockIdentity.fromJson(item.cast<String, dynamic>()),
-            ),
+        payload.whereType<Map>().map((item) {
+          final stock = StockIdentity.fromJson(item.cast<String, dynamic>());
+          final changed = item.toString() != stock.toJson().toString();
+          migrated = migrated || changed;
+          return stock;
+        }),
       );
+    if (migrated) {
+      await _persist();
+    }
   }
 
   @override

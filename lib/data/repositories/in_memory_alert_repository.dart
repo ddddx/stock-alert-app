@@ -66,4 +66,11 @@ class InMemoryAlertRepository implements AlertRepository {
 
   @override
   Future<void> initialize() async {}
+
+  @override
+  Future<void> replaceAll(List<AlertRule> rules) async {
+    _rules
+      ..clear()
+      ..addAll(rules);
+  }
 }

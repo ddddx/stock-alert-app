@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:stock_alert_app/core/utils/formatters.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/models/stock_search_result.dart';

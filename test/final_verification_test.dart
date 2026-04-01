@@ -553,11 +553,9 @@ class _FakeSettingsRepository implements SettingsRepository {
 class _FakeAudioAlertService implements AudioAlertService {
   _FakeAudioAlertService({
     required this.shouldSucceed,
-    this.preloadResult = true,
   });
 
   final bool shouldSucceed;
-  final bool preloadResult;
   int preloadCalls = 0;
   final List<String> spokenTexts = [];
 
@@ -567,14 +565,14 @@ class _FakeAudioAlertService implements AudioAlertService {
   @override
   Future<bool> preload() async {
     preloadCalls += 1;
-    return preloadResult;
+    return true;
   }
 
   @override
   Future<bool> speak(String text) async {
     preloadCalls += 1;
     spokenTexts.add(text);
-    return preloadResult && shouldSucceed;
+    return shouldSucceed;
   }
 }
 
@@ -620,22 +618,16 @@ class _FakeMonitorService implements MonitorService {
 }
 
 class _FakePlatformBridgeService extends PlatformBridgeService {
-  _FakePlatformBridgeService({
-    this.startResult = true,
-    this.reloadResult = true,
-  });
-
-  final bool startResult;
-  final bool reloadResult;
+  _FakePlatformBridgeService();
 
   @override
   Future<bool> startForegroundMonitorService({required String summary}) async {
-    return startResult;
+    return true;
   }
 
   @override
   Future<bool> reloadForegroundMonitorService() async {
-    return reloadResult;
+    return true;
   }
 }
 

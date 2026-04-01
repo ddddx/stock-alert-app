@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:stock_alert_app/services/background/monitoring_policy.dart';
 
 void main() {

@@ -1,5 +1,6 @@
 import '../../services/storage/json_file_store.dart';
 import '../models/alert_rule.dart';
+import '../models/stock_identity.dart';
 import 'alert_repository.dart';
 
 class LocalAlertRepository implements AlertRepository {
@@ -43,13 +44,41 @@ class LocalAlertRepository implements AlertRepository {
       return;
     }
 
+    var migrated = false;
     _rules
       ..clear()
       ..addAll(
-        payload.whereType<Map>().map(
-              (item) => AlertRule.fromJson(item.cast<String, dynamic>()),
-            ),
+        payload.whereType<Map>().map((item) {
+          final rule = AlertRule.fromJson(item.cast<String, dynamic>());
+          final sanitizedTargets = rule.targetStocks
+              .map(
+                (stock) => StockIdentity(
+                  code: stock.code,
+                  name: stock.readableName,
+                  market: stock.market,
+                  securityTypeName: stock.securityTypeName,
+                  monitoringEnabled: stock.monitoringEnabled,
+                ),
+              )
+              .toList(growable: false);
+          final sanitizedRule = rule.copyWith(
+            stockName: rule.stockName.trim().isEmpty
+                ? rule.stockCode
+                : StockIdentity(
+                    code: rule.stockCode,
+                    name: rule.stockName,
+                    market: rule.market,
+                  ).readableName,
+            targetStocks: sanitizedTargets,
+          );
+          final changed = item.toString() != sanitizedRule.toJson().toString();
+          migrated = migrated || changed;
+          return sanitizedRule;
+        }),
       );
+    if (migrated) {
+      await _persist();
+    }
   }
 
   @override

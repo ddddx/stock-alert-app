@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.io.File
 
 plugins {
     id("com.android.application")
@@ -8,12 +9,31 @@ plugins {
 }
 
 val keystoreProperties = Properties()
-val keystorePropertiesFile = file("key.properties")
-val hasReleaseSigning = keystorePropertiesFile.exists()
+val keystorePropertiesCandidates = listOf(
+    rootProject.file("key.properties"),
+    file("key.properties"),
+)
+val keystorePropertiesFile = keystorePropertiesCandidates.firstOrNull { it.exists() }
 
-if (hasReleaseSigning) {
-    keystorePropertiesFile.inputStream().use(keystoreProperties::load)
+if (keystorePropertiesFile != null) {
+    keystorePropertiesFile!!.inputStream().use(keystoreProperties::load)
 }
+
+val releaseStoreFile = keystorePropertiesFile
+    ?.let { propertiesFile ->
+        keystoreProperties
+            .getProperty("storeFile")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { configuredPath ->
+                val candidate = File(configuredPath)
+                if (candidate.isAbsolute) candidate else propertiesFile.parentFile.resolve(configuredPath)
+            }
+    }
+val hasReleaseSigning =
+    releaseStoreFile?.exists() == true &&
+        !keystoreProperties.getProperty("storePassword").isNullOrBlank() &&
+        !keystoreProperties.getProperty("keyAlias").isNullOrBlank() &&
+        !keystoreProperties.getProperty("keyPassword").isNullOrBlank()
 
 android {
     namespace = "com.stockpulse.radar"
@@ -40,7 +60,7 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storeFile = releaseStoreFile
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")

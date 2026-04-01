@@ -1,4 +1,5 @@
 import '../../core/utils/formatters.dart';
+import '../../core/utils/stock_text_sanitizer.dart';
 import '../../data/models/alert_rule.dart';
 import '../../data/models/stock_quote_snapshot.dart';
 
@@ -48,7 +49,10 @@ class AlertMessageBuilder {
   }
 
   String _stockSubject(StockQuoteSnapshot quote) {
-    final name = quote.name.trim();
+    final name = StockTextSanitizer.sanitizeStockName(
+      quote.name,
+      stockCode: quote.code,
+    );
     if (name.isNotEmpty) {
       return name;
     }

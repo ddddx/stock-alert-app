@@ -16,13 +16,20 @@ class LocalHistoryRepository implements HistoryRepository {
       return;
     }
 
+    var migrated = false;
     _entries
       ..clear()
       ..addAll(
-        payload.whereType<Map>().map(
-              (item) => AlertHistoryEntry.fromJson(item.cast<String, dynamic>()),
-            ),
+        payload.whereType<Map>().map((item) {
+          final entry = AlertHistoryEntry.fromJson(item.cast<String, dynamic>());
+          final changed = item.toString() != entry.toJson().toString();
+          migrated = migrated || changed;
+          return entry;
+        }),
       );
+    if (migrated) {
+      await _persist();
+    }
   }
 
   @override
