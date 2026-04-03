@@ -7,6 +7,7 @@ import '../../data/repositories/local_history_repository.dart';
 import '../../data/repositories/local_settings_repository.dart';
 import '../../data/repositories/local_watchlist_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/models/stock_quote_snapshot.dart';
 import '../../data/models/app_backup_payload.dart';
 import '../../features/alerts/presentation/pages/alerts_page.dart';
 import '../../features/history/presentation/pages/history_page.dart';
@@ -47,6 +48,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   bool _androidOnboardingRunning = false;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   Timer? _foregroundRefreshTimer;
+  Map<String, StockQuoteSnapshot> _progressiveQuotesByCode = const {};
+  Set<String> _pendingRefreshCodes = const <String>{};
 
   final _platformBridgeService = PlatformBridgeService();
   final _watchlistStore = JsonFileStore(fileName: 'watchlist.json');
@@ -131,6 +134,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         repository: _watchlistRepository,
         marketDataService: _marketDataService,
         quotes: _monitorService.latestQuotes,
+        quotesByCode: _progressiveQuotesByCode,
+        pendingRefreshCodes: _pendingRefreshCodes,
+        isRefreshing: _refreshing,
         monitorStatus: _settingsRepository.getStatus(),
         onRefresh: _refreshQuotes,
         onSortOrderChanged: (order) async {
@@ -149,7 +155,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           _ruleEngine.removeRule(rule.id);
         },
       ),
-      HistoryPage(repository: _historyRepository),
+      HistoryPage(
+        repository: _historyRepository,
+        watchlistRepository: _watchlistRepository,
+      ),
       SettingsPage(
         repository: _settingsRepository,
         monitorService: _monitorService,
@@ -384,9 +393,33 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
     setState(() {
       _refreshing = true;
+      _progressiveQuotesByCode = {
+        for (final quote in _monitorService.latestQuotes) quote.code: quote,
+      };
+      _pendingRefreshCodes = _watchlistRepository
+          .getAll()
+          .where((stock) => stock.monitoringEnabled)
+          .map((stock) => stock.code)
+          .toSet();
     });
     try {
-      await _monitorService.refreshWatchlist(forceFetch: forceFetch);
+      await _monitorService.refreshWatchlist(
+        forceFetch: forceFetch,
+        onQuotesUpdated: (quotes) {
+          if (!mounted) {
+            return;
+          }
+          final refreshedCodes = quotes.map((quote) => quote.code).toSet();
+          setState(() {
+            _progressiveQuotesByCode = {
+              for (final quote in quotes) quote.code: quote,
+            };
+            _pendingRefreshCodes = _pendingRefreshCodes
+                .where((code) => !refreshedCodes.contains(code))
+                .toSet();
+          });
+        },
+      );
     } finally {
       final shouldRunAgain = _refreshQueued;
       final nextForceFetch = _queuedForceFetch;
@@ -395,6 +428,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _refreshing = false;
+          _progressiveQuotesByCode = {
+            for (final quote in _monitorService.latestQuotes) quote.code: quote,
+          };
+          _pendingRefreshCodes = const <String>{};
         });
       }
       if (mounted &&

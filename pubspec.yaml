@@ -1,7 +1,7 @@
 name: stock_alert_app
 description: A 股股票异动监控应用，支持实时搜索、自选、后台守护、语音播报与本地持久化。
 publish_to: 'none'
-version: 0.2.3+2026040101
+version: 0.2.4+2026040301
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

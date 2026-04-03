@@ -180,6 +180,41 @@ class AshareMarketDataService {
         .toList(growable: false);
   }
 
+  Future<List<StockQuoteSnapshot>> fetchQuotesProgressively(
+    List<StockIdentity> stocks, {
+    void Function(StockQuoteSnapshot quote)? onQuoteReceived,
+  }) async {
+    if (stocks.isEmpty) {
+      return const [];
+    }
+
+    final quotesByCode = <String, StockQuoteSnapshot>{};
+    _SingleQuoteOutcome? lastSingleFailure;
+    for (final stock in stocks) {
+      final outcome = await _fetchSingleQuoteOutcome(stock);
+      final quote = outcome.quote;
+      if (quote != null) {
+        quotesByCode[quote.code] = quote;
+        onQuoteReceived?.call(quote);
+      } else {
+        lastSingleFailure = outcome;
+      }
+    }
+
+    if (quotesByCode.isEmpty && lastSingleFailure != null) {
+      final failure = lastSingleFailure;
+      Error.throwWithStackTrace(
+        failure.error!,
+        failure.stackTrace!,
+      );
+    }
+
+    return stocks
+        .map((stock) => quotesByCode[stock.code])
+        .whereType<StockQuoteSnapshot>()
+        .toList(growable: false);
+  }
+
   Future<List<StockQuoteSnapshot>> _fetchQuotesIndividually(
     List<StockIdentity> stocks,
   ) async {
@@ -318,11 +353,7 @@ class AshareMarketDataService {
 
     return StockQuoteSnapshot(
       code: fields[2].trim().isEmpty ? stock.code : fields[2].trim(),
-      name: StockTextSanitizer.sanitizeStockName(
-        fields[1].trim().isEmpty ? null : fields[1].trim(),
-        fallbackName: stock.readableName,
-        stockCode: stock.code,
-      ),
+      name: stock.readableName,
       market: stock.market,
       securityTypeName: stock.securityTypeName,
       priceDecimalDigits: SecurityPriceScale.resolvePriceDecimalDigits(
@@ -487,11 +518,7 @@ class AshareMarketDataService {
 
     return StockQuoteSnapshot(
       code: resolvedCode,
-      name: StockTextSanitizer.sanitizeStockName(
-        _readStaticString(map, ['f58']),
-        fallbackName: stock.readableName,
-        stockCode: resolvedCode,
-      ),
+      name: stock.readableName,
       market: stock.market,
       securityTypeName: stock.securityTypeName,
       priceDecimalDigits: priceDecimalDigits,

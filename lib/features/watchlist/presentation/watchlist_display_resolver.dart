@@ -83,9 +83,12 @@ class WatchlistDisplayResolver {
     required List<StockQuoteSnapshot> quotes,
     required MonitorStatus monitorStatus,
     required bool isTradingTime,
+    Set<String> pendingRefreshCodes = const <String>{},
+    bool isRefreshing = false,
   }) {
     final quoteByCode = {for (final quote in quotes) quote.code: quote};
-    final hasRefreshError = monitorStatus.lastMessage.startsWith('行情刷新失败：');
+    final hasRefreshError = !isRefreshing &&
+        monitorStatus.lastMessage.toLowerCase().contains('refresh failed');
     final items = <WatchlistDisplayItem>[];
 
     for (var index = 0; index < watchlist.length; index += 1) {
@@ -101,6 +104,8 @@ class WatchlistDisplayResolver {
             monitorStatus: monitorStatus,
             isTradingTime: isTradingTime,
             hasRefreshError: hasRefreshError,
+            isPendingRefresh: pendingRefreshCodes.contains(stock.code),
+            isRefreshing: isRefreshing,
           ),
           originalIndex: index,
         ),
@@ -147,24 +152,35 @@ class WatchlistDisplayResolver {
     required MonitorStatus monitorStatus,
     required bool isTradingTime,
     required bool hasRefreshError,
+    required bool isPendingRefresh,
+    required bool isRefreshing,
   }) {
-    if (hasRefreshError) {
-      return WatchlistItemStatus.refreshFailed;
-    }
     if (!stock.monitoringEnabled) {
       return WatchlistItemStatus.disabled;
     }
-    if (!monitorStatus.serviceEnabled) {
-      return WatchlistItemStatus.paused;
+    if (hasRefreshError) {
+      return WatchlistItemStatus.refreshFailed;
     }
-    if (!isTradingTime) {
-      return WatchlistItemStatus.offHours;
+    if (isPendingRefresh) {
+      return WatchlistItemStatus.waitingRefresh;
     }
     if (quote == null) {
+      if (!monitorStatus.serviceEnabled) {
+        return WatchlistItemStatus.paused;
+      }
+      if (!isTradingTime) {
+        return WatchlistItemStatus.offHours;
+      }
       return WatchlistItemStatus.waitingRefresh;
     }
     if (!quote.changePercent.isFinite) {
       return WatchlistItemStatus.dataAbnormal;
+    }
+    if (!monitorStatus.serviceEnabled && !isRefreshing) {
+      return WatchlistItemStatus.paused;
+    }
+    if (!isTradingTime && !isRefreshing) {
+      return WatchlistItemStatus.offHours;
     }
     return WatchlistItemStatus.monitoring;
   }

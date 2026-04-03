@@ -190,6 +190,9 @@ class NativeMonitorEngine {
             return state.copy(active = false) to null
         }
 
+        if (rule.stepMetric == "percent" && currentIndex == 0) {
+            return state.copy(lastStepIndex = currentIndex, active = false) to null
+        }
         val referenceValue = if (rule.stepMetric == "percent") current.previousClose else (rule.anchorPriceFor(current.code) ?: current.lastPrice)
         val previousIndex = state.lastStepIndex ?: currentIndex
         val crossedAmount = current.lastPrice - referenceValue
@@ -243,8 +246,8 @@ class NativeMonitorEngine {
         changeAmount: Double,
         changePercent: Double,
     ): String {
-        val direction = if (changeAmount >= 0) "上涨" else "下跌"
-        return "${current.name}(${current.code}) ${rule.lookbackMinutes} 分钟内$direction${formatAbsPercent(changePercent)}，变动 ${formatSignedPrice(changeAmount, current)}，现价 ${formatPrice(current.lastPrice, current)}。"
+        val direction = directionLabel(changeAmount)
+        return "${stockSubject(current)}触发短时波动提醒，${rule.lookbackMinutes}分钟内$direction${formatAbsPercent(changePercent)}，当前涨跌幅${formatPercent(current.changePercent)}。"
     }
 
     private fun buildStepAlertMessage(
@@ -256,11 +259,18 @@ class NativeMonitorEngine {
         crossedAmount: Double,
         crossedPercent: Double,
     ): String {
+        val stepValue = rule.stepValue ?: 0.0
         return if (rule.stepMetric == "percent") {
-            "${current.name}(${current.code}) 涨跌幅跨过 ${String.format(Locale.US, "%.2f", currentIndex * (rule.stepValue ?: 0.0))}% 台阶，本次累计波动 ${formatSignedPrice(crossedAmount, current)}，累计涨跌幅 ${formatPercent(crossedPercent)}，当前涨跌幅 ${formatPercent(current.changePercent)}，现价 ${formatPrice(current.lastPrice, current)}。"
+            val previousThreshold = previousIndex * stepValue
+            val currentThreshold = currentIndex * stepValue
+            val crossedLabel = if (previousIndex == 0) {
+                "涨跌幅达到${formatThresholdPercent(currentThreshold)}台阶，"
+            } else {
+                "涨跌幅从${formatThresholdPercent(previousThreshold)}台阶跨到${formatThresholdPercent(currentThreshold)}台阶，"
+            }
+            "${stockSubject(current)}???????${crossedLabel}?????${formatPercent(current.changePercent)}?"
         } else {
-            val stepValue = rule.stepValue ?: 0.0
-            "${current.name}(${current.code}) 价格从 ${formatPrice(referenceValue + previousIndex * stepValue, current)} 跨到 ${formatPrice(referenceValue + currentIndex * stepValue, current)} 台阶，本次累计波动 ${formatSignedPrice(crossedAmount, current)}，累计涨跌幅 ${formatPercent(crossedPercent)}，当前价格 ${formatPrice(current.lastPrice, current)}。"
+            "${stockSubject(current)}触发阶梯提醒，价格从${formatPrice(referenceValue + previousIndex * stepValue, current)}跨到${formatPrice(referenceValue + currentIndex * stepValue, current)}这一档，最新价${formatPrice(current.lastPrice, current)}。"
         }
     }
 
@@ -280,6 +290,24 @@ class NativeMonitorEngine {
 
     private fun formatAbsPercent(value: Double): String = "${String.format(Locale.US, "%.2f", abs(value))}%"
 
+    private fun formatThresholdPercent(value: Double): String = String.format(Locale.US, "%.2f", abs(value)) + "%"
+
+    private fun stockSubject(quote: NativeQuote): String {
+        val name = quote.name.trim()
+        return if (name.isNotEmpty() && !Regex("^[0-9]{6}$").matches(name)) {
+            name
+        } else {
+            quote.code.trim()
+        }
+    }
+
+    private fun directionLabel(value: Double): String {
+        return if (value >= 0.0) {
+            "上涨"
+        } else {
+            "下跌"
+        }
+    }
     private fun priceFractionDigits(quote: NativeQuote): Int {
         return quote.priceDecimalDigits
             ?: if (NativeSecurityPriceScale.divisorFor(quote.code, quote.securityTypeName) >= 1000.0) 3 else 2
@@ -319,7 +347,7 @@ class NativeMarketDataSource {
                 ?: scaledPrice(data, stock, "f18", priceDecimalDigits)
             return NativeQuote(
                 code = quoteCode,
-                name = data.optString("f58").orEmpty().ifBlank { stock.name },
+                name = preferredQuoteName(stock),
                 market = stock.market,
                 securityTypeName = stock.securityTypeName,
                 priceDecimalDigits = priceDecimalDigits,
@@ -371,6 +399,28 @@ class NativeMarketDataSource {
             is String -> value.toDoubleOrNull() ?: 0.0
             else -> 0.0
         }
+    }
+
+    private fun preferredQuoteName(stock: NativeStock): String {
+        val fallback = stock.name.trim()
+        if (isReadableStockName(fallback)) {
+            return fallback
+        }
+        return stock.code
+    }
+
+    private fun isReadableStockName(value: String): Boolean {
+        if (value.isBlank()) {
+            return false
+        }
+        if (Regex("^[0-9]{6}$").matches(value)) {
+            return false
+        }
+        val suspiciousFragments = listOf("脙", "脗", "鈧", "锟", "�")
+        if (suspiciousFragments.any { value.contains(it) }) {
+            return false
+        }
+        return true
     }
 
     private fun isExplicitDecimalValue(rawValue: Any?, plain: Double, priceDecimalDigits: Int): Boolean {

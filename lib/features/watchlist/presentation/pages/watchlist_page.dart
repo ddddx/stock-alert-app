@@ -20,6 +20,9 @@ class WatchlistPage extends StatefulWidget {
     required this.repository,
     required this.marketDataService,
     required this.quotes,
+    this.quotesByCode = const {},
+    this.pendingRefreshCodes = const <String>{},
+    this.isRefreshing = false,
     required this.monitorStatus,
     required this.onRefresh,
     required this.onSortOrderChanged,
@@ -28,6 +31,9 @@ class WatchlistPage extends StatefulWidget {
   final WatchlistRepository repository;
   final AshareMarketDataService marketDataService;
   final List<StockQuoteSnapshot> quotes;
+  final Map<String, StockQuoteSnapshot> quotesByCode;
+  final Set<String> pendingRefreshCodes;
+  final bool isRefreshing;
   final MonitorStatus monitorStatus;
   final Future<void> Function() onRefresh;
   final Future<void> Function(WatchlistSortOrder order) onSortOrderChanged;
@@ -44,11 +50,19 @@ class _WatchlistPageState extends State<WatchlistPage> {
   @override
   Widget build(BuildContext context) {
     final items = widget.repository.getAll();
+    final effectiveQuotes = widget.quotesByCode.isNotEmpty
+        ? items
+            .map((stock) => widget.quotesByCode[stock.code])
+            .whereType<StockQuoteSnapshot>()
+            .toList(growable: false)
+        : widget.quotes;
     final displayItems = _displayResolver.buildItems(
       watchlist: items,
-      quotes: widget.quotes,
+      quotes: effectiveQuotes,
       monitorStatus: widget.monitorStatus,
       isTradingTime: const AshareMarketHours().isTradingTime(DateTime.now()),
+      pendingRefreshCodes: widget.pendingRefreshCodes,
+      isRefreshing: widget.isRefreshing,
     );
 
     return RefreshIndicator(

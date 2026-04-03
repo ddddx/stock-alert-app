@@ -31,6 +31,8 @@ class StockTextSanitizer {
     String fallbackStockName = '',
   }) {
     var text = _normalize(rawText);
+    final normalizedCode = stockCode.trim();
+    final normalizedFallback = _normalize(fallbackStockName);
     final sanitizedName = sanitizeStockName(
       rawStockName,
       fallbackName: fallbackStockName,
@@ -46,6 +48,12 @@ class StockTextSanitizer {
         sanitizedName.isNotEmpty &&
         originalName != sanitizedName) {
       text = text.replaceAll(originalName, sanitizedName);
+    }
+
+    if (normalizedCode.isNotEmpty &&
+        isReadableStockName(normalizedFallback) &&
+        sanitizedName == normalizedCode) {
+      text = text.replaceAll(normalizedCode, normalizedFallback);
     }
 
     return text.trim().isEmpty ? sanitizedName : text;

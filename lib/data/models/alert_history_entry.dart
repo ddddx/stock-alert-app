@@ -1,5 +1,4 @@
 import 'alert_rule.dart';
-import '../../core/utils/stock_text_sanitizer.dart';
 
 class AlertHistoryEntry {
   const AlertHistoryEntry({
@@ -23,10 +22,7 @@ class AlertHistoryEntry {
 
   factory AlertHistoryEntry.fromJson(Map<String, dynamic> json) {
     final stockCode = json['stockCode'] as String? ?? '';
-    final stockName = StockTextSanitizer.sanitizeStockName(
-      json['stockName'] as String?,
-      stockCode: stockCode,
-    );
+    final stockName = (json['stockName'] as String? ?? '').trim();
     return AlertHistoryEntry(
       id: json['id'] as String? ?? '',
       ruleId: json['ruleId'] as String? ?? '',
@@ -44,18 +40,8 @@ class AlertHistoryEntry {
       referencePrice: (json['referencePrice'] as num?)?.toDouble() ?? 0,
       changeAmount: (json['changeAmount'] as num?)?.toDouble() ?? 0,
       changePercent: (json['changePercent'] as num?)?.toDouble() ?? 0,
-      message: StockTextSanitizer.sanitizeReadableText(
-        json['message'] as String? ?? '',
-        stockCode: stockCode,
-        rawStockName: json['stockName'] as String? ?? '',
-        fallbackStockName: stockName,
-      ),
-      spokenText: StockTextSanitizer.sanitizeReadableText(
-        json['spokenText'] as String? ?? '',
-        stockCode: stockCode,
-        rawStockName: json['stockName'] as String? ?? '',
-        fallbackStockName: stockName,
-      ),
+      message: (json['message'] as String? ?? '').trim(),
+      spokenText: (json['spokenText'] as String? ?? '').trim(),
       playedSound: json['playedSound'] as bool? ?? false,
     );
   }
@@ -83,10 +69,7 @@ class AlertHistoryEntry {
       'ruleId': ruleId,
       'ruleType': ruleType.name,
       'stockCode': stockCode,
-      'stockName': StockTextSanitizer.sanitizeStockName(
-        stockName,
-        stockCode: stockCode,
-      ),
+      'stockName': stockName,
       'market': market,
       'securityTypeName': securityTypeName,
       'priceDecimalDigits': priceDecimalDigits,
@@ -95,16 +78,8 @@ class AlertHistoryEntry {
       'referencePrice': referencePrice,
       'changeAmount': changeAmount,
       'changePercent': changePercent,
-      'message': StockTextSanitizer.sanitizeReadableText(
-        message,
-        stockCode: stockCode,
-        rawStockName: stockName,
-      ),
-      'spokenText': StockTextSanitizer.sanitizeReadableText(
-        spokenText,
-        stockCode: stockCode,
-        rawStockName: stockName,
-      ),
+      'message': message,
+      'spokenText': spokenText,
       'playedSound': playedSound,
     };
   }
