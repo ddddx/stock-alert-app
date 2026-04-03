@@ -63,9 +63,30 @@ void main() {
     expect(text, contains('贵州茅台'));
     expect(text, isNot(contains('600519')));
     expect(text, contains('阶梯提醒'));
-    expect(text, contains('越过2.00%台阶'));
+    expect(text, contains('从1.50%台阶跨到2.00%台阶'));
     expect(text, contains('当前涨跌幅+2.30%'));
     expect(text, isNot(contains('最新价')));
+  });
+
+  test('percent step message avoids zero threshold phrasing', () {
+    final text = builder.buildStepAlertMessage(
+      rule: AlertRule.stepAlert(
+        id: 'rule-4',
+        stepValue: 0.5,
+        stepMetric: StepMetric.percent,
+        enabled: true,
+        createdAt: DateTime(2026, 3, 29),
+      ),
+      current: quote,
+      previousIndex: 0,
+      currentIndex: 1,
+      referenceValue: 1650,
+      crossedAmount: 8.25,
+      crossedPercent: 0.50,
+    );
+
+    expect(text, isNot(contains('0.00%')));
+    expect(text, contains('达到0.50%台阶'));
   });
 
   test('price step message only announces price movement', () {

@@ -229,6 +229,12 @@ class AlertRuleEngine {
       return _EvaluationOutcome(state: state.copyWith(active: false));
     }
 
+    if (rule.stepMetric == StepMetric.percent && currentIndex == 0) {
+      return _EvaluationOutcome(
+        state: state.copyWith(lastStepIndex: currentIndex, active: false),
+      );
+    }
+
     final referenceValue = rule.stepMetric == StepMetric.percent
         ? current.previousClose
         : (rule.anchorPriceFor(current.code) ?? current.lastPrice);

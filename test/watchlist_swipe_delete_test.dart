@@ -214,6 +214,14 @@ class _FakeWatchlistRepository implements WatchlistRepository {
 
 class _FakeMarketDataService extends AshareMarketDataService {
   @override
+  Future<List<StockQuoteSnapshot>> fetchQuotesProgressively(
+    List<StockIdentity> stocks, {
+    void Function(StockQuoteSnapshot quote)? onQuoteReceived,
+  }) async {
+    return const [];
+  }
+
+  @override
   Future<List<StockSearchResult>> searchStocks(String keyword) async {
     return const [];
   }

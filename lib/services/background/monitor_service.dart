@@ -29,7 +29,10 @@ class MonitorRunResult {
 
 abstract class MonitorService {
   Future<void> prepare();
-  Future<MonitorRunResult> refreshWatchlist({bool forceFetch = false});
+  Future<MonitorRunResult> refreshWatchlist({
+    bool forceFetch = false,
+    void Function(List<StockQuoteSnapshot> quotes)? onQuotesUpdated,
+  });
   Future<void> start();
   Future<void> stop();
   Future<void> reload();
@@ -104,7 +107,10 @@ class AshareMonitorService implements MonitorService {
   }
 
   @override
-  Future<MonitorRunResult> refreshWatchlist({bool forceFetch = false}) async {
+  Future<MonitorRunResult> refreshWatchlist({
+    bool forceFetch = false,
+    void Function(List<StockQuoteSnapshot> quotes)? onQuotesUpdated,
+  }) async {
     final checkedAt = _now();
     final watchlist = _watchlistRepository.getAll();
     if (watchlist.isEmpty) {
@@ -160,11 +166,24 @@ class AshareMonitorService implements MonitorService {
     }
 
     try {
-      final quotes = await _marketDataService.fetchQuotes(
+      final latestByCode = {
+        for (final quote in _latestQuotes) quote.code: quote,
+      };
+      final progressiveQuotes =
+          await _marketDataService.fetchQuotesProgressively(
         monitoredWatchlist,
-        preferSingleQuoteRetrieval: true,
+        onQuoteReceived: (quote) {
+          latestByCode[quote.code] = quote;
+          _latestQuotes = monitoredWatchlist
+              .map((stock) => latestByCode[stock.code])
+              .whereType<StockQuoteSnapshot>()
+              .toList(growable: false);
+          onQuotesUpdated?.call(latestQuotes);
+        },
       );
+      final quotes = progressiveQuotes;
       _latestQuotes = quotes;
+      onQuotesUpdated?.call(latestQuotes);
       final triggers = _ruleEngine.processQuotes(
         rules: _alertRepository.getEnabledRules(),
         quotes: quotes,

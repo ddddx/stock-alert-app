@@ -87,8 +87,11 @@ class WatchlistDisplayResolver {
     bool isRefreshing = false,
   }) {
     final quoteByCode = {for (final quote in quotes) quote.code: quote};
+    final normalizedMessage = monitorStatus.lastMessage.toLowerCase();
+    const refreshFailureMarker = '\u884c\u60c5\u5237\u65b0\u5931\u8d25';
     final hasRefreshError = !isRefreshing &&
-        monitorStatus.lastMessage.toLowerCase().contains('refresh failed');
+        (normalizedMessage.contains('refresh failed') ||
+            monitorStatus.lastMessage.contains(refreshFailureMarker));
     final items = <WatchlistDisplayItem>[];
 
     for (var index = 0; index < watchlist.length; index += 1) {

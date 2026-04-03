@@ -37,8 +37,13 @@ class AlertMessageBuilder {
   }) {
     final stepValue = rule.stepValue ?? 0;
     if (rule.stepMetric == StepMetric.percent) {
+      final previousThreshold = previousIndex * stepValue;
+      final currentThreshold = currentIndex * stepValue;
+      final crossedLabel = previousIndex == 0
+          ? '涨跌幅达到${currentThreshold.abs().toStringAsFixed(2)}%台阶，'
+          : '涨跌幅从${previousThreshold.abs().toStringAsFixed(2)}%台阶跨到${currentThreshold.abs().toStringAsFixed(2)}%台阶，';
       return '${_stockSubject(current)}触发阶梯提醒，'
-          '涨跌幅已越过${(currentIndex * stepValue).toStringAsFixed(2)}%台阶，'
+          '$crossedLabel'
           '当前涨跌幅${Formatters.percent(current.changePercent)}。';
     }
 

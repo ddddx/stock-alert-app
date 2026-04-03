@@ -40,8 +40,8 @@ void main() {
     await repository.initialize();
 
     final entry = repository.getAll().single;
-    expect(entry.stockName, '600519');
-    expect(entry.message, contains('600519'));
-    expect(entry.spokenText, contains('600519'));
+    expect(entry.stockName, unreadableName);
+    expect(entry.message, contains(unreadableName));
+    expect(entry.spokenText, contains(unreadableName));
   });
 }

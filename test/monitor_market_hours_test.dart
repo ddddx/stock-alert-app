@@ -224,15 +224,11 @@ class _RecordingMarketDataService extends AshareMarketDataService {
   int fetchQuotesCalls = 0;
   List<String> lastRequestedCodes = const [];
 
-  @override
-  Future<List<StockQuoteSnapshot>> fetchQuotes(List<StockIdentity> watchlist,
-      {bool preferSingleQuoteRetrieval = false}) async {
-    fetchQuotesCalls += 1;
-    lastRequestedCodes = watchlist.map((item) => item.code).toList();
+  List<StockQuoteSnapshot> _fakeQuotes() {
     return [
       StockQuoteSnapshot(
         code: '600519',
-        name: '贵州茅台',
+        name: '璐靛窞鑼呭彴',
         market: 'SH',
         lastPrice: 1500,
         previousClose: 1490,
@@ -245,6 +241,30 @@ class _RecordingMarketDataService extends AshareMarketDataService {
         timestamp: DateTime(2026, 3, 23, 10, 0),
       ),
     ];
+  }
+
+  @override
+  Future<List<StockQuoteSnapshot>> fetchQuotesProgressively(
+    List<StockIdentity> watchlist, {
+    void Function(StockQuoteSnapshot quote)? onQuoteReceived,
+    bool preferSingleQuoteRetrieval = false,
+  }) async {
+    fetchQuotesCalls += 1;
+    lastRequestedCodes = watchlist.map((item) => item.code).toList();
+    final quotes = _fakeQuotes();
+    for (final quote in quotes) {
+      onQuoteReceived?.call(quote);
+    }
+    return quotes;
+  }
+
+  @override
+  Future<List<StockQuoteSnapshot>> fetchQuotes(List<StockIdentity> watchlist,
+      {bool preferSingleQuoteRetrieval = false}) async {
+    return fetchQuotesProgressively(
+      watchlist,
+      preferSingleQuoteRetrieval: preferSingleQuoteRetrieval,
+    );
   }
 }
 

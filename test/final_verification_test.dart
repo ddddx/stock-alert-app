@@ -373,7 +373,8 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.enterText(endpointField, 'https://dav.example.com/backup.json');
+    await tester.enterText(
+        endpointField, 'https://dav.example.com/backup.json');
     await tester.enterText(usernameField, 'alice');
 
     await tester.tap(exportButton.first);
@@ -521,6 +522,14 @@ class _FakeMarketDataService extends AshareMarketDataService {
   final List<String> searchCalls = [];
 
   @override
+  Future<List<StockQuoteSnapshot>> fetchQuotesProgressively(
+    List<StockIdentity> stocks, {
+    void Function(StockQuoteSnapshot quote)? onQuoteReceived,
+  }) async {
+    return const [];
+  }
+
+  @override
   Future<List<StockSearchResult>> searchStocks(String keyword) async {
     searchCalls.add(keyword);
     return const [
@@ -640,7 +649,10 @@ class _FakeMonitorService implements MonitorService {
   Future<void> prepare() async {}
 
   @override
-  Future<MonitorRunResult> refreshWatchlist({bool forceFetch = false}) {
+  Future<MonitorRunResult> refreshWatchlist({
+    bool forceFetch = false,
+    void Function(List<StockQuoteSnapshot> quotes)? onQuotesUpdated,
+  }) {
     throw UnimplementedError();
   }
 
