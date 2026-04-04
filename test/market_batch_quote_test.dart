@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -545,6 +546,105 @@ void main() {
     expect(
       uris.where((uri) => uri.toString().contains('qt.gtimg.cn')),
       hasLength(4),
+    );
+  });
+
+  test(
+      'fetchQuotesProgressively starts multiple single-quote requests concurrently and preserves watchlist order',
+      () async {
+    final pendingResponses = <String, Completer<dynamic>>{};
+    final requestedSecIds = <String>[];
+    final receivedCodes = <String>[];
+    final service = AshareMarketDataService(
+      jsonLoader: (uri) {
+        expect(uri.toString(), contains('qt/stock/get'));
+        final secId = uri.queryParameters['secid'];
+        expect(secId, isNotNull);
+        requestedSecIds.add(secId!);
+        final completer = Completer<dynamic>();
+        pendingResponses[secId] = completer;
+        return completer.future;
+      },
+    );
+
+    final quotesFuture = service.fetchQuotesProgressively(
+      const [
+        StockIdentity(code: '600519', name: 'Moutai', market: 'SH'),
+        StockIdentity(code: '000001', name: 'Ping An Bank', market: 'SZ'),
+        StockIdentity(code: '300750', name: 'CATL', market: 'SZ'),
+      ],
+      onQuoteReceived: (quote) {
+        receivedCodes.add(quote.code);
+      },
+    );
+
+    await Future<void>.delayed(Duration.zero);
+
+    expect(requestedSecIds.toSet(), {
+      '1.600519',
+      '0.000001',
+      '0.300750',
+    });
+
+    pendingResponses['0.000001']!.complete({
+      'data': {
+        'f57': '000001',
+        'f58': 'Ping An Bank',
+        'f59': 2,
+        'f43': 1020,
+        'f169': 20,
+        'f170': 200,
+        'f46': 1000,
+        'f44': 1020,
+        'f45': 990,
+        'f47': 2000,
+        'f60': 1000,
+        'f18': 1000,
+      },
+    });
+    await Future<void>.delayed(Duration.zero);
+
+    pendingResponses['1.600519']!.complete({
+      'data': {
+        'f57': '600519',
+        'f58': 'Moutai',
+        'f59': 2,
+        'f43': 150000,
+        'f169': 1000,
+        'f170': 67,
+        'f46': 149200,
+        'f44': 150000,
+        'f45': 149000,
+        'f47': 1000,
+        'f60': 149000,
+        'f18': 149000,
+      },
+    });
+    await Future<void>.delayed(Duration.zero);
+
+    pendingResponses['0.300750']!.complete({
+      'data': {
+        'f57': '300750',
+        'f58': 'CATL',
+        'f59': 2,
+        'f43': 20100,
+        'f169': 100,
+        'f170': 50,
+        'f46': 20000,
+        'f44': 20200,
+        'f45': 19900,
+        'f47': 3000,
+        'f60': 20000,
+        'f18': 20000,
+      },
+    });
+
+    final quotes = await quotesFuture;
+
+    expect(receivedCodes, ['000001', '600519', '300750']);
+    expect(
+      quotes.map((quote) => quote.code).toList(),
+      ['600519', '000001', '300750'],
     );
   });
 }

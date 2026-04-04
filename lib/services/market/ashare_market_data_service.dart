@@ -27,6 +27,7 @@ class AshareMarketDataService {
   ];
   static const _singleQuoteTimeout = Duration(seconds: 5);
   static const _batchQuoteTimeout = Duration(seconds: 6);
+  static const _progressiveQuoteConcurrency = 4;
   static const _tencentQuoteLayouts = [
     _TencentQuoteLayout(
       changeAmountIndex: 31,
@@ -189,17 +190,38 @@ class AshareMarketDataService {
     }
 
     final quotesByCode = <String, StockQuoteSnapshot>{};
-    _SingleQuoteOutcome? lastSingleFailure;
-    for (final stock in stocks) {
-      final outcome = await _fetchSingleQuoteOutcome(stock);
-      final quote = outcome.quote;
-      if (quote != null) {
-        quotesByCode[quote.code] = quote;
-        onQuoteReceived?.call(quote);
-      } else {
-        lastSingleFailure = outcome;
+    final failedOutcomes = <_SingleQuoteOutcome>[];
+    var nextStockIndex = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final currentStockIndex = nextStockIndex;
+        if (currentStockIndex >= stocks.length) {
+          return;
+        }
+        nextStockIndex += 1;
+
+        final outcome =
+            await _fetchSingleQuoteOutcome(stocks[currentStockIndex]);
+        final quote = outcome.quote;
+        if (quote != null) {
+          quotesByCode[quote.code] = quote;
+          onQuoteReceived?.call(quote);
+          continue;
+        }
+        failedOutcomes.add(outcome);
       }
     }
+
+    await Future.wait(
+      List.generate(
+        math.min(_progressiveQuoteConcurrency, stocks.length),
+        (_) => worker(),
+      ),
+    );
+
+    final lastSingleFailure =
+        failedOutcomes.isEmpty ? null : failedOutcomes.last;
 
     if (quotesByCode.isEmpty && lastSingleFailure != null) {
       final failure = lastSingleFailure;

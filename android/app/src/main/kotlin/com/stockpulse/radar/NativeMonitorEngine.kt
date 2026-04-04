@@ -4,6 +4,8 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -315,8 +317,36 @@ class NativeMonitorEngine {
 }
 
 class NativeMarketDataSource {
+    companion object {
+        private const val maxConcurrentQuoteFetches = 4
+    }
+
     fun fetchQuotes(stocks: List<NativeStock>): List<NativeQuote> {
-        return stocks.map { fetchSingleQuote(it) }
+        if (stocks.isEmpty()) {
+            return emptyList()
+        }
+
+        val executor = Executors.newFixedThreadPool(minOf(stocks.size, maxConcurrentQuoteFetches))
+        val futures = stocks.map { stock ->
+            executor.submit<NativeQuote> { fetchSingleQuote(stock) }
+        }
+
+        return try {
+            futures.map { future -> future.get() }
+        } catch (error: InterruptedException) {
+            futures.forEach { it.cancel(true) }
+            Thread.currentThread().interrupt()
+            throw IllegalStateException("行情刷新被中断", error)
+        } catch (error: ExecutionException) {
+            futures.forEach { it.cancel(true) }
+            val cause = error.cause
+            when (cause) {
+                is Exception -> throw cause
+                else -> throw IllegalStateException("行情刷新失败", cause ?: error)
+            }
+        } finally {
+            executor.shutdownNow()
+        }
     }
 
     private fun fetchSingleQuote(stock: NativeStock): NativeQuote {
