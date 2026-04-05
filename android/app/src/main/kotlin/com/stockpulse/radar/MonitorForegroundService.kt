@@ -29,6 +29,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     private var ttsReady = false
     private var ttsInitCompleted = false
     private var lastSummary: String = defaultSummary()
+    private var pollingPaused = false
 
     private val pollRunnable = object : Runnable {
         override fun run() {
@@ -59,6 +60,18 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 }
 
                 ACTION_RELOAD_MONITOR -> {
+                    startAsForeground(loadBootSummary())
+                    ensureMonitoringActive(triggerImmediateRefresh = false)
+                }
+
+                ACTION_PAUSE_MONITOR -> {
+                    pollingPaused = true
+                    handler.removeCallbacks(pollRunnable)
+                    updateSummary(this, buildPausedSummary())
+                }
+
+                ACTION_RESUME_MONITOR -> {
+                    pollingPaused = false
                     startAsForeground(loadBootSummary())
                     ensureMonitoringActive(triggerImmediateRefresh = false)
                 }
@@ -138,6 +151,10 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
             stopSelf()
             return
         }
+        if (pollingPaused) {
+            updateSummary(this, buildPausedSummary())
+            return
+        }
         if (triggerImmediateRefresh) {
             triggerRefresh(reschedule = true)
         } else {
@@ -147,6 +164,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
 
     private fun stopMonitoring() {
         handler.removeCallbacks(pollRunnable)
+        pollingPaused = false
         MonitorStorage.updateStatus(
             context = this,
             checkedAtMillis = System.currentTimeMillis(),
@@ -156,6 +174,10 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun triggerRefresh(reschedule: Boolean) {
+        if (pollingPaused) {
+            updateSummary(this, buildPausedSummary())
+            return
+        }
         val checkedAtMillis = System.currentTimeMillis()
         val marketSession = AshareMarketSchedule.currentSession(checkedAtMillis)
         if (!marketSession.isTradingOpen) {
@@ -229,7 +251,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 Log.e(TAG, "Monitor refresh failed unexpectedly", error)
                 val settings = loadSettings()
                 val summary =
-                    "Refresh failed: ${error.message ?: error.javaClass.simpleName}"
+                    "后台监控刷新失败：${error.message ?: error.javaClass.simpleName}"
                 MonitorStorage.updateStatus(this, checkedAtMillis, summary)
                 handler.post {
                     updateSummary(this, summary)
@@ -245,6 +267,10 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
 
     private fun scheduleNextPoll(intervalSeconds: Int, updateClosedSummary: Boolean = false) {
         handler.removeCallbacks(pollRunnable)
+        if (pollingPaused) {
+            updateSummary(this, buildPausedSummary())
+            return
+        }
         val nowMillis = System.currentTimeMillis()
         val marketSession = AshareMarketSchedule.currentSession(nowMillis)
         if (!marketSession.isTradingOpen) {
@@ -384,6 +410,8 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         const val ACTION_START_MONITOR = "com.stockpulse.radar.action.START_MONITOR"
         const val ACTION_REFRESH_NOW = "com.stockpulse.radar.action.REFRESH_NOW"
         const val ACTION_RELOAD_MONITOR = "com.stockpulse.radar.action.RELOAD_MONITOR"
+        const val ACTION_PAUSE_MONITOR = "com.stockpulse.radar.action.PAUSE_MONITOR"
+        const val ACTION_RESUME_MONITOR = "com.stockpulse.radar.action.RESUME_MONITOR"
         const val ACTION_STOP_MONITOR = "com.stockpulse.radar.action.STOP_MONITOR"
 
         fun updateSummary(context: Context, summary: String) {
@@ -442,6 +470,8 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         }
 
         private fun defaultSummary(): String = "等待下一次行情刷新。"
+
+        private fun buildPausedSummary(): String = "应用当前在前台，后台轮询已暂停。"
 
         private fun summaryArgument(): String = "summary"
     }

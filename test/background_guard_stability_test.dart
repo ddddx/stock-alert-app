@@ -116,7 +116,9 @@ class _RecordingMonitorService implements MonitorService {
   }
 
   @override
-  Future<void> requestBackgroundRefresh() async {}
+  Future<void> requestBackgroundRefresh() async {
+    throw UnimplementedError();
+  }
 
   @override
   Future<void> start() async {}

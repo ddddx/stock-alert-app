@@ -168,6 +168,39 @@ void main() {
     expect(repository.getAll(), isEmpty);
     expect(find.textContaining('当前还没有自选股'), findsOneWidget);
   });
+
+  testWidgets('watchlist monitoring toggle updates repository state', (
+    tester,
+  ) async {
+    final repository = _FakeWatchlistRepository(
+      items: const [
+        StockIdentity(code: '600519', name: 'Alpha', market: 'SH'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      buildTestApp(
+        WatchlistPage(
+          repository: repository,
+          marketDataService: _FakeMarketDataService(),
+          quotes: const [],
+          monitorStatus: _monitoringStatus,
+          onRefresh: () async {},
+          onSortOrderChanged: (_) async {},
+        ),
+      ),
+    );
+
+    final toggle = find.byKey(const Key('watchlist-monitor-toggle-600519'));
+    expect(toggle, findsOneWidget);
+    expect(repository.getAll().single.monitoringEnabled, isTrue);
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(repository.getAll().single.monitoringEnabled, isFalse);
+    expect(find.text('未监控'), findsOneWidget);
+  });
 }
 
 class _FakeWatchlistRepository implements WatchlistRepository {

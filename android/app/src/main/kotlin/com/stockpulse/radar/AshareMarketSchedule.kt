@@ -48,7 +48,7 @@ object AshareMarketSchedule {
         val next = Calendar.getInstance(chinaTimeZone).apply {
             timeInMillis = session.nextOpenAtMillis
         }
-        return "Outside A-share trading hours. Background monitoring paused until ${formatSessionLabel(next)}."
+        return "当前不在 A 股交易时段，后台监控已暂停，将于${formatSessionLabel(next)}恢复。"
     }
 
     private fun nextOpenAt(reference: Calendar): Calendar {
@@ -98,13 +98,13 @@ object AshareMarketSchedule {
 
     private fun formatSessionLabel(calendar: Calendar): String {
         val weekday = when (calendar.get(Calendar.DAY_OF_WEEK)) {
-            Calendar.MONDAY -> "Mon"
-            Calendar.TUESDAY -> "Tue"
-            Calendar.WEDNESDAY -> "Wed"
-            Calendar.THURSDAY -> "Thu"
-            Calendar.FRIDAY -> "Fri"
-            Calendar.SATURDAY -> "Sat"
-            Calendar.SUNDAY -> "Sun"
+            Calendar.MONDAY -> "周一"
+            Calendar.TUESDAY -> "周二"
+            Calendar.WEDNESDAY -> "周三"
+            Calendar.THURSDAY -> "周四"
+            Calendar.FRIDAY -> "周五"
+            Calendar.SATURDAY -> "周六"
+            Calendar.SUNDAY -> "周日"
             else -> ""
         }
         val month = calendar.get(Calendar.MONTH) + 1

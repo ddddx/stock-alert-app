@@ -50,8 +50,18 @@ class NativeMonitorEngine {
             )
         }
 
+        val monitoredWatchlist = watchlist.filter { it.monitoringEnabled }
+        if (monitoredWatchlist.isEmpty()) {
+            return NativeRefreshResult(
+                quotes = emptyList(),
+                triggers = emptyList(),
+                summary = "自选中暂无开启监控的股票，未执行行情刷新。",
+                checkedAtMillis = nowMillis,
+            )
+        }
+
         return try {
-            val quotes = marketDataSource.fetchQuotes(watchlist)
+            val quotes = marketDataSource.fetchQuotes(monitoredWatchlist)
             quotes.forEach { appendHistory(runtimeState, it) }
             val triggers = evaluateRules(rules, quotes, runtimeState, nowMillis)
             val summary = if (triggers.isEmpty()) {
@@ -270,7 +280,7 @@ class NativeMonitorEngine {
             } else {
                 "涨跌幅从${formatThresholdPercent(previousThreshold)}台阶跨到${formatThresholdPercent(currentThreshold)}台阶，"
             }
-            "${stockSubject(current)}???????${crossedLabel}?????${formatPercent(current.changePercent)}?"
+            "${stockSubject(current)}触发阶梯提醒，${crossedLabel}当前涨跌幅${formatPercent(current.changePercent)}。"
         } else {
             "${stockSubject(current)}触发阶梯提醒，价格从${formatPrice(referenceValue + previousIndex * stepValue, current)}跨到${formatPrice(referenceValue + currentIndex * stepValue, current)}这一档，最新价${formatPrice(current.lastPrice, current)}。"
         }

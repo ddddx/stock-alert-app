@@ -21,6 +21,7 @@ data class NativeStock(
     val name: String,
     val market: String,
     val securityTypeName: String = "",
+    val monitoringEnabled: Boolean = true,
 ) {
     val secId: String
         get() = "${if (market == "SH") "1" else "0"}.$code"
@@ -310,6 +311,7 @@ object MonitorStorage {
                 name = item.optString("name").orEmpty().trim(),
                 market = item.optString("market", "SZ").orEmpty().trim().ifBlank { "SZ" },
                 securityTypeName = item.optString("securityTypeName").orEmpty().trim(),
+                monitoringEnabled = item.optBoolean("monitoringEnabled", true),
             )
         }
         return stocks
@@ -568,6 +570,7 @@ object MonitorStorage {
                 name = item.optString("name").orEmpty().trim(),
                 market = item.optString("market", "SZ").orEmpty().trim().ifBlank { "SZ" },
                 securityTypeName = item.optString("securityTypeName").orEmpty().trim(),
+                monitoringEnabled = item.optBoolean("monitoringEnabled", true),
             )
         }
         return stocks.distinctBy { it.code }

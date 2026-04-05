@@ -142,6 +142,32 @@ class PlatformBridgeService {
     }
   }
 
+  Future<bool> pauseForegroundMonitorService() async {
+    if (!Platform.isAndroid) {
+      return true;
+    }
+    try {
+      return await _channel
+              .invokeMethod<bool>('pauseForegroundMonitorService') ??
+          false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  Future<bool> resumeForegroundMonitorService() async {
+    if (!Platform.isAndroid) {
+      return true;
+    }
+    try {
+      return await _channel
+              .invokeMethod<bool>('resumeForegroundMonitorService') ??
+          false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   Future<bool> stopForegroundMonitorService() async {
     if (!Platform.isAndroid) {
       return true;
@@ -155,7 +181,8 @@ class PlatformBridgeService {
     }
   }
 
-  Future<AndroidBackgroundAccessStatus> getAndroidBackgroundAccessStatus() async {
+  Future<AndroidBackgroundAccessStatus>
+      getAndroidBackgroundAccessStatus() async {
     if (!Platform.isAndroid) {
       return AndroidBackgroundAccessStatus.notAndroid();
     }
@@ -174,7 +201,8 @@ class PlatformBridgeService {
       return true;
     }
     try {
-      return await _channel.invokeMethod<bool>('requestNotificationPermission') ??
+      return await _channel
+              .invokeMethod<bool>('requestNotificationPermission') ??
           false;
     } on PlatformException {
       return false;

@@ -373,8 +373,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     onPressed: () async {
                       await widget.onRefresh();
                       if (status.serviceEnabled) {
-                        await widget.monitorService.requestBackgroundRefresh();
-                        _showFeedback('已发起一次前台 + 后台联动刷新。');
+                        _showFeedback('已执行一次前台刷新；后台轮询会在应用退到后台后自动恢复。');
                       } else {
                         _showFeedback('已执行一次前台刷新；如需持续后台轮询，请先开启后台监控。');
                       }

@@ -72,7 +72,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
         children: [
           SectionCard(
             title: '自选股',
-            subtitle: '支持按代码、名称或拼音搜索。向左滑动个股可显示删除按钮。',
+            subtitle: '支持按代码、名称或拼音搜索。可逐只开关监控，向左滑动个股可显示删除按钮。',
             trailing: Wrap(
               spacing: 8,
               children: [
@@ -117,6 +117,18 @@ class _WatchlistPageState extends State<WatchlistPage> {
                           stock: item.stock,
                           quote: item.quote,
                           status: item.status,
+                          onToggleMonitoring: (enabled) async {
+                            await widget.repository.updateMonitoringEnabled(
+                              item.stock.code,
+                              enabled,
+                            );
+                            if (enabled) {
+                              await widget.onRefresh();
+                            }
+                            if (mounted) {
+                              setState(() {});
+                            }
+                          },
                           onRemove: () async {
                             await widget.repository.remove(item.stock.code);
                             if (mounted) {
@@ -212,12 +224,14 @@ class _WatchlistTile extends StatefulWidget {
     required this.stock,
     required this.quote,
     required this.status,
+    required this.onToggleMonitoring,
     required this.onRemove,
   });
 
   final StockIdentity stock;
   final StockQuoteSnapshot? quote;
   final WatchlistItemStatus status;
+  final Future<void> Function(bool enabled) onToggleMonitoring;
   final Future<void> Function() onRemove;
 
   @override
@@ -249,7 +263,7 @@ class _WatchlistTileState extends State<_WatchlistTile> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: SizedBox(
-        height: 132,
+        height: 156,
         child: Stack(
           children: [
             Positioned.fill(
@@ -351,6 +365,26 @@ class _WatchlistTileState extends State<_WatchlistTile> {
                                         fontWeight: FontWeight.w600,
                                       ),
                                 ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Text(
+                                    '后台监控',
+                                    style:
+                                        Theme.of(context).textTheme.labelMedium,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Switch.adaptive(
+                                    key: Key(
+                                      'watchlist-monitor-toggle-${widget.stock.code}',
+                                    ),
+                                    value: widget.stock.monitoringEnabled,
+                                    onChanged: (value) async {
+                                      await widget.onToggleMonitoring(value);
+                                    },
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 6),
                               Text(
