@@ -270,7 +270,8 @@ void main() {
     expect(find.textContaining('已执行一次前台刷新'), findsWidgets);
   });
 
-  testWidgets('manual refresh stays foreground-only when guard is on', (
+  testWidgets('manual refresh keeps background polling active when guard is on',
+      (
     tester,
   ) async {
     final settingsRepository = _FakeSettingsRepository();
@@ -301,7 +302,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(monitorService.backgroundRefreshCalls, 0);
-    expect(find.textContaining('后台轮询会在应用退到后台后自动恢复'), findsWidgets);
+    expect(find.textContaining('后台轮询仍会按既定间隔持续运行'), findsWidgets);
   });
 
   testWidgets('poll preset updates interval and current summary together', (

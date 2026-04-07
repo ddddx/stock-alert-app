@@ -109,7 +109,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final previousState = _lifecycleState;
     _lifecycleState = state;
     if (_bootstrapping) {
       return;
@@ -117,9 +116,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.resumed:
         _syncForegroundRefreshTimer();
-        if (previousState != AppLifecycleState.resumed) {
-          unawaited(_pauseBackgroundMonitorWhileForegroundVisible());
-        }
         unawaited(_handleResume());
         break;
       case AppLifecycleState.inactive:
@@ -127,9 +123,6 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
         _foregroundRefreshTimer?.cancel();
-        if (previousState == AppLifecycleState.resumed) {
-          unawaited(_resumeBackgroundMonitorAfterForegroundExit());
-        }
         break;
     }
   }
@@ -503,23 +496,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       setState(() {});
     }
     final status = _settingsRepository.getStatus();
-    await _refreshQuotes(forceFetch: !status.serviceEnabled);
-  }
-
-  Future<void> _pauseBackgroundMonitorWhileForegroundVisible() async {
-    final status = _settingsRepository.getStatus();
-    if (!status.serviceEnabled) {
+    if (status.serviceEnabled) {
       return;
     }
-    await _platformBridgeService.pauseForegroundMonitorService();
-  }
-
-  Future<void> _resumeBackgroundMonitorAfterForegroundExit() async {
-    final status = _settingsRepository.getStatus();
-    if (!status.serviceEnabled) {
-      return;
-    }
-    await _platformBridgeService.resumeForegroundMonitorService();
+    await _refreshQuotes(forceFetch: true);
   }
 
   void _markDirty() {

@@ -71,25 +71,6 @@ class MainActivity : FlutterActivity() {
                         result.success(started)
                     }
 
-                    pauseForegroundServiceMethod() -> {
-                        val started = MonitorServiceLauncher.startMonitorService(
-                            context = this,
-                            action = MonitorForegroundService.ACTION_PAUSE_MONITOR,
-                            disableOnFailure = false,
-                        )
-                        result.success(started)
-                    }
-
-                    resumeForegroundServiceMethod() -> {
-                        val started = MonitorServiceLauncher.startMonitorService(
-                            context = this,
-                            action = MonitorForegroundService.ACTION_RESUME_MONITOR,
-                            disableOnFailure = true,
-                            failurePrefix = "后台监控恢复失败",
-                        )
-                        result.success(started)
-                    }
-
                     stopForegroundServiceMethod() -> {
                         result.success(MonitorServiceLauncher.stopMonitorService(this))
                     }
@@ -230,10 +211,6 @@ class MainActivity : FlutterActivity() {
     private fun reloadForegroundServiceMethod(): String = "reloadForegroundMonitorService"
 
     private fun refreshForegroundServiceMethod(): String = "refreshForegroundMonitorService"
-
-    private fun pauseForegroundServiceMethod(): String = "pauseForegroundMonitorService"
-
-    private fun resumeForegroundServiceMethod(): String = "resumeForegroundMonitorService"
 
     private fun stopForegroundServiceMethod(): String = "stopForegroundMonitorService"
 
