@@ -1,7 +1,9 @@
 package com.stockpulse.radar
 
+import java.io.IOException
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.util.Locale
 import java.util.concurrent.ExecutionException
@@ -61,10 +63,15 @@ class NativeMonitorEngine {
         }
 
         return try {
-            val quotes = marketDataSource.fetchQuotes(monitoredWatchlist)
+            val quoteResult = marketDataSource.fetchQuotes(monitoredWatchlist)
+            val quotes = quoteResult.quotes
             quotes.forEach { appendHistory(runtimeState, it) }
             val triggers = evaluateRules(rules, quotes, runtimeState, nowMillis)
-            val summary = if (triggers.isEmpty()) {
+            val summary = if (quoteResult.failedCount > 0 && triggers.isEmpty()) {
+                "已刷新 ${quotes.size} 只 A 股，另有 ${quoteResult.failedCount} 只刷新失败。"
+            } else if (quoteResult.failedCount > 0) {
+                "已刷新 ${quotes.size} 只 A 股，触发 ${triggers.size} 条提醒，另有 ${quoteResult.failedCount} 只刷新失败。"
+            } else if (triggers.isEmpty()) {
                 "已刷新 ${quotes.size} 只 A 股，暂无规则触发。"
             } else {
                 "已刷新 ${quotes.size} 只 A 股，触发 ${triggers.size} 条提醒。"
@@ -329,20 +336,46 @@ class NativeMonitorEngine {
 class NativeMarketDataSource {
     companion object {
         private const val maxConcurrentQuoteFetches = 4
+        private val requestRetryBackoffsMillis = listOf(250L, 500L)
     }
 
-    fun fetchQuotes(stocks: List<NativeStock>): List<NativeQuote> {
+    fun fetchQuotes(stocks: List<NativeStock>): NativeQuoteFetchResult {
         if (stocks.isEmpty()) {
-            return emptyList()
+            return NativeQuoteFetchResult(
+                quotes = emptyList(),
+                failedCount = 0,
+            )
         }
 
         val executor = Executors.newFixedThreadPool(minOf(stocks.size, maxConcurrentQuoteFetches))
         val futures = stocks.map { stock ->
-            executor.submit<NativeQuote> { fetchSingleQuote(stock) }
+            executor.submit<NativeQuoteFetchOutcome> { fetchSingleQuoteOutcome(stock) }
         }
 
         return try {
-            futures.map { future -> future.get() }
+            val quotesByCode = linkedMapOf<String, NativeQuote>()
+            var failedCount = 0
+            var lastFailure: NativeQuoteFetchOutcome? = null
+
+            futures.forEach { future ->
+                val outcome = future.get()
+                val quote = outcome.quote
+                if (quote != null) {
+                    quotesByCode[quote.code] = quote
+                } else {
+                    failedCount += 1
+                    lastFailure = outcome
+                }
+            }
+
+            if (quotesByCode.isEmpty() && lastFailure != null) {
+                throw lastFailure.error ?: IllegalStateException("行情刷新失败")
+            }
+
+            NativeQuoteFetchResult(
+                quotes = stocks.mapNotNull { stock -> quotesByCode[stock.code] },
+                failedCount = failedCount,
+            )
         } catch (error: InterruptedException) {
             futures.forEach { it.cancel(true) }
             Thread.currentThread().interrupt()
@@ -359,6 +392,38 @@ class NativeMarketDataSource {
         }
     }
 
+    private fun fetchSingleQuoteOutcome(stock: NativeStock): NativeQuoteFetchOutcome {
+        return try {
+            NativeQuoteFetchOutcome.success(fetchSingleQuoteWithRetry(stock))
+        } catch (error: Exception) {
+            NativeQuoteFetchOutcome.failure(error)
+        }
+    }
+
+    private fun fetchSingleQuoteWithRetry(stock: NativeStock): NativeQuote {
+        var lastError: Exception? = null
+
+        for (attempt in 0..requestRetryBackoffsMillis.size) {
+            try {
+                return fetchSingleQuote(stock)
+            } catch (error: Exception) {
+                if (!shouldRetryRequest(error, attempt)) {
+                    throw error
+                }
+                lastError = error
+            }
+
+            try {
+                Thread.sleep(requestRetryBackoffsMillis[attempt])
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw IllegalStateException("行情刷新被中断")
+            }
+        }
+
+        throw lastError ?: IllegalStateException("行情刷新失败")
+    }
+
     private fun fetchSingleQuote(stock: NativeStock): NativeQuote {
         val url = URL(
             "https://push2.eastmoney.com/api/qt/stock/get" +
@@ -371,6 +436,7 @@ class NativeMarketDataSource {
             setRequestProperty("Accept", "application/json, text/plain, */*")
             setRequestProperty("User-Agent", "Mozilla/5.0")
             setRequestProperty("Referer", "https://quote.eastmoney.com/")
+            setRequestProperty("Connection", "close")
         }
 
         try {
@@ -473,6 +539,61 @@ class NativeMarketDataSource {
             is Number -> rawValue.toDouble() % 1.0 != 0.0
             is String -> rawValue.contains(".")
             else -> false
+        }
+    }
+
+    private fun shouldRetryRequest(error: Exception, attempt: Int): Boolean {
+        if (attempt >= requestRetryBackoffsMillis.size) {
+            return false
+        }
+        if (error is SocketTimeoutException) {
+            return true
+        }
+        if (error is IOException) {
+            val message = error.message.orEmpty().lowercase(Locale.ROOT)
+            return message.contains("unexpected end of stream") ||
+                message.contains("connection reset") ||
+                message.contains("connection closed") ||
+                message.contains("connection terminated") ||
+                message.contains("timed out") ||
+                message.contains("timeout") ||
+                message.contains("eof")
+        }
+
+        val message = error.message.orEmpty().lowercase(Locale.ROOT)
+        val statusMatch = Regex("接口请求失败: (\\d{3})").find(message)
+        val statusCode = statusMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
+        return statusCode == 408 ||
+            statusCode == 429 ||
+            statusCode == 500 ||
+            statusCode == 502 ||
+            statusCode == 503 ||
+            statusCode == 504
+    }
+}
+
+data class NativeQuoteFetchResult(
+    val quotes: List<NativeQuote>,
+    val failedCount: Int,
+)
+
+data class NativeQuoteFetchOutcome(
+    val quote: NativeQuote?,
+    val error: Exception?,
+) {
+    companion object {
+        fun success(quote: NativeQuote): NativeQuoteFetchOutcome {
+            return NativeQuoteFetchOutcome(
+                quote = quote,
+                error = null,
+            )
+        }
+
+        fun failure(error: Exception): NativeQuoteFetchOutcome {
+            return NativeQuoteFetchOutcome(
+                quote = null,
+                error = error,
+            )
         }
     }
 }
