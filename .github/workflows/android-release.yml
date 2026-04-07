@@ -29,47 +29,14 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Flutter doctor
-        shell: pwsh
-        run: |
-          flutter doctor -v 2>&1 | Tee-Object -FilePath flutter-doctor.log
-          exit 0
-
-      - name: Upload environment log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-environment-log
-          path: flutter-doctor.log
-          if-no-files-found: warn
-
       - name: Install dependencies
-        shell: pwsh
-        run: |
-          flutter pub get 2>&1 | Tee-Object -FilePath flutter-pub-get.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Upload dependency log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-pub-get-log
-          path: flutter-pub-get.log
-          if-no-files-found: warn
+        run: flutter pub get
 
       - name: Run tests
         shell: pwsh
         run: |
           flutter test 2>&1 | Tee-Object -FilePath flutter-test.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Upload test log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-test-log
-          path: flutter-test.log
-          if-no-files-found: warn
 
       - name: Prepare Android release keystore
         if: success()
@@ -107,42 +74,7 @@ jobs:
           Write-Host "Wrote key.properties to $keyPropsPath"
 
       - name: Build split APKs
-        shell: pwsh
-        run: |
-          flutter build apk --release --split-per-abi 2>&1 | Tee-Object -FilePath flutter-build-release.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Collect release outputs
-        if: always()
-        shell: pwsh
-        run: |
-          $outputDir = "build/app/outputs/flutter-apk"
-          if (-not (Test-Path $outputDir)) {
-            "No output directory found: $outputDir" | Set-Content -Path android-release-artifacts.txt -Encoding utf8
-            exit 0
-          }
-
-          $files = Get-ChildItem -Path $outputDir -File | Sort-Object Name
-          if (-not $files) {
-            "No files found in: $outputDir" | Set-Content -Path android-release-artifacts.txt -Encoding utf8
-            exit 0
-          }
-
-          $lines = foreach ($file in $files) {
-            "{0}`t{1} bytes" -f $file.Name, $file.Length
-          }
-          $lines | Set-Content -Path android-release-artifacts.txt -Encoding utf8
-          $files | Format-Table Name, Length, LastWriteTime -AutoSize
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-release-log
-          path: |
-            flutter-build-release.log
-            android-release-artifacts.txt
-          if-no-files-found: warn
+        run: flutter build apk --release --split-per-abi
 
       - name: Upload workflow artifacts
         if: success()

@@ -28,11 +28,11 @@
 
 | 自选 | 设置 |
 |---|---|
-| ![自选页](docs/images/app-settings-2.jpg) | ![设置页](docs/images/app-watchlist.jpg) |
+| ![自选页](docs/images/app-watchlist.jpg) | ![设置页](docs/images/app-settings.jpg) |
 
 | 历史 | 规则 |
 |---|---|
-| ![历史页](docs/images/app-alerts.jpg) | ![规则页](docs/images/app-history.jpg) |
+| ![历史页](docs/images/app-history.jpg) | ![规则页](docs/images/app-alerts.jpg) |
 
 ## 提醒规则
 
