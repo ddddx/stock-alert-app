@@ -35,7 +35,7 @@ data class NativeRefreshResult(
 }
 
 class NativeMonitorEngine {
-    private val marketDataSource = NativeMarketDataSource()
+    private val marketDataSource = RobustNativeMarketDataSource()
 
     fun refresh(
         watchlist: List<NativeStock>,
