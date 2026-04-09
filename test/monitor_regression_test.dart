@@ -125,6 +125,7 @@ void main() {
     expect(firstPass, isEmpty);
     expect(secondPass, hasLength(1));
     expect(secondPass.first.message, contains('平安银行'));
+    expect(secondPass.first.message, contains('上涨跨越价格台阶'));
     expect(secondPass.first.message, contains('价格从'));
     expect(secondPass.first.message, contains('最新价¥10.60'));
     expect(secondPass.first.message, isNot(contains('%')));

@@ -63,7 +63,7 @@ void main() {
     expect(text, contains('贵州茅台'));
     expect(text, isNot(contains('600519')));
     expect(text, contains('阶梯提醒'));
-    expect(text, contains('从1.50%台阶跨到2.00%台阶'));
+    expect(text, contains('从+1.50%台阶跨到+2.00%台阶'));
     expect(text, contains('当前涨跌幅+2.30%'));
     expect(text, isNot(contains('最新价')));
   });
@@ -86,7 +86,7 @@ void main() {
     );
 
     expect(text, isNot(contains('0.00%')));
-    expect(text, contains('达到0.50%台阶'));
+    expect(text, contains('达到+0.50%台阶'));
   });
 
   test('price step message only announces price movement', () {
@@ -109,6 +109,7 @@ void main() {
     expect(text, contains('贵州茅台'));
     expect(text, isNot(contains('600519')));
     expect(text, contains('价格从'));
+    expect(text, contains('上涨跨越价格台阶'));
     expect(text, contains('跨到'));
     expect(text, contains('最新价'));
     expect(text, isNot(contains('涨跌幅')));

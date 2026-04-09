@@ -282,14 +282,15 @@ class NativeMonitorEngine {
         return if (rule.stepMetric == "percent") {
             val previousThreshold = previousIndex * stepValue
             val currentThreshold = currentIndex * stepValue
+            val thresholdDirection = formatSignedThresholdPercent(currentThreshold)
             val crossedLabel = if (previousIndex == 0) {
-                "涨跌幅达到${formatThresholdPercent(currentThreshold)}台阶，"
+                "涨跌幅达到${thresholdDirection}台阶，"
             } else {
-                "涨跌幅从${formatThresholdPercent(previousThreshold)}台阶跨到${formatThresholdPercent(currentThreshold)}台阶，"
+                "涨跌幅从${formatSignedThresholdPercent(previousThreshold)}台阶跨到${thresholdDirection}台阶，"
             }
             "${stockSubject(current)}触发阶梯提醒，${crossedLabel}当前涨跌幅${formatPercent(current.changePercent)}。"
         } else {
-            "${stockSubject(current)}触发阶梯提醒，价格从${formatPrice(referenceValue + previousIndex * stepValue, current)}跨到${formatPrice(referenceValue + currentIndex * stepValue, current)}这一档，最新价${formatPrice(current.lastPrice, current)}。"
+            "${stockSubject(current)}触发阶梯提醒，${directionLabel(crossedAmount)}跨越价格台阶，价格从${formatPrice(referenceValue + previousIndex * stepValue, current)}跨到${formatPrice(referenceValue + currentIndex * stepValue, current)}这一档，最新价${formatPrice(current.lastPrice, current)}。"
         }
     }
 
@@ -310,6 +311,11 @@ class NativeMonitorEngine {
     private fun formatAbsPercent(value: Double): String = "${String.format(Locale.US, "%.2f", abs(value))}%"
 
     private fun formatThresholdPercent(value: Double): String = String.format(Locale.US, "%.2f", abs(value)) + "%"
+
+    private fun formatSignedThresholdPercent(value: Double): String {
+        val sign = if (value > 0) "+" else if (value < 0) "-" else ""
+        return "$sign${formatThresholdPercent(value)}"
+    }
 
     private fun stockSubject(quote: NativeQuote): String {
         val name = quote.name.trim()

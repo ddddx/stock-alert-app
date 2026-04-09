@@ -39,18 +39,26 @@ class AlertMessageBuilder {
     if (rule.stepMetric == StepMetric.percent) {
       final previousThreshold = previousIndex * stepValue;
       final currentThreshold = currentIndex * stepValue;
+      final thresholdDirection = _signedPercentThreshold(currentThreshold);
       final crossedLabel = previousIndex == 0
-          ? '涨跌幅达到${currentThreshold.abs().toStringAsFixed(2)}%台阶，'
-          : '涨跌幅从${previousThreshold.abs().toStringAsFixed(2)}%台阶跨到${currentThreshold.abs().toStringAsFixed(2)}%台阶，';
+          ? '涨跌幅达到$thresholdDirection台阶，'
+          : '涨跌幅从${_signedPercentThreshold(previousThreshold)}台阶跨到$thresholdDirection台阶，';
       return '${_stockSubject(current)}触发阶梯提醒，'
           '$crossedLabel'
           '当前涨跌幅${Formatters.percent(current.changePercent)}。';
     }
 
+    final direction = _directionLabel(crossedAmount);
+
     return '${_stockSubject(current)}触发阶梯提醒，'
-        '价格从${Formatters.priceForSecurity(referenceValue + previousIndex * stepValue, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}跨到'
+        '$direction跨越价格台阶，价格从${Formatters.priceForSecurity(referenceValue + previousIndex * stepValue, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}跨到'
         '${Formatters.priceForSecurity(referenceValue + currentIndex * stepValue, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}这一档，'
         '最新价${Formatters.priceForSecurity(current.lastPrice, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}。';
+  }
+
+  String _signedPercentThreshold(double value) {
+    final sign = value > 0 ? '+' : value < 0 ? '-' : '';
+    return '$sign${value.abs().toStringAsFixed(2)}%';
   }
 
   String _stockSubject(StockQuoteSnapshot quote) {

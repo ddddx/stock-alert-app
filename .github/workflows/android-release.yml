@@ -96,15 +96,18 @@ jobs:
             Write-Error "Failed to read version from pubspec.yaml"
             exit 1
           }
-          $version = ($versionLine -replace '^version:\s*', '').Trim()
-          "app_version=$version" >> $env:GITHUB_OUTPUT
+          $fullVersion = ($versionLine -replace '^version:\s*', '').Trim()
+          $releaseVersion = ($fullVersion -split '\+', 2)[0]
+          "app_version=$fullVersion" >> $env:GITHUB_OUTPUT
+          "release_version=$releaseVersion" >> $env:GITHUB_OUTPUT
 
       - name: Generate release notes
         id: release_notes
         shell: pwsh
         run: |
           $version = '${{ steps.app_version.outputs.app_version }}'
-          $tag = "v$version"
+          $releaseVersion = '${{ steps.app_version.outputs.release_version }}'
+          $tag = "v$releaseVersion"
           $previousTag = git tag --sort=-creatordate | Where-Object { $_ -ne $tag } | Select-Object -First 1
           if ($previousTag) {
             $changes = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)%n"
@@ -118,6 +121,7 @@ jobs:
           $notes = @"
           Android release build
           Version: $version
+          Release tag: v$releaseVersion
           Commit: ${{ github.sha }}
 
           Changes:
@@ -133,8 +137,8 @@ jobs:
       - name: Publish rolling release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.app_version.outputs.app_version }}
-          name: v${{ steps.app_version.outputs.app_version }}
+          tag_name: v${{ steps.app_version.outputs.release_version }}
+          name: v${{ steps.app_version.outputs.release_version }}
           prerelease: false
           make_latest: true
           fail_on_unmatched_files: true
