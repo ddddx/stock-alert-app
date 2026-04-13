@@ -15,6 +15,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var notificationPermissionResult: MethodChannel.Result? = null
+    private val sinaMarketDataSource = SinaNativeMarketDataSource()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -83,6 +84,26 @@ class MainActivity : FlutterActivity() {
                     openNotificationSettingsMethod() -> {
                         openNotificationSettings()
                         result.success(true)
+                    }
+
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, marketChannelName())
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    searchSinaStocksMethod() -> {
+                        val keyword = call.argument<String>(keywordArgument()).orEmpty()
+                        runCatching {
+                            sinaMarketDataSource.searchStocks(keyword)
+                        }.onSuccess(result::success).onFailure { error ->
+                            result.error(
+                                "SINA_SEARCH_FAILED",
+                                error.message ?: error.javaClass.simpleName,
+                                null,
+                            )
+                        }
                     }
 
                     else -> result.notImplemented()
@@ -194,7 +215,11 @@ class MainActivity : FlutterActivity() {
 
     private fun platformChannelName(): String = "stock_pulse/platform"
 
+    private fun marketChannelName(): String = "stock_pulse/market"
+
     private fun summaryArgument(): String = "summary"
+
+    private fun keywordArgument(): String = "keyword"
 
     private fun getStorageDirectoryMethod(): String = "getStorageDirectoryPath"
 
@@ -217,6 +242,8 @@ class MainActivity : FlutterActivity() {
     private fun openBatterySettingsMethod(): String = "openBatteryOptimizationSettings"
 
     private fun openNotificationSettingsMethod(): String = "openNotificationSettings"
+
+    private fun searchSinaStocksMethod(): String = "searchSinaStocks"
 
     private fun notificationPermissionRequestCode(): Int = 21031
 }
