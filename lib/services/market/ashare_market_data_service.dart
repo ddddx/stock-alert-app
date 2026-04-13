@@ -6,8 +6,9 @@ import '../../core/utils/stock_text_sanitizer.dart';
 import '../../data/models/stock_identity.dart';
 import '../../data/models/stock_quote_snapshot.dart';
 import '../../data/models/stock_search_result.dart';
+import 'market_data_provider.dart';
 
-class AshareMarketDataService {
+class AshareMarketDataService extends MarketDataProvider {
   AshareMarketDataService({
     HttpClient? httpClient,
     Future<dynamic> Function(Uri uri)? jsonLoader,
@@ -19,6 +20,9 @@ class AshareMarketDataService {
         _sleeper = sleeper ?? _defaultSleeper {
     _httpClient.connectionTimeout = const Duration(seconds: 8);
   }
+
+  static const providerIdValue = defaultMarketDataProviderId;
+  static const providerNameValue = '聚合 A 股';
 
   static const _searchToken = 'D43BF722C8E33BDC906FB84D85E326E8';
   static const _requestRetryBackoffs = [
@@ -50,6 +54,13 @@ class AshareMarketDataService {
   final Future<String> Function(Uri uri)? _textLoader;
   final Future<void> Function(Duration delay) _sleeper;
 
+  @override
+  String get providerId => providerIdValue;
+
+  @override
+  String get providerName => providerNameValue;
+
+  @override
   Future<List<StockSearchResult>> searchStocks(String keyword) async {
     final query = keyword.trim();
     if (query.isEmpty) {
@@ -130,6 +141,12 @@ class AshareMarketDataService {
     return rankSearchResults(results, query);
   }
 
+  @override
+  Future<StockQuoteSnapshot> fetchQuote(StockIdentity stock) {
+    return _fetchSingleQuote(stock);
+  }
+
+  @override
   Future<List<StockQuoteSnapshot>> fetchQuotes(List<StockIdentity> stocks,
       {bool preferSingleQuoteRetrieval = false}) async {
     if (stocks.isEmpty) {
@@ -181,12 +198,22 @@ class AshareMarketDataService {
         .toList(growable: false);
   }
 
+  @override
   Future<List<StockQuoteSnapshot>> fetchQuotesProgressively(
     List<StockIdentity> stocks, {
     void Function(StockQuoteSnapshot quote)? onQuoteReceived,
+    bool preferSingleQuoteRetrieval = false,
   }) async {
     if (stocks.isEmpty) {
       return const [];
+    }
+
+    if (preferSingleQuoteRetrieval) {
+      return super.fetchQuotesProgressively(
+        stocks,
+        onQuoteReceived: onQuoteReceived,
+        preferSingleQuoteRetrieval: true,
+      );
     }
 
     final quotesByCode = <String, StockQuoteSnapshot>{};
