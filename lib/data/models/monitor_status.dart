@@ -11,6 +11,7 @@ class MonitorStatus {
     required this.androidOnboardingShown,
     required this.watchlistSortOrder,
     required this.webDavConfig,
+    this.marketDataProviderId = 'ashare',
   });
 
   factory MonitorStatus.fromJson(Map<String, dynamic> json) {
@@ -34,6 +35,8 @@ class MonitorStatus {
           _ => null,
         },
       ),
+      marketDataProviderId:
+          json['marketDataProviderId'] as String? ?? 'ashare',
     );
   }
 
@@ -46,6 +49,7 @@ class MonitorStatus {
     bool? androidOnboardingShown,
     WatchlistSortOrder? watchlistSortOrder,
     WebDavConfig? webDavConfig,
+    String? marketDataProviderId,
   }) {
     return MonitorStatus(
       serviceEnabled: serviceEnabled ?? this.serviceEnabled,
@@ -57,6 +61,8 @@ class MonitorStatus {
           androidOnboardingShown ?? this.androidOnboardingShown,
       watchlistSortOrder: watchlistSortOrder ?? this.watchlistSortOrder,
       webDavConfig: webDavConfig ?? this.webDavConfig,
+      marketDataProviderId:
+          marketDataProviderId ?? this.marketDataProviderId,
     );
   }
 
@@ -68,6 +74,7 @@ class MonitorStatus {
   final bool androidOnboardingShown;
   final WatchlistSortOrder watchlistSortOrder;
   final WebDavConfig webDavConfig;
+  final String marketDataProviderId;
 
   Map<String, dynamic> toJson() {
     return {
@@ -79,6 +86,7 @@ class MonitorStatus {
       'androidOnboardingShown': androidOnboardingShown,
       'watchlistSortOrder': watchlistSortOrder.name,
       'webDavConfig': webDavConfig.toJson(),
+      'marketDataProviderId': marketDataProviderId,
     };
   }
 }

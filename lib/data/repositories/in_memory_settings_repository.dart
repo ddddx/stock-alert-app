@@ -13,6 +13,7 @@ class InMemorySettingsRepository {
     androidOnboardingShown: false,
     watchlistSortOrder: WatchlistSortOrder.none,
     webDavConfig: WebDavConfig(endpoint: '', username: ''),
+    marketDataProviderId: 'ashare',
   );
 
   MonitorStatus getStatus() => _status;
@@ -29,6 +30,10 @@ class InMemorySettingsRepository {
     _status = _status.copyWith(
       pollIntervalSeconds: normalizeMonitorPollIntervalSeconds(seconds),
     );
+  }
+
+  void updateMarketDataProviderId(String providerId) {
+    _status = _status.copyWith(marketDataProviderId: providerId);
   }
 
   void markPrepared(String message) {

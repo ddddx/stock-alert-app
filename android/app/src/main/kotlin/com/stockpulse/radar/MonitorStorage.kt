@@ -14,6 +14,7 @@ data class NativeMonitorSettings(
     val soundEnabled: Boolean,
     val pollIntervalSeconds: Int,
     val lastMessage: String,
+    val marketDataProviderId: String,
 )
 
 data class NativeStock(
@@ -260,6 +261,9 @@ object MonitorStorage {
             lastMessage = json?.optString("lastMessage", DEFAULT_MESSAGE).orEmpty().ifBlank {
                 DEFAULT_MESSAGE
             },
+            marketDataProviderId = json?.optString("marketDataProviderId", "ashare")
+                .orEmpty()
+                .ifBlank { "ashare" },
         )
     }
 
@@ -274,6 +278,9 @@ object MonitorStorage {
         }
         if (!current.has("pollIntervalSeconds")) {
             current.put("pollIntervalSeconds", 20)
+        }
+        if (!current.has("marketDataProviderId")) {
+            current.put("marketDataProviderId", "ashare")
         }
         current.put("lastCheckAt", formatIso8601(checkedAtMillis))
         current.put("lastMessage", message.ifBlank { DEFAULT_MESSAGE })
@@ -291,6 +298,9 @@ object MonitorStorage {
         }
         if (!current.has("pollIntervalSeconds")) {
             current.put("pollIntervalSeconds", 20)
+        }
+        if (!current.has("marketDataProviderId")) {
+            current.put("marketDataProviderId", "ashare")
         }
         current.put("lastCheckAt", formatIso8601(checkedAtMillis))
         current.put("lastMessage", message.ifBlank { DEFAULT_MESSAGE })

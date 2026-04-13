@@ -8,6 +8,7 @@ abstract class SettingsRepository {
   Future<void> updateService(bool enabled);
   Future<void> updateSound(bool enabled);
   Future<void> updatePollIntervalSeconds(int seconds);
+  Future<void> updateMarketDataProviderId(String providerId);
   Future<void> updateWatchlistSortOrder(WatchlistSortOrder order);
   Future<void> updateWebDavConfig(WebDavConfig config);
   Future<void> markAndroidOnboardingShown();

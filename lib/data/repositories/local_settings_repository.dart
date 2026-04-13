@@ -18,6 +18,7 @@ class LocalSettingsRepository implements SettingsRepository {
     androidOnboardingShown: false,
     watchlistSortOrder: WatchlistSortOrder.none,
     webDavConfig: WebDavConfig(endpoint: '', username: ''),
+    marketDataProviderId: 'ashare',
   );
 
   @override
@@ -56,6 +57,12 @@ class LocalSettingsRepository implements SettingsRepository {
   Future<void> updatePollIntervalSeconds(int seconds) async {
     final normalized = normalizeMonitorPollIntervalSeconds(seconds);
     _status = _status.copyWith(pollIntervalSeconds: normalized);
+    await _persist();
+  }
+
+  @override
+  Future<void> updateMarketDataProviderId(String providerId) async {
+    _status = _status.copyWith(marketDataProviderId: providerId);
     await _persist();
   }
 

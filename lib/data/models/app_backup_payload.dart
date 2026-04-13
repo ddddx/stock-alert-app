@@ -7,6 +7,7 @@ class AppBackupPreferences {
     required this.soundEnabled,
     required this.pollIntervalSeconds,
     required this.watchlistSortOrder,
+    this.marketDataProviderId = 'ashare',
   });
 
   factory AppBackupPreferences.fromJson(Map<String, dynamic> json) {
@@ -16,18 +17,22 @@ class AppBackupPreferences {
       watchlistSortOrder: WatchlistSortOrderX.fromName(
         json['watchlistSortOrder'] as String?,
       ),
+      marketDataProviderId:
+          json['marketDataProviderId'] as String? ?? 'ashare',
     );
   }
 
   final bool soundEnabled;
   final int pollIntervalSeconds;
   final WatchlistSortOrder watchlistSortOrder;
+  final String marketDataProviderId;
 
   Map<String, dynamic> toJson() {
     return {
       'soundEnabled': soundEnabled,
       'pollIntervalSeconds': pollIntervalSeconds,
       'watchlistSortOrder': watchlistSortOrder.name,
+      'marketDataProviderId': marketDataProviderId,
     };
   }
 }
