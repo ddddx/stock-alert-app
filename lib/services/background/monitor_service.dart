@@ -5,7 +5,7 @@ import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/watchlist_repository.dart';
 import '../alerts/alert_rule_engine.dart';
 import '../audio/audio_alert_service.dart';
-import '../market/ashare_market_data_service.dart';
+import '../market/market_data_provider.dart';
 import '../platform/platform_bridge_service.dart';
 import 'monitoring_policy.dart';
 
@@ -48,7 +48,8 @@ class AshareMonitorService implements MonitorService {
     required AlertRepository alertRepository,
     required HistoryRepository historyRepository,
     required SettingsRepository settingsRepository,
-    required AshareMarketDataService marketDataService,
+    required MarketDataProvider marketDataService,
+    MarketDataProvider Function()? marketDataProviderResolver,
     required AudioAlertService audioAlertService,
     required AlertRuleEngine ruleEngine,
     required PlatformBridgeService platformBridgeService,
@@ -59,6 +60,7 @@ class AshareMonitorService implements MonitorService {
         _historyRepository = historyRepository,
         _settingsRepository = settingsRepository,
         _marketDataService = marketDataService,
+        _marketDataProviderResolver = marketDataProviderResolver,
         _audioAlertService = audioAlertService,
         _ruleEngine = ruleEngine,
         _platformBridgeService = platformBridgeService,
@@ -69,12 +71,16 @@ class AshareMonitorService implements MonitorService {
   final AlertRepository _alertRepository;
   final HistoryRepository _historyRepository;
   final SettingsRepository _settingsRepository;
-  final AshareMarketDataService _marketDataService;
+  final MarketDataProvider _marketDataService;
+  final MarketDataProvider Function()? _marketDataProviderResolver;
   final AudioAlertService _audioAlertService;
   final AlertRuleEngine _ruleEngine;
   final PlatformBridgeService _platformBridgeService;
   final AshareMarketHours _marketHours;
   final DateTime Function() _now;
+
+  MarketDataProvider get _resolvedMarketDataProvider =>
+      _marketDataProviderResolver?.call() ?? _marketDataService;
 
   bool _running = false;
   List<StockQuoteSnapshot> _latestQuotes = const [];
@@ -170,7 +176,7 @@ class AshareMonitorService implements MonitorService {
         for (final quote in _latestQuotes) quote.code: quote,
       };
       final progressiveQuotes =
-          await _marketDataService.fetchQuotesProgressively(
+          await _resolvedMarketDataProvider.fetchQuotesProgressively(
         monitoredWatchlist,
         onQuoteReceived: (quote) {
           latestByCode[quote.code] = quote;

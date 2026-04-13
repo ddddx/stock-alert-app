@@ -13,7 +13,7 @@ class SinaNativeMarketDataSource(
     private val textLoader: ((URL) -> String)? = null,
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) },
     private val clock: () -> Long = { System.currentTimeMillis() },
-) {
+) : NativeQuoteDataSource {
     companion object {
         private const val sinaReferer = "https://finance.sina.com.cn"
         private val gb18030 = Charset.forName("GB18030")
@@ -38,7 +38,7 @@ class SinaNativeMarketDataSource(
             .distinctBy { stock -> "${stock["market"]}-${stock["code"]}" }
     }
 
-    fun fetchQuotes(stocks: List<NativeStock>): NativeQuoteFetchResult {
+    override fun fetchQuotes(stocks: List<NativeStock>): NativeQuoteFetchResult {
         if (stocks.isEmpty()) {
             return NativeQuoteFetchResult(
                 quotes = emptyList(),

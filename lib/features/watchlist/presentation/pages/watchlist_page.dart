@@ -10,7 +10,7 @@ import '../../../../data/models/stock_search_result.dart';
 import '../../../../data/models/watchlist_sort_order.dart';
 import '../../../../data/repositories/watchlist_repository.dart';
 import '../../../../services/background/monitoring_policy.dart';
-import '../../../../services/market/ashare_market_data_service.dart';
+import '../../../../services/market/market_data_provider.dart';
 import '../../../../shared/widgets/section_card.dart';
 import '../watchlist_display_resolver.dart';
 
@@ -29,7 +29,7 @@ class WatchlistPage extends StatefulWidget {
   });
 
   final WatchlistRepository repository;
-  final AshareMarketDataService marketDataService;
+  final MarketDataProvider marketDataService;
   final List<StockQuoteSnapshot> quotes;
   final Map<String, StockQuoteSnapshot> quotesByCode;
   final Set<String> pendingRefreshCodes;
@@ -468,7 +468,7 @@ class _StockSearchSheet extends StatefulWidget {
     required this.excludedCodes,
   });
 
-  final AshareMarketDataService service;
+  final MarketDataProvider service;
   final Set<String> excludedCodes;
 
   @override

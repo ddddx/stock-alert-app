@@ -378,6 +378,11 @@ class _FakeSettingsRepository implements SettingsRepository {
   }
 
   @override
+  Future<void> updateMarketDataProviderId(String providerId) async {
+    _status = _status.copyWith(marketDataProviderId: providerId);
+  }
+
+  @override
   Future<void> updateWatchlistSortOrder(WatchlistSortOrder order) async {
     _status = _status.copyWith(watchlistSortOrder: order);
   }

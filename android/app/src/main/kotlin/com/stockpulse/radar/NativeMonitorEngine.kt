@@ -35,12 +35,14 @@ data class NativeRefreshResult(
 }
 
 class NativeMonitorEngine {
-    private val marketDataSource = RobustNativeMarketDataSource()
+    private val ashareMarketDataSource: NativeQuoteDataSource = RobustNativeMarketDataSource()
+    private val sinaMarketDataSource: NativeQuoteDataSource = SinaNativeMarketDataSource()
 
     fun refresh(
         watchlist: List<NativeStock>,
         rules: List<NativeRule>,
         runtimeState: NativeRuntimeState,
+        settings: NativeMonitorSettings,
         nowMillis: Long = System.currentTimeMillis(),
     ): NativeRefreshResult {
         if (watchlist.isEmpty()) {
@@ -63,6 +65,10 @@ class NativeMonitorEngine {
         }
 
         return try {
+            val marketDataSource = when (settings.marketDataProviderId) {
+                "sina" -> sinaMarketDataSource
+                else -> ashareMarketDataSource
+            }
             val quoteResult = marketDataSource.fetchQuotes(monitoredWatchlist)
             val quotes = quoteResult.quotes
             quotes.forEach { appendHistory(runtimeState, it) }

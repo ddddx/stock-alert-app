@@ -187,6 +187,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                     watchlist = watchlist,
                     rules = rules,
                     runtimeState = runtimeState,
+                    settings = settings,
                 )
                 MonitorStorage.saveRuntimeState(this, runtimeState)
                 val historyEntries = mutableListOf<NativeAlertHistoryEntry>()

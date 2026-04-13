@@ -526,6 +526,7 @@ class _FakeMarketDataService extends AshareMarketDataService {
   Future<List<StockQuoteSnapshot>> fetchQuotesProgressively(
     List<StockIdentity> stocks, {
     void Function(StockQuoteSnapshot quote)? onQuoteReceived,
+    bool preferSingleQuoteRetrieval = false,
   }) async {
     return const [];
   }
@@ -583,6 +584,11 @@ class _FakeSettingsRepository implements SettingsRepository {
   @override
   Future<void> updatePollIntervalSeconds(int seconds) async {
     _status = _status.copyWith(pollIntervalSeconds: seconds);
+  }
+
+  @override
+  Future<void> updateMarketDataProviderId(String providerId) async {
+    _status = _status.copyWith(marketDataProviderId: providerId);
   }
 
   @override

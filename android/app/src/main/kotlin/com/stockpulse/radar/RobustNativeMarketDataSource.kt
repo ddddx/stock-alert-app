@@ -13,7 +13,7 @@ class RobustNativeMarketDataSource(
     private val textLoader: ((URL) -> String)? = null,
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) },
     private val clock: () -> Long = { System.currentTimeMillis() },
-) {
+) : NativeQuoteDataSource {
     companion object {
         private const val maxConcurrentQuoteFetches = 4
         private const val eastmoneyQuoteReferer = "https://quote.eastmoney.com/"
@@ -25,7 +25,7 @@ class RobustNativeMarketDataSource(
         )
     }
 
-    fun fetchQuotes(stocks: List<NativeStock>): NativeQuoteFetchResult {
+    override fun fetchQuotes(stocks: List<NativeStock>): NativeQuoteFetchResult {
         if (stocks.isEmpty()) {
             return NativeQuoteFetchResult(
                 quotes = emptyList(),

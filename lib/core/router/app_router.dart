@@ -18,6 +18,8 @@ import '../../services/alerts/alert_rule_engine.dart';
 import '../../services/audio/audio_alert_service.dart';
 import '../../services/background/monitor_service.dart';
 import '../../services/market/ashare_market_data_service.dart';
+import '../../services/market/market_data_provider.dart';
+import '../../services/market/sina_market_data_provider.dart';
 import '../../services/platform/platform_bridge_service.dart';
 import '../../services/storage/json_file_store.dart';
 import '../../services/webdav/webdav_backup_service.dart';
@@ -62,7 +64,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   late final _historyRepository = LocalHistoryRepository(store: _historyStore);
   late final _settingsRepository =
       LocalSettingsRepository(store: _settingsStore);
-  final _marketDataService = AshareMarketDataService();
+  late final Map<String, MarketDataProvider> _marketDataProviders = {
+    AshareMarketDataService.providerIdValue: AshareMarketDataService(),
+    SinaMarketDataProvider.providerIdValue: SinaMarketDataProvider(),
+  };
   final _messageBuilder = AlertMessageBuilder();
   final _audioService = FlutterTtsAudioAlertService();
   final _webDavBackupService = WebDavBackupService();
@@ -72,11 +77,18 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     alertRepository: _alertRepository,
     historyRepository: _historyRepository,
     settingsRepository: _settingsRepository,
-    marketDataService: _marketDataService,
+    marketDataService: _currentMarketDataProvider,
+    marketDataProviderResolver: () => _currentMarketDataProvider,
     audioAlertService: _audioService,
     ruleEngine: _ruleEngine,
     platformBridgeService: _platformBridgeService,
   );
+
+  MarketDataProvider get _currentMarketDataProvider {
+    final providerId = _settingsRepository.getStatus().marketDataProviderId;
+    return _marketDataProviders[providerId] ??
+        _marketDataProviders[defaultMarketDataProviderId]!;
+  }
 
   static const List<String> _titles = ['自选', '规则', '历史', '设置'];
 
@@ -132,7 +144,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     final pages = [
       WatchlistPage(
         repository: _watchlistRepository,
-        marketDataService: _marketDataService,
+        marketDataService: _currentMarketDataProvider,
         quotes: _monitorService.latestQuotes,
         quotesByCode: _progressiveQuotesByCode,
         pendingRefreshCodes: _pendingRefreshCodes,
@@ -173,6 +185,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         onRequestAndroidBackgroundAccess: _requestAndroidBackgroundAccess,
         onExportToWebDav: _exportToWebDav,
         onImportFromWebDav: _importFromWebDav,
+        currentMarketDataProviderId:
+            _settingsRepository.getStatus().marketDataProviderId,
+        availableMarketDataProviders:
+            _marketDataProviders.values.toList(growable: false),
+        onMarketDataProviderChanged: _handleMarketDataProviderChanged,
       ),
     ];
 
@@ -453,6 +470,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         soundEnabled: status.soundEnabled,
         pollIntervalSeconds: status.pollIntervalSeconds,
         watchlistSortOrder: status.watchlistSortOrder,
+        marketDataProviderId: status.marketDataProviderId,
       ),
     );
     await _webDavBackupService.exportPayload(
@@ -475,6 +493,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     );
     await _settingsRepository.updateWatchlistSortOrder(
       payload.preferences.watchlistSortOrder,
+    );
+    await _settingsRepository.updateMarketDataProviderId(
+      payload.preferences.marketDataProviderId,
     );
     await _settingsRepository.markChecked(
       checkedAt: DateTime.now(),
@@ -500,6 +521,21 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       return;
     }
     await _refreshQuotes(forceFetch: true);
+  }
+
+  Future<void> _handleMarketDataProviderChanged(String providerId) async {
+    final currentProviderId = _settingsRepository.getStatus().marketDataProviderId;
+    if (currentProviderId == providerId ||
+        !_marketDataProviders.containsKey(providerId)) {
+      return;
+    }
+
+    await _settingsRepository.updateMarketDataProviderId(providerId);
+    if (_settingsRepository.getStatus().serviceEnabled) {
+      await _monitorService.reload();
+    }
+    await _refreshQuotes(forceFetch: true);
+    _markDirty();
   }
 
   void _markDirty() {

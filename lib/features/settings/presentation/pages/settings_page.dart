@@ -9,9 +9,12 @@ import '../../../../services/alerts/alert_message_builder.dart';
 import '../../../../services/audio/audio_alert_service.dart';
 import '../../../../services/background/monitor_service.dart';
 import '../../../../services/background/monitoring_policy.dart';
+import '../../../../services/market/market_data_provider.dart';
 import '../../../../services/platform/platform_bridge_service.dart';
 import '../../../../services/webdav/webdav_backup_service.dart';
 import '../../../../shared/widgets/section_card.dart';
+
+Future<void> _noopMarketDataProviderChanged(String providerId) async {}
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
@@ -27,6 +30,9 @@ class SettingsPage extends StatefulWidget {
     required this.onRequestAndroidBackgroundAccess,
     required this.onExportToWebDav,
     required this.onImportFromWebDav,
+    this.currentMarketDataProviderId = 'ashare',
+    this.availableMarketDataProviders = const [],
+    this.onMarketDataProviderChanged = _noopMarketDataProviderChanged,
   });
 
   final SettingsRepository repository;
@@ -42,6 +48,9 @@ class SettingsPage extends StatefulWidget {
   final Future<String> Function(WebDavCredentials credentials) onExportToWebDav;
   final Future<String> Function(WebDavCredentials credentials)
       onImportFromWebDav;
+  final String currentMarketDataProviderId;
+  final List<MarketDataProvider> availableMarketDataProviders;
+  final Future<void> Function(String providerId) onMarketDataProviderChanged;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();

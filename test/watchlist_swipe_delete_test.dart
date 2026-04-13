@@ -250,6 +250,7 @@ class _FakeMarketDataService extends AshareMarketDataService {
   Future<List<StockQuoteSnapshot>> fetchQuotesProgressively(
     List<StockIdentity> stocks, {
     void Function(StockQuoteSnapshot quote)? onQuoteReceived,
+    bool preferSingleQuoteRetrieval = false,
   }) async {
     return const [];
   }
