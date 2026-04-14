@@ -274,6 +274,50 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.onChanged();
   }
 
+  Future<void> _handleAudioPreload() async {
+    final ready = await widget.audioService.preload();
+    final message = ready
+        ? '语音播报能力已预热，可以直接试播真实提醒文案。'
+        : '预热失败：${widget.audioService.lastErrorMessage ?? '语音插件未完成初始化。'}';
+    _showFeedback(message);
+    widget.onChanged();
+  }
+
+  Future<void> _handleImmediateRefresh(bool serviceEnabled) async {
+    await widget.onRefresh();
+    if (serviceEnabled) {
+      _showFeedback('已执行一次前台刷新；后台轮询仍会按既定间隔持续运行。');
+    } else {
+      _showFeedback('已执行一次前台刷新；如需持续后台轮询，请先开启后台监控。');
+    }
+    widget.onChanged();
+  }
+
+  Future<void> _handleNotificationPermission() async {
+    final granted =
+        await widget.platformBridgeService.requestNotificationPermission();
+    if (!granted) {
+      await widget.platformBridgeService.openNotificationSettings();
+    }
+    _showFeedback(
+      granted ? '通知权限已授予。' : '未能直接获取通知权限，已打开系统通知设置，请确认允许通知。',
+    );
+  }
+
+  Future<void> _handleBatteryWhitelist() async {
+    await widget.platformBridgeService.openBatteryOptimizationSettings();
+    _showFeedback('已打开电池优化设置，建议将本应用加入白名单。');
+  }
+
+  Future<void> _handlePreviewSpeech() async {
+    final text = widget.messageBuilder.buildPreviewText(widget.previewQuote);
+    final played = await widget.audioService.speak(text);
+    final message = played
+        ? '已试播：$text'
+        : '试播失败：${widget.audioService.lastErrorMessage ?? '语音插件未完成初始化、设备缺少可用语音服务，或当前媒体音量过低。'} 文案为：$text';
+    _showFeedback(message);
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = widget.repository.getStatus();
@@ -299,6 +343,14 @@ class _SettingsPageState extends State<SettingsPage> {
             title: '最近说明',
             body: status.lastMessage,
           ),
+        if (_toast != null) ...[
+          const SizedBox(height: 12),
+          _SettingsSubpanel(
+            icon: Icons.task_alt_outlined,
+            title: '最近操作',
+            body: _toast!,
+          ),
+        ],
       ],
     );
   }
@@ -400,68 +452,44 @@ class _SettingsPageState extends State<SettingsPage> {
               );
             }).toList(),
           ),
+          const SizedBox(height: 12),
+          Text(
+            '监控操作',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.tonalIcon(
-              onPressed: _applyPollInterval,
-              icon: const Icon(Icons.check_circle_outline),
-              label: const Text('应用间隔'),
-            ),
+          _buildActionGrid(
+            children: [
+              _SettingsActionButton(
+                onPressed: _applyPollInterval,
+                icon: Icons.check_circle_outline,
+                label: '应用轮询间隔',
+                emphasis: _SettingsActionEmphasis.primary,
+              ),
+              _SettingsActionButton(
+                onPressed: () => _handleImmediateRefresh(status.serviceEnabled),
+                icon: Icons.refresh,
+                label: '立即刷新',
+              ),
+            ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Text(
+            '系统权限',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          _buildActionGrid(
             children: [
-              FilledButton.tonalIcon(
-                onPressed: () async {
-                  final ready = await widget.audioService.preload();
-                  final message = ready
-                      ? '语音播报能力已预热，可以直接试播真实提醒文案。'
-                      : '预热失败：${widget.audioService.lastErrorMessage ?? '语音插件未完成初始化。'}';
-                  _showFeedback(message);
-                  widget.onChanged();
-                },
-                icon: const Icon(Icons.precision_manufacturing_outlined),
-                label: const Text('预热播报'),
+              _SettingsActionButton(
+                onPressed: _handleNotificationPermission,
+                icon: Icons.notifications_active_outlined,
+                label: '通知权限',
               ),
-              FilledButton.tonalIcon(
-                onPressed: () async {
-                  await widget.onRefresh();
-                  if (status.serviceEnabled) {
-                    _showFeedback('已执行一次前台刷新；后台轮询仍会按既定间隔持续运行。');
-                  } else {
-                    _showFeedback('已执行一次前台刷新；如需持续后台轮询，请先开启后台监控。');
-                  }
-                  widget.onChanged();
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text('立即刷新'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: () async {
-                  final granted = await widget.platformBridgeService
-                      .requestNotificationPermission();
-                  if (!granted) {
-                    await widget.platformBridgeService.openNotificationSettings();
-                  }
-                  _showFeedback(
-                    granted ? '通知权限已授予。' : '未能直接获取通知权限，已打开系统通知设置，请确认允许通知。',
-                  );
-                },
-                icon: const Icon(Icons.notifications_active_outlined),
-                label: const Text('通知权限'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: () async {
-                  await widget.platformBridgeService
-                      .openBatteryOptimizationSettings();
-                  _showFeedback('已打开电池优化设置，建议将本应用加入白名单。');
-                },
-                icon: const Icon(Icons.battery_saver_outlined),
-                label: const Text('电池白名单'),
+              _SettingsActionButton(
+                onPressed: _handleBatteryWhitelist,
+                icon: Icons.battery_saver_outlined,
+                label: '电池白名单',
               ),
             ],
           ),
@@ -535,23 +563,21 @@ class _SettingsPageState extends State<SettingsPage> {
             title: status.soundEnabled ? '播报链路已启用' : '播报链路已关闭',
             body: '前台提醒、试播按钮和后台触发的语音都共享这套播报配置。',
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              onPressed: () async {
-                final text = widget.messageBuilder.buildPreviewText(
-                  widget.previewQuote,
-                );
-                final played = await widget.audioService.speak(text);
-                final message = played
-                    ? '已试播：$text'
-                    : '试播失败：${widget.audioService.lastErrorMessage ?? '语音插件未完成初始化、设备缺少可用语音服务，或当前媒体音量过低。'} 文案为：$text';
-                _showFeedback(message);
-              },
-              icon: const Icon(Icons.volume_up_outlined),
-              label: const Text('试播真实文案'),
-            ),
+          const SizedBox(height: 12),
+          _buildActionGrid(
+            children: [
+              _SettingsActionButton(
+                onPressed: _handlePreviewSpeech,
+                icon: Icons.volume_up_outlined,
+                label: '试播真实文案',
+                emphasis: _SettingsActionEmphasis.primary,
+              ),
+              _SettingsActionButton(
+                onPressed: _handleAudioPreload,
+                icon: Icons.precision_manufacturing_outlined,
+                label: '预热播报',
+              ),
+            ],
           ),
         ],
       ),
@@ -602,31 +628,29 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          _buildActionGrid(
             children: [
-              FilledButton.tonalIcon(
+              _SettingsActionButton(
                 onPressed: _webDavBusy
                     ? null
                     : () async {
                         await _rememberWebDavConfig();
                         _showFeedback('已保存 WebDAV 地址和用户名。');
                       },
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('保存连接信息'),
+                icon: Icons.save_outlined,
+                label: '保存连接信息',
               ),
-              FilledButton.tonalIcon(
+              _SettingsActionButton(
                 onPressed: _webDavBusy
                     ? null
                     : () => _runWebDavAction(
                           action: widget.onExportToWebDav,
                         ),
-                icon: const Icon(Icons.cloud_upload_outlined),
-                label: Text(_webDavBusy ? '处理中...' : '导出到 WebDAV'),
+                icon: Icons.cloud_upload_outlined,
+                label: _webDavBusy ? '处理中...' : '导出到 WebDAV',
+                emphasis: _SettingsActionEmphasis.primary,
               ),
-              FilledButton.tonalIcon(
+              _SettingsActionButton(
                 onPressed: _webDavBusy
                     ? null
                     : () async {
@@ -638,8 +662,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           action: widget.onImportFromWebDav,
                         );
                       },
-                icon: const Icon(Icons.cloud_download_outlined),
-                label: const Text('从 WebDAV 导入'),
+                icon: Icons.cloud_download_outlined,
+                label: '从 WebDAV 导入',
               ),
             ],
           ),
@@ -648,7 +672,27 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Widget _buildActionGrid({
+    required List<Widget> children,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        final maxWidth = constraints.maxWidth;
+        final useTwoColumns = maxWidth >= 520;
+        final itemWidth = useTwoColumns ? (maxWidth - spacing) / 2 : maxWidth;
 
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final child in children)
+              SizedBox(width: itemWidth, child: child),
+          ],
+        );
+      },
+    );
+  }
 
   String _providerNameFor(String providerId) {
     for (final provider in widget.availableMarketDataProviders) {
@@ -714,6 +758,51 @@ class _SettingsQuickStat extends StatelessWidget {
   }
 }
 
+enum _SettingsActionEmphasis {
+  primary,
+  secondary,
+}
+
+class _SettingsActionButton extends StatelessWidget {
+  const _SettingsActionButton({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+    this.emphasis = _SettingsActionEmphasis.secondary,
+  });
+
+  final VoidCallback? onPressed;
+  final IconData icon;
+  final String label;
+  final _SettingsActionEmphasis emphasis;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = FilledButton.styleFrom(
+      minimumSize: const Size.fromHeight(48),
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    );
+
+    switch (emphasis) {
+      case _SettingsActionEmphasis.primary:
+        return FilledButton.icon(
+          onPressed: onPressed,
+          style: style,
+          icon: Icon(icon),
+          label: Text(label),
+        );
+      case _SettingsActionEmphasis.secondary:
+        return FilledButton.tonalIcon(
+          onPressed: onPressed,
+          style: style,
+          icon: Icon(icon),
+          label: Text(label),
+        );
+    }
+  }
+}
+
 class _SettingsSubpanel extends StatelessWidget {
   const _SettingsSubpanel({
     required this.icon,
@@ -763,5 +852,3 @@ class _SettingsSubpanel extends StatelessWidget {
     );
   }
 }
-
-

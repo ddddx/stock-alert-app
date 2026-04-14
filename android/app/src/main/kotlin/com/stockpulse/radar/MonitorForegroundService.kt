@@ -195,7 +195,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 result.triggers.forEach { trigger ->
                     val playedSound = if (soundEnabled) speak(trigger.spokenText) else false
                     historyEntries += NativeAlertHistoryEntry(
-                        id = "${trigger.rule.id}-${trigger.triggeredAtMillis}",
+                        id = "${trigger.rule.id}-${trigger.quote.code}-${trigger.triggeredAtMillis}",
                         ruleId = trigger.rule.id,
                         ruleType = trigger.rule.type,
                         stockCode = trigger.quote.code,

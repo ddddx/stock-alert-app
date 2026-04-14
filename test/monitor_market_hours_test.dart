@@ -119,6 +119,79 @@ void main() {
     expect(result.hasError, isFalse);
   });
 
+  test('monitor refresh records alerts without speech when sound is disabled',
+      () async {
+    final historyRepository = _FakeHistoryRepository();
+    final settingsRepository = _FakeSettingsRepository(soundEnabled: false);
+    final audioAlertService = _FakeAudioAlertService();
+    final marketDataService = _SequenceMarketDataService([
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1500,
+          previousClose: 1490,
+          changeAmount: 3,
+          changePercent: 0.2,
+          openPrice: 1492,
+          highPrice: 1500,
+          lowPrice: 1490,
+          volume: 1000,
+          timestamp: DateTime(2026, 3, 23, 10, 0),
+        ),
+      ],
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1502,
+          previousClose: 1490,
+          changeAmount: 12,
+          changePercent: 0.8,
+          openPrice: 1492,
+          highPrice: 1502,
+          lowPrice: 1490,
+          volume: 1100,
+          timestamp: DateTime(2026, 3, 23, 10, 1),
+        ),
+      ],
+    ]);
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(),
+      alertRepository: _FakeAlertRepository(
+        rules: [
+          AlertRule.stepAlert(
+            id: 'rule-step',
+            stockCode: '600519',
+            stockName: '贵州茅台',
+            market: 'SH',
+            stepValue: 0.5,
+            stepMetric: StepMetric.percent,
+            enabled: true,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      ),
+      historyRepository: historyRepository,
+      settingsRepository: settingsRepository,
+      marketDataService: marketDataService,
+      audioAlertService: audioAlertService,
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: _FakePlatformBridgeService(),
+      now: () => DateTime(2026, 3, 23, 10, 0),
+    );
+
+    await service.refreshWatchlist();
+    final result = await service.refreshWatchlist();
+
+    expect(result.triggers, hasLength(1));
+    expect(audioAlertService.spokenTexts, isEmpty);
+    expect(historyRepository.entries, hasLength(1));
+    expect(historyRepository.entries.single.playedSound, isFalse);
+  });
+
   test(
       'monitor refresh keeps partial quotes when one fallback stock still fails',
       () async {
@@ -268,6 +341,40 @@ class _RecordingMarketDataService extends AshareMarketDataService {
   }
 }
 
+class _SequenceMarketDataService extends AshareMarketDataService {
+  _SequenceMarketDataService(this._quotesByCall);
+
+  final List<List<StockQuoteSnapshot>> _quotesByCall;
+  int _callIndex = 0;
+
+  @override
+  Future<List<StockQuoteSnapshot>> fetchQuotesProgressively(
+    List<StockIdentity> watchlist, {
+    void Function(StockQuoteSnapshot quote)? onQuoteReceived,
+    bool preferSingleQuoteRetrieval = false,
+  }) async {
+    final quotes = _quotesByCall[_callIndex.clamp(0, _quotesByCall.length - 1)];
+    if (_callIndex < _quotesByCall.length - 1) {
+      _callIndex += 1;
+    }
+    for (final quote in quotes) {
+      onQuoteReceived?.call(quote);
+    }
+    return quotes;
+  }
+
+  @override
+  Future<List<StockQuoteSnapshot>> fetchQuotes(
+    List<StockIdentity> watchlist, {
+    bool preferSingleQuoteRetrieval = false,
+  }) async {
+    return fetchQuotesProgressively(
+      watchlist,
+      preferSingleQuoteRetrieval: preferSingleQuoteRetrieval,
+    );
+  }
+}
+
 class _FakeWatchlistRepository implements WatchlistRepository {
   const _FakeWatchlistRepository({
     this.items = const [
@@ -300,6 +407,10 @@ class _FakeWatchlistRepository implements WatchlistRepository {
 }
 
 class _FakeAlertRepository implements AlertRepository {
+  _FakeAlertRepository({this.rules = const []});
+
+  final List<AlertRule> rules;
+
   @override
   Future<void> add(AlertRule rule) async {}
 
@@ -307,10 +418,11 @@ class _FakeAlertRepository implements AlertRepository {
   Future<void> delete(String id) async {}
 
   @override
-  List<AlertRule> getAll() => const [];
+  List<AlertRule> getAll() => rules;
 
   @override
-  List<AlertRule> getEnabledRules() => const [];
+  List<AlertRule> getEnabledRules() =>
+      rules.where((rule) => rule.enabled).toList(growable: false);
 
   @override
   Future<void> initialize() async {}
@@ -326,27 +438,36 @@ class _FakeAlertRepository implements AlertRepository {
 }
 
 class _FakeHistoryRepository implements HistoryRepository {
-  @override
-  Future<void> add(AlertHistoryEntry entry) async {}
+  final List<AlertHistoryEntry> entries = [];
 
   @override
-  List<AlertHistoryEntry> getAll() => const [];
+  Future<void> add(AlertHistoryEntry entry) async {
+    entries.add(entry);
+  }
+
+  @override
+  List<AlertHistoryEntry> getAll() => List.unmodifiable(entries);
 
   @override
   Future<void> initialize() async {}
 }
 
 class _FakeSettingsRepository implements SettingsRepository {
-  MonitorStatus _status = const MonitorStatus(
-    serviceEnabled: false,
-    soundEnabled: true,
-    pollIntervalSeconds: 5,
-    lastCheckAt: null,
-    lastMessage: 'ready',
-    androidOnboardingShown: false,
-    watchlistSortOrder: WatchlistSortOrder.none,
-    webDavConfig: WebDavConfig(endpoint: '', username: ''),
-  );
+  _FakeSettingsRepository({
+    bool serviceEnabled = false,
+    bool soundEnabled = true,
+  }) : _status = MonitorStatus(
+          serviceEnabled: serviceEnabled,
+          soundEnabled: soundEnabled,
+          pollIntervalSeconds: 5,
+          lastCheckAt: null,
+          lastMessage: 'ready',
+          androidOnboardingShown: false,
+          watchlistSortOrder: WatchlistSortOrder.none,
+          webDavConfig: const WebDavConfig(endpoint: '', username: ''),
+        );
+
+  MonitorStatus _status;
 
   @override
   MonitorStatus getStatus() => _status;
@@ -404,6 +525,8 @@ class _FakeSettingsRepository implements SettingsRepository {
 }
 
 class _FakeAudioAlertService implements AudioAlertService {
+  final List<String> spokenTexts = [];
+
   @override
   String? get lastErrorMessage => null;
 
@@ -411,7 +534,10 @@ class _FakeAudioAlertService implements AudioAlertService {
   Future<bool> preload() async => true;
 
   @override
-  Future<bool> speak(String text) async => true;
+  Future<bool> speak(String text) async {
+    spokenTexts.add(text);
+    return true;
+  }
 }
 
 class _FakePlatformBridgeService extends PlatformBridgeService {
