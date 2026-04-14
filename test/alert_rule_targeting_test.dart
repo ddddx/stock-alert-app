@@ -25,21 +25,46 @@ void main() {
     engine.processQuotes(
       rules: [rule],
       quotes: [
-        _quote(code: '600519', name: '贵州茅台', market: 'SH', lastPrice: 1500, previousClose: 1490, timestamp: DateTime(2026, 1, 1, 9, 30)),
-        _quote(code: '000001', name: '平安银行', market: 'SZ', lastPrice: 10, previousClose: 10, timestamp: DateTime(2026, 1, 1, 9, 30)),
+        _quote(
+            code: '600519',
+            name: '贵州茅台',
+            market: 'SH',
+            lastPrice: 1500,
+            previousClose: 1490,
+            timestamp: DateTime(2026, 1, 1, 9, 30)),
+        _quote(
+            code: '000001',
+            name: '平安银行',
+            market: 'SZ',
+            lastPrice: 10,
+            previousClose: 10,
+            timestamp: DateTime(2026, 1, 1, 9, 30)),
       ],
     );
 
     final triggers = engine.processQuotes(
       rules: [rule],
       quotes: [
-        _quote(code: '600519', name: '贵州茅台', market: 'SH', lastPrice: 1520, previousClose: 1490, timestamp: DateTime(2026, 1, 1, 9, 35)),
-        _quote(code: '000001', name: '平安银行', market: 'SZ', lastPrice: 10.2, previousClose: 10, timestamp: DateTime(2026, 1, 1, 9, 35)),
+        _quote(
+            code: '600519',
+            name: '贵州茅台',
+            market: 'SH',
+            lastPrice: 1520,
+            previousClose: 1490,
+            timestamp: DateTime(2026, 1, 1, 9, 35)),
+        _quote(
+            code: '000001',
+            name: '平安银行',
+            market: 'SZ',
+            lastPrice: 10.2,
+            previousClose: 10,
+            timestamp: DateTime(2026, 1, 1, 9, 35)),
       ],
     );
 
     expect(triggers, hasLength(2));
-    expect(triggers.map((item) => item.quote.code), containsAll(['600519', '000001']));
+    expect(triggers.map((item) => item.quote.code),
+        containsAll(['600519', '000001']));
   });
 
   test('price step rule keeps independent anchors per selected stock', () {
@@ -63,22 +88,146 @@ void main() {
     engine.processQuotes(
       rules: [rule],
       quotes: [
-        _quote(code: '600519', name: '贵州茅台', market: 'SH', lastPrice: 1500.1, previousClose: 1490, timestamp: DateTime(2026, 1, 1, 9, 30)),
-        _quote(code: '000001', name: '平安银行', market: 'SZ', lastPrice: 10.1, previousClose: 10, timestamp: DateTime(2026, 1, 1, 9, 30)),
+        _quote(
+            code: '600519',
+            name: '贵州茅台',
+            market: 'SH',
+            lastPrice: 1500.1,
+            previousClose: 1490,
+            timestamp: DateTime(2026, 1, 1, 9, 30)),
+        _quote(
+            code: '000001',
+            name: '平安银行',
+            market: 'SZ',
+            lastPrice: 10.1,
+            previousClose: 10,
+            timestamp: DateTime(2026, 1, 1, 9, 30)),
       ],
     );
 
     final triggers = engine.processQuotes(
       rules: [rule],
       quotes: [
-        _quote(code: '600519', name: '贵州茅台', market: 'SH', lastPrice: 1500.7, previousClose: 1490, timestamp: DateTime(2026, 1, 1, 9, 31)),
-        _quote(code: '000001', name: '平安银行', market: 'SZ', lastPrice: 10.7, previousClose: 10, timestamp: DateTime(2026, 1, 1, 9, 31)),
+        _quote(
+            code: '600519',
+            name: '贵州茅台',
+            market: 'SH',
+            lastPrice: 1500.7,
+            previousClose: 1490,
+            timestamp: DateTime(2026, 1, 1, 9, 31)),
+        _quote(
+            code: '000001',
+            name: '平安银行',
+            market: 'SZ',
+            lastPrice: 10.7,
+            previousClose: 10,
+            timestamp: DateTime(2026, 1, 1, 9, 31)),
       ],
     );
 
     expect(triggers, hasLength(2));
     expect(triggers.first.referencePrice, anyOf(1500, 10));
     expect(triggers.last.referencePrice, anyOf(1500, 10));
+  });
+
+  test('global short-window rule also covers stocks added after rule creation',
+      () {
+    final engine = AlertRuleEngine(messageBuilder: AlertMessageBuilder());
+    final rule = AlertRule.shortWindowMove(
+      id: 'global-short-late-add',
+      moveThresholdPercent: 1,
+      lookbackMinutes: 5,
+      moveDirection: MoveDirection.either,
+      enabled: true,
+      createdAt: DateTime(2026, 1, 1),
+      applyToAllWatchlist: true,
+      targetStocks: const [
+        StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
+      ],
+    );
+
+    engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 10,
+          previousClose: 10,
+          timestamp: DateTime(2026, 1, 1, 9, 30),
+        ),
+      ],
+    );
+
+    final triggers = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 10.2,
+          previousClose: 10,
+          timestamp: DateTime(2026, 1, 1, 9, 35),
+        ),
+      ],
+    );
+
+    expect(triggers, hasLength(1));
+    expect(triggers.single.quote.code, '000001');
+  });
+
+  test('global price step rule anchors newly added stocks on first seen quote',
+      () {
+    final engine = AlertRuleEngine(messageBuilder: AlertMessageBuilder());
+    final rule = AlertRule.stepAlert(
+      id: 'global-step-late-add',
+      stepValue: 0.5,
+      stepMetric: StepMetric.price,
+      enabled: true,
+      createdAt: DateTime(2026, 1, 1),
+      applyToAllWatchlist: true,
+      targetStocks: const [
+        StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
+      ],
+      anchorPrices: const {
+        '600519': 1500,
+      },
+    );
+
+    final firstPass = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 10,
+          previousClose: 10,
+          timestamp: DateTime(2026, 1, 1, 9, 30),
+        ),
+      ],
+    );
+
+    final secondPass = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 10.6,
+          previousClose: 10,
+          timestamp: DateTime(2026, 1, 1, 9, 31),
+        ),
+      ],
+    );
+
+    expect(firstPass, isEmpty);
+    expect(secondPass, hasLength(1));
+    expect(secondPass.single.quote.code, '000001');
+    expect(secondPass.single.referencePrice, 10);
   });
 }
 
@@ -97,7 +246,9 @@ StockQuoteSnapshot _quote({
     lastPrice: lastPrice,
     previousClose: previousClose,
     changeAmount: lastPrice - previousClose,
-    changePercent: previousClose == 0 ? 0 : (lastPrice - previousClose) / previousClose * 100,
+    changePercent: previousClose == 0
+        ? 0
+        : (lastPrice - previousClose) / previousClose * 100,
     openPrice: previousClose,
     highPrice: lastPrice,
     lowPrice: previousClose,

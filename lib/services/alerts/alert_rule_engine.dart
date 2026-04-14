@@ -220,15 +220,33 @@ class AlertRuleEngine {
       return _EvaluationOutcome(state: state);
     }
 
-    final currentIndex = _stepIndex(rule, current);
+    final referenceValue = _stepReferencePrice(rule, current, state);
+    final currentIndex = _stepIndex(
+      rule,
+      current,
+      referenceValue: referenceValue,
+    );
     if (state.lastStepIndex == null) {
       return _EvaluationOutcome(
-        state: state.copyWith(lastStepIndex: currentIndex, active: false),
+        state: state.copyWith(
+          lastStepIndex: currentIndex,
+          active: false,
+          stepAnchorPrice: rule.stepMetric == StepMetric.price
+              ? referenceValue
+              : state.stepAnchorPrice,
+        ),
       );
     }
 
     if (currentIndex == state.lastStepIndex) {
-      return _EvaluationOutcome(state: state.copyWith(active: false));
+      return _EvaluationOutcome(
+        state: state.copyWith(
+          active: false,
+          stepAnchorPrice: rule.stepMetric == StepMetric.price
+              ? referenceValue
+              : state.stepAnchorPrice,
+        ),
+      );
     }
 
     if (rule.stepMetric == StepMetric.percent && currentIndex == 0) {
@@ -236,10 +254,6 @@ class AlertRuleEngine {
         state: state.copyWith(lastStepIndex: currentIndex, active: false),
       );
     }
-
-    final referenceValue = rule.stepMetric == StepMetric.percent
-        ? current.previousClose
-        : (rule.anchorPriceFor(current.code) ?? current.lastPrice);
     final previousIndex = state.lastStepIndex!;
     final crossedAmount = current.lastPrice - referenceValue;
     final crossedPercent =
@@ -259,6 +273,9 @@ class AlertRuleEngine {
         active: true,
         lastStepIndex: currentIndex,
         lastTriggeredAt: now,
+        stepAnchorPrice: rule.stepMetric == StepMetric.price
+            ? referenceValue
+            : state.stepAnchorPrice,
       ),
       trigger: AlertTrigger(
         rule: rule,
@@ -273,7 +290,24 @@ class AlertRuleEngine {
     );
   }
 
-  int _stepIndex(AlertRule rule, StockQuoteSnapshot quote) {
+  double _stepReferencePrice(
+    AlertRule rule,
+    StockQuoteSnapshot quote,
+    RuleEvaluationState state,
+  ) {
+    if (rule.stepMetric == StepMetric.percent) {
+      return quote.previousClose;
+    }
+    return rule.anchorPriceFor(quote.code) ??
+        state.stepAnchorPrice ??
+        quote.lastPrice;
+  }
+
+  int _stepIndex(
+    AlertRule rule,
+    StockQuoteSnapshot quote, {
+    required double referenceValue,
+  }) {
     final stepValue = rule.stepValue ?? 0;
     if (stepValue <= 0) {
       return 0;
@@ -281,8 +315,7 @@ class AlertRuleEngine {
     if (rule.stepMetric == StepMetric.percent) {
       return _bandIndex(quote.changePercent / stepValue);
     }
-    final anchor = rule.anchorPriceFor(quote.code) ?? quote.lastPrice;
-    return _bandIndex((quote.lastPrice - anchor) / stepValue);
+    return _bandIndex((quote.lastPrice - referenceValue) / stepValue);
   }
 
   int _bandIndex(double value) {

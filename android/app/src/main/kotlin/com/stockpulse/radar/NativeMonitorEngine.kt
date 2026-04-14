@@ -206,19 +206,26 @@ class NativeMonitorEngine {
             return state to null
         }
 
-        val currentIndex = stepIndex(rule, current)
+        val referenceValue = stepReferencePrice(rule, current, state)
+        val currentIndex = stepIndex(rule, current, referenceValue)
         if (state.lastStepIndex == null) {
-            return state.copy(lastStepIndex = currentIndex, active = false) to null
+            return state.copy(
+                lastStepIndex = currentIndex,
+                active = false,
+                stepAnchorPrice = if (rule.stepMetric == "price") referenceValue else state.stepAnchorPrice,
+            ) to null
         }
 
         if (currentIndex == state.lastStepIndex) {
-            return state.copy(active = false) to null
+            return state.copy(
+                active = false,
+                stepAnchorPrice = if (rule.stepMetric == "price") referenceValue else state.stepAnchorPrice,
+            ) to null
         }
 
         if (rule.stepMetric == "percent" && currentIndex == 0) {
             return state.copy(lastStepIndex = currentIndex, active = false) to null
         }
-        val referenceValue = if (rule.stepMetric == "percent") current.previousClose else (rule.anchorPriceFor(current.code) ?: current.lastPrice)
         val previousIndex = state.lastStepIndex ?: currentIndex
         val crossedAmount = current.lastPrice - referenceValue
         val crossedPercent = if (referenceValue == 0.0) 0.0 else crossedAmount / referenceValue * 100.0
@@ -236,6 +243,7 @@ class NativeMonitorEngine {
             active = true,
             lastStepIndex = currentIndex,
             lastTriggeredAtMillis = nowMillis,
+            stepAnchorPrice = if (rule.stepMetric == "price") referenceValue else state.stepAnchorPrice,
         ) to NativeAlertTrigger(
             rule = rule,
             quote = current,
@@ -248,7 +256,19 @@ class NativeMonitorEngine {
         )
     }
 
-    private fun stepIndex(rule: NativeRule, quote: NativeQuote): Int {
+    private fun stepReferencePrice(
+        rule: NativeRule,
+        quote: NativeQuote,
+        state: NativeRuleState,
+    ): Double {
+        return if (rule.stepMetric == "percent") {
+            quote.previousClose
+        } else {
+            rule.anchorPriceFor(quote.code) ?: state.stepAnchorPrice ?: quote.lastPrice
+        }
+    }
+
+    private fun stepIndex(rule: NativeRule, quote: NativeQuote, referenceValue: Double): Int {
         val stepValue = rule.stepValue ?: return 0
         if (stepValue <= 0.0) {
             return 0
@@ -256,8 +276,7 @@ class NativeMonitorEngine {
         return if (rule.stepMetric == "percent") {
             bandIndex(quote.changePercent / stepValue)
         } else {
-            val anchor = rule.anchorPriceFor(quote.code) ?: quote.lastPrice
-            bandIndex((quote.lastPrice - anchor) / stepValue)
+            bandIndex((quote.lastPrice - referenceValue) / stepValue)
         }
     }
 

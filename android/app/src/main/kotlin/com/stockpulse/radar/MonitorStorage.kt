@@ -110,6 +110,7 @@ data class NativeRuleState(
     val active: Boolean = false,
     val lastStepIndex: Int? = null,
     val lastTriggeredAtMillis: Long? = null,
+    val stepAnchorPrice: Double? = null,
 )
 
 data class NativeRuntimeState(
@@ -387,6 +388,7 @@ object MonitorStorage {
                     active = item.optBoolean("active", false),
                     lastStepIndex = item.optNullableInt("lastStepIndex"),
                     lastTriggeredAtMillis = item.optNullableLong("lastTriggeredAtMillis"),
+                    stepAnchorPrice = item.optNullableDouble("stepAnchorPrice"),
                 )
             }
         }
@@ -431,6 +433,7 @@ object MonitorStorage {
                 .put("active", state.active)
                 .put("lastTriggeredAtMillis", state.lastTriggeredAtMillis ?: JSONObject.NULL)
                 .put("lastStepIndex", state.lastStepIndex ?: JSONObject.NULL)
+                .put("stepAnchorPrice", state.stepAnchorPrice ?: JSONObject.NULL)
             ruleStates.put(ruleId, json)
         }
         root.put("ruleStates", ruleStates)
