@@ -463,7 +463,7 @@ class _SettingsPageState extends State<SettingsPage> {
               _SettingsActionButton(
                 onPressed: _applyPollInterval,
                 icon: Icons.check_circle_outline,
-                label: '应用轮询间隔',
+                label: '应用间隔',
                 emphasis: _SettingsActionEmphasis.primary,
               ),
               _SettingsActionButton(
@@ -778,28 +778,97 @@ class _SettingsActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = FilledButton.styleFrom(
-      minimumSize: const Size.fromHeight(48),
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-    );
+    final scheme = Theme.of(context).colorScheme;
+    final enabled = onPressed != null;
+    final isPrimary = emphasis == _SettingsActionEmphasis.primary;
+    final backgroundColor = enabled
+        ? (isPrimary ? scheme.primaryContainer : const Color(0xFFF5F7FB))
+        : const Color(0xFFF2F4F7);
+    final borderColor = enabled
+        ? (isPrimary
+            ? scheme.primary.withValues(alpha: 0.20)
+            : const Color(0xFFD6DEE8))
+        : const Color(0xFFE3E8EF);
+    final iconColor = enabled
+        ? (isPrimary ? scheme.primary : const Color(0xFF1E3A5F))
+        : const Color(0xFF9AA6B2);
+    final titleColor = enabled
+        ? (isPrimary ? scheme.onPrimaryContainer : const Color(0xFF102A43))
+        : const Color(0xFF7B8794);
+    final subtitleColor =
+        enabled ? const Color(0xFF52606D) : const Color(0xFF9AA5B1);
 
-    switch (emphasis) {
-      case _SettingsActionEmphasis.primary:
-        return FilledButton.icon(
-          onPressed: onPressed,
-          style: style,
-          icon: Icon(icon),
-          label: Text(label),
-        );
-      case _SettingsActionEmphasis.secondary:
-        return FilledButton.tonalIcon(
-          onPressed: onPressed,
-          style: style,
-          icon: Icon(icon),
-          label: Text(label),
-        );
-    }
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          height: 76,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+            boxShadow: enabled
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: titleColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      enabled ? '点击执行' : '当前不可用',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: subtitleColor,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_rounded,
+                color: subtitleColor,
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

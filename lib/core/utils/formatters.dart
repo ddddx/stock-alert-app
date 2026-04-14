@@ -2,7 +2,11 @@ import '../../data/models/stock_identity.dart';
 
 class Formatters {
   static String percent(double value, {int fractionDigits = 2}) {
-    final sign = value > 0 ? '+' : value < 0 ? '-' : '';
+    final sign = value > 0
+        ? '+'
+        : value < 0
+            ? '-'
+            : '';
     return '$sign${value.abs().toStringAsFixed(fractionDigits)}%';
   }
 
@@ -11,7 +15,11 @@ class Formatters {
   }
 
   static String signedPrice(double value, {int fractionDigits = 2}) {
-    final sign = value > 0 ? '+' : value < 0 ? '-' : '';
+    final sign = value > 0
+        ? '+'
+        : value < 0
+            ? '-'
+            : '';
     return '$sign\u00A5${value.abs().toStringAsFixed(fractionDigits)}';
   }
 
@@ -23,8 +31,7 @@ class Formatters {
   }) {
     return price(
       value,
-      fractionDigits:
-          priceDecimalDigits ??
+      fractionDigits: priceDecimalDigits ??
           priceFractionDigitsFor(
             code: code,
             securityTypeName: securityTypeName,
@@ -40,8 +47,7 @@ class Formatters {
   }) {
     return signedPrice(
       value,
-      fractionDigits:
-          priceDecimalDigits ??
+      fractionDigits: priceDecimalDigits ??
           priceFractionDigitsFor(
             code: code,
             securityTypeName: securityTypeName,
@@ -66,10 +72,11 @@ class Formatters {
     if (value == null) {
       return '暂无';
     }
-    final month = value.month.toString().padLeft(2, '0');
-    final day = value.day.toString().padLeft(2, '0');
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
+    final localValue = value.toLocal();
+    final month = localValue.month.toString().padLeft(2, '0');
+    final day = localValue.day.toString().padLeft(2, '0');
+    final hour = localValue.hour.toString().padLeft(2, '0');
+    final minute = localValue.minute.toString().padLeft(2, '0');
     return '$month-$day $hour:$minute';
   }
 }

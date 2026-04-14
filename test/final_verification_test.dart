@@ -80,7 +80,7 @@ void main() {
       ),
     );
 
-    final previewButton = find.widgetWithText(FilledButton, '试播真实文案');
+    final previewButton = find.text('试播真实文案');
     await tester.scrollUntilVisible(
       previewButton,
       200,
@@ -122,7 +122,7 @@ void main() {
       ),
     );
 
-    final previewButton = find.widgetWithText(FilledButton, '试播真实文案');
+    final previewButton = find.text('试播真实文案');
     await tester.scrollUntilVisible(
       previewButton,
       200,
@@ -263,7 +263,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, '立即刷新'));
+    await tester.tap(find.text('立即刷新'));
     await tester.pumpAndSettle();
 
     expect(monitorService.backgroundRefreshCalls, 0);
@@ -298,7 +298,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, '立即刷新'));
+    await tester.tap(find.text('立即刷新'));
     await tester.pumpAndSettle();
 
     expect(monitorService.backgroundRefreshCalls, 0);
@@ -364,10 +364,7 @@ void main() {
 
     final endpointField = find.byKey(const Key('webdav-endpoint-input'));
     final usernameField = find.byKey(const Key('webdav-username-input'));
-    final exportButton = find.ancestor(
-      of: find.byIcon(Icons.cloud_upload_outlined),
-      matching: find.byType(FilledButton),
-    );
+    final exportButton = find.text('导出到 WebDAV');
 
     await tester.scrollUntilVisible(
       endpointField,
