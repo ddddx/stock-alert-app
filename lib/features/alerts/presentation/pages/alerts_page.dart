@@ -350,11 +350,11 @@ class _AlertsPageState extends State<AlertsPage> {
                       await widget.repository.update(rule);
                       await widget.onRuleUpdated?.call(existingRule, rule);
                     }
-                    if (mounted) {
-                      setState(() {});
-                    }
                     if (context.mounted) {
                       Navigator.of(context).pop();
+                    }
+                    if (mounted) {
+                      setState(() {});
                     }
                   },
                   child: const Text('保存'),

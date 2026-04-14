@@ -109,14 +109,8 @@ class AlertRuleEngine {
       return;
     }
 
-    final previousTargets = previousRule.applyToAllWatchlist
-        ? const <String>['*']
-        : previousRule.targetStocks.map((item) => item.code).toList()
-      ..sort();
-    final nextTargets = nextRule.applyToAllWatchlist
-        ? const <String>['*']
-        : nextRule.targetStocks.map((item) => item.code).toList()
-      ..sort();
+    final previousTargets = _sortedTargetCodes(previousRule);
+    final nextTargets = _sortedTargetCodes(nextRule);
 
     if (previousRule.type != nextRule.type ||
         previousRule.moveThresholdPercent != nextRule.moveThresholdPercent ||
@@ -129,6 +123,14 @@ class AlertRuleEngine {
         previousTargets.join(',') != nextTargets.join(',')) {
       removeRule(previousRule.id);
     }
+  }
+
+  List<String> _sortedTargetCodes(AlertRule rule) {
+    final targetCodes = rule.applyToAllWatchlist
+        ? <String>['*']
+        : rule.targetStocks.map((item) => item.code).toList(growable: true);
+    targetCodes.sort();
+    return targetCodes;
   }
 
   void reset() {

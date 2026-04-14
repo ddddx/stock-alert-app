@@ -5,6 +5,8 @@ import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/repositories/alert_repository.dart';
 import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
 import 'package:stock_alert_app/features/alerts/presentation/pages/alerts_page.dart';
+import 'package:stock_alert_app/services/alerts/alert_message_builder.dart';
+import 'package:stock_alert_app/services/alerts/alert_rule_engine.dart';
 
 import 'support/test_app.dart';
 
@@ -129,6 +131,67 @@ void main() {
 
     expect(alertRepository.rules, isEmpty);
     expect(find.text('还没有提醒规则，添加一条后即可开始监控。'), findsOneWidget);
+  });
+
+  testWidgets('editing a global rule still saves after adding a new watchlist stock',
+      (tester) async {
+    final alertRepository = _FakeAlertRepository(
+      rules: [
+        AlertRule.shortWindowMove(
+          id: 'rule-1',
+          stockCode: '600519',
+          stockName: 'Alpha',
+          market: 'SH',
+          applyToAllWatchlist: true,
+          targetStocks: const [
+            StockIdentity(code: '600519', name: 'Alpha', market: 'SH'),
+          ],
+          moveThresholdPercent: 1,
+          lookbackMinutes: 5,
+          moveDirection: MoveDirection.either,
+          enabled: true,
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    final watchlistRepository = _FakeWatchlistRepository(
+      items: const [
+        StockIdentity(code: '600519', name: 'Alpha', market: 'SH'),
+      ],
+    );
+    final engine = AlertRuleEngine(messageBuilder: AlertMessageBuilder());
+
+    await tester.pumpWidget(
+      _buildApp(
+        AlertsPage(
+          repository: alertRepository,
+          watchlistRepository: watchlistRepository,
+          quotes: const [],
+          onRuleUpdated: (previousRule, nextRule) async {
+            engine.replaceRule(previousRule, nextRule);
+          },
+        ),
+      ),
+    );
+
+    await watchlistRepository.add(
+      const StockIdentity(code: '000001', name: 'Beta', market: 'SZ'),
+    );
+
+    await tester.tap(find.byKey(const Key('edit-rule-rule-1')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      alertRepository.rules.single.resolvedTargetStocks
+          .map((item) => item.code)
+          .toList(),
+      ['600519', '000001'],
+    );
+    expect(find.text('目标范围：全部自选股'), findsOneWidget);
   });
 }
 

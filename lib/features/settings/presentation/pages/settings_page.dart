@@ -293,7 +293,12 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 12),
         _buildWebDavSection(),
         const SizedBox(height: 12),
-        _buildStatusSection(status),
+        if (status.lastMessage.isNotEmpty)
+          _SettingsSubpanel(
+            icon: Icons.info_outline,
+            title: '最近说明',
+            body: status.lastMessage,
+          ),
       ],
     );
   }
@@ -408,6 +413,7 @@ class _SettingsPageState extends State<SettingsPage> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               FilledButton.tonalIcon(
                 onPressed: () async {
@@ -421,7 +427,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 icon: const Icon(Icons.precision_manufacturing_outlined),
                 label: const Text('预热播报'),
               ),
-              FilledButton.icon(
+              FilledButton.tonalIcon(
                 onPressed: () async {
                   await widget.onRefresh();
                   if (status.serviceEnabled) {
@@ -434,7 +440,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 icon: const Icon(Icons.refresh),
                 label: const Text('立即刷新'),
               ),
-              OutlinedButton.icon(
+              FilledButton.tonalIcon(
                 onPressed: () async {
                   final granted = await widget.platformBridgeService
                       .requestNotificationPermission();
@@ -448,7 +454,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 icon: const Icon(Icons.notifications_active_outlined),
                 label: const Text('通知权限'),
               ),
-              OutlinedButton.icon(
+              FilledButton.tonalIcon(
                 onPressed: () async {
                   await widget.platformBridgeService
                       .openBatteryOptimizationSettings();
@@ -485,7 +491,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     body: _providerDescription(provider),
                     trailing: provider.providerId == selectedProviderId
                         ? const Chip(label: Text('当前'))
-                        : OutlinedButton(
+                        : FilledButton.tonal(
                             onPressed: () async {
                               final wasServiceEnabled = status.serviceEnabled;
                               await widget.onMarketDataProviderChanged(
@@ -599,8 +605,9 @@ class _SettingsPageState extends State<SettingsPage> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              OutlinedButton.icon(
+              FilledButton.tonalIcon(
                 onPressed: _webDavBusy
                     ? null
                     : () async {
@@ -610,7 +617,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('保存连接信息'),
               ),
-              FilledButton.icon(
+              FilledButton.tonalIcon(
                 onPressed: _webDavBusy
                     ? null
                     : () => _runWebDavAction(
@@ -641,43 +648,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildStatusSection(dynamic status) {
-    return SectionCard(
-      title: '当前状态',
-      subtitle: '集中查看最近一次监控结果、刷新来源和后台运行限制。',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SettingsStatusLine(
-            label: '最近说明',
-            value: status.lastMessage,
-          ),
-          _SettingsStatusLine(
-            label: '最近检查',
-            value: Formatters.compactDateTime(status.lastCheckAt),
-          ),
-          _SettingsStatusLine(
-            label: '后台监控',
-            value:
-                '${status.serviceEnabled ? '已开启' : '未开启'} · 轮询 ${status.pollIntervalSeconds} 秒',
-          ),
-          _SettingsStatusLine(
-            label: '行情数据源',
-            value: _providerNameFor(status.marketDataProviderId),
-          ),
-          const Text('本地数据已持久化，重启应用后会保留自选、规则、历史和设置。'),
-          const SizedBox(height: 8),
-          const Text('监控仅在A股交易时段运行：工作日 09:30-11:30、13:00-15:00；午休和收市后会暂停。'),
-          const SizedBox(height: 8),
-          const Text('如果系统强杀进程，前台服务会尽量维持；设备重启或应用更新后，需要重新打开应用并确认权限。'),
-          if (_toast != null) ...[
-            const SizedBox(height: 8),
-            Text('操作反馈：$_toast'),
-          ],
-        ],
-      ),
-    );
-  }
+
 
   String _providerNameFor(String providerId) {
     for (final provider in widget.availableMarketDataProviders) {
@@ -793,31 +764,4 @@ class _SettingsSubpanel extends StatelessWidget {
   }
 }
 
-class _SettingsStatusLine extends StatelessWidget {
-  const _SettingsStatusLine({
-    required this.label,
-    required this.value,
-  });
 
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: RichText(
-        text: TextSpan(
-          style: Theme.of(context).textTheme.bodyMedium,
-          children: [
-            TextSpan(
-              text: '$label：',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            TextSpan(text: value),
-          ],
-        ),
-      ),
-    );
-  }
-}
