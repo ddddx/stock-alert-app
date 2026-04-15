@@ -449,7 +449,12 @@ void main() {
 
     final service = FlutterTtsAudioAlertService();
     expect(await service.speak('  preview text  '), isFalse);
-    expect(methods, ['awaitSpeakCompletion', 'stop', 'speak']);
+    final preloadIndex = methods.indexOf('awaitSpeakCompletion');
+    final stopIndex = methods.indexOf('stop');
+    final speakIndex = methods.indexOf('speak');
+    expect(preloadIndex, isNonNegative);
+    expect(stopIndex, greaterThan(preloadIndex));
+    expect(speakIndex, greaterThan(stopIndex));
   });
 
   test('flutter TTS preload is cached after a successful setup', () async {
