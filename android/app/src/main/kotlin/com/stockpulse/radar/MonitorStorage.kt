@@ -116,6 +116,7 @@ data class NativeRuleState(
 data class NativeRuntimeState(
     val quoteHistoryByCode: MutableMap<String, MutableList<NativeQuote>> = mutableMapOf(),
     val ruleStates: MutableMap<String, NativeRuleState> = mutableMapOf(),
+    var lastTradingDay: String? = null,
 )
 
 data class NativeAlertHistoryEntry(
@@ -396,6 +397,7 @@ object MonitorStorage {
         return NativeRuntimeState(
             quoteHistoryByCode = historyByCode,
             ruleStates = ruleStates,
+            lastTradingDay = json.optNullableString("lastTradingDay"),
         )
     }
 
@@ -426,6 +428,7 @@ object MonitorStorage {
             historyByCode.put(code, array)
         }
         root.put("quoteHistoryByCode", historyByCode)
+        root.put("lastTradingDay", runtimeState.lastTradingDay ?: JSONObject.NULL)
 
         val ruleStates = JSONObject()
         runtimeState.ruleStates.forEach { (ruleId, state) ->

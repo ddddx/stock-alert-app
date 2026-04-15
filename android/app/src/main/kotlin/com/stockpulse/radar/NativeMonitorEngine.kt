@@ -5,7 +5,9 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
+import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import kotlin.math.abs
@@ -37,6 +39,7 @@ data class NativeRefreshResult(
 class NativeMonitorEngine {
     private val ashareMarketDataSource: NativeQuoteDataSource = RobustNativeMarketDataSource()
     private val sinaMarketDataSource: NativeQuoteDataSource = SinaNativeMarketDataSource()
+    private val chinaTimeZone: TimeZone = TimeZone.getTimeZone("Asia/Shanghai")
 
     fun refresh(
         watchlist: List<NativeStock>,
@@ -65,6 +68,7 @@ class NativeMonitorEngine {
         }
 
         return try {
+            resetRuntimeStateIfTradingDayChanged(runtimeState, nowMillis)
             val marketDataSource = when (settings.marketDataProviderId) {
                 "sina" -> sinaMarketDataSource
                 else -> ashareMarketDataSource
@@ -266,6 +270,32 @@ class NativeMonitorEngine {
         } else {
             rule.anchorPriceFor(quote.code) ?: state.stepAnchorPrice ?: quote.lastPrice
         }
+    }
+
+    private fun resetRuntimeStateIfTradingDayChanged(
+        runtimeState: NativeRuntimeState,
+        nowMillis: Long,
+    ) {
+        val tradingDay = tradingDayKey(nowMillis)
+        if (runtimeState.lastTradingDay == tradingDay) {
+            return
+        }
+        runtimeState.quoteHistoryByCode.clear()
+        runtimeState.ruleStates.clear()
+        runtimeState.lastTradingDay = tradingDay
+    }
+
+    private fun tradingDayKey(timestampMillis: Long): String {
+        val calendar = Calendar.getInstance(chinaTimeZone).apply {
+            timeInMillis = timestampMillis
+        }
+        return String.format(
+            Locale.US,
+            "%04d-%02d-%02d",
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH) + 1,
+            calendar.get(Calendar.DAY_OF_MONTH),
+        )
     }
 
     private fun stepIndex(rule: NativeRule, quote: NativeQuote, referenceValue: Double): Int {

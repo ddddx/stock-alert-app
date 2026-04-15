@@ -54,11 +54,14 @@ class AlertRuleEngine {
   final AlertMessageBuilder _messageBuilder;
   final Map<String, List<StockQuoteSnapshot>> _historyByCode = {};
   final Map<String, RuleEvaluationState> _states = {};
+  String? _activeTradingDayKey;
 
   List<AlertTrigger> processQuotes({
     required List<AlertRule> rules,
     required List<StockQuoteSnapshot> quotes,
   }) {
+    _resetStateForTradingDayIfNeeded(quotes);
+
     for (final quote in quotes) {
       _appendHistory(quote);
     }
@@ -136,6 +139,32 @@ class AlertRuleEngine {
   void reset() {
     _historyByCode.clear();
     _states.clear();
+    _activeTradingDayKey = null;
+  }
+
+  void _resetStateForTradingDayIfNeeded(List<StockQuoteSnapshot> quotes) {
+    if (quotes.isEmpty) {
+      return;
+    }
+    final tradingDayKey = _tradingDayKey(quotes.first.timestamp);
+    if (_activeTradingDayKey == null) {
+      _activeTradingDayKey = tradingDayKey;
+      return;
+    }
+    if (_activeTradingDayKey == tradingDayKey) {
+      return;
+    }
+    _historyByCode.clear();
+    _states.clear();
+    _activeTradingDayKey = tradingDayKey;
+  }
+
+  String _tradingDayKey(DateTime moment) {
+    final shanghaiMoment = moment.toUtc().add(const Duration(hours: 8));
+    final year = shanghaiMoment.year.toString().padLeft(4, '0');
+    final month = shanghaiMoment.month.toString().padLeft(2, '0');
+    final day = shanghaiMoment.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
   }
 
   void _appendHistory(StockQuoteSnapshot quote) {

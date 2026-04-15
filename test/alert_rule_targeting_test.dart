@@ -229,6 +229,52 @@ void main() {
     expect(secondPass.single.quote.code, '000001');
     expect(secondPass.single.referencePrice, 10);
   });
+
+  test('percent step rule does not trigger on first quote of a new trading day',
+      () {
+    final engine = AlertRuleEngine(messageBuilder: AlertMessageBuilder());
+    final rule = AlertRule.stepAlert(
+      id: 'step-cross-day',
+      stockCode: '600519',
+      stockName: '贵州茅台',
+      market: 'SH',
+      stepValue: 0.5,
+      stepMetric: StepMetric.percent,
+      enabled: true,
+      createdAt: DateTime(2026, 1, 1),
+    );
+
+    final dayOnePass = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 101.2,
+          previousClose: 100,
+          timestamp: DateTime(2026, 1, 1, 14, 59),
+        ),
+      ],
+    );
+
+    final dayTwoFirstPass = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 98.8,
+          previousClose: 100,
+          timestamp: DateTime(2026, 1, 2, 9, 30),
+        ),
+      ],
+    );
+
+    expect(dayOnePass, isEmpty);
+    expect(dayTwoFirstPass, isEmpty);
+  });
 }
 
 StockQuoteSnapshot _quote({
