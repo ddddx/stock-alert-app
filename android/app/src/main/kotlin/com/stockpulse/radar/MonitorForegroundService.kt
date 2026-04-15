@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.util.Locale
@@ -331,6 +332,19 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
 
     private fun configureTtsVoice(): Boolean {
         val tts = textToSpeech ?: return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            val preferredVoice = selectPreferredChineseVoice(tts.voices.orEmpty())
+            if (preferredVoice != null) {
+                val result = tts.setVoice(preferredVoice)
+                if (result != TextToSpeech.ERROR) {
+                    Log.i(
+                        TAG,
+                        "Foreground service selected TTS voice: name=${preferredVoice.name}, locale=${preferredVoice.locale}, quality=${preferredVoice.quality}, latency=${preferredVoice.latency}",
+                    )
+                    return true
+                }
+            }
+        }
         val candidateLocales = linkedSetOf(
             Locale.SIMPLIFIED_CHINESE,
             Locale.CHINESE,
@@ -348,6 +362,33 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         }
         Log.w(TAG, "Foreground service preferred Chinese TTS locale unavailable; falling back to engine default voice")
         return false
+    }
+
+    private fun selectPreferredChineseVoice(voices: Set<Voice>): Voice? {
+        var bestVoice: Voice? = null
+        var bestScore = Int.MIN_VALUE
+        for (voice in voices) {
+            val locale = voice.locale ?: continue
+            if (!isChineseLocale(locale)) {
+                continue
+            }
+            if (voice.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) {
+                continue
+            }
+            val score =
+                voice.quality * 1000 -
+                    voice.latency * 10 -
+                    if (voice.isNetworkConnectionRequired) 3000 else 0
+            if (score > bestScore) {
+                bestScore = score
+                bestVoice = voice
+            }
+        }
+        return bestVoice
+    }
+
+    private fun isChineseLocale(locale: Locale): Boolean {
+        return locale.language.equals("zh", ignoreCase = true)
     }
 
     private fun configureTtsAudio() {

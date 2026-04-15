@@ -114,12 +114,15 @@ jobs:
           $tag = "v$releaseVersion"
           $previousTag = git tag --sort=-creatordate | Where-Object { $_ -ne $tag } | Select-Object -First 1
           if ($previousTag) {
-            $changes = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)%n"
+            $changes = git log "$previousTag..HEAD" --pretty=format:"- %s (%h)"
           } else {
-            $changes = git log -n 10 --pretty=format:"- %s (%h)%n"
+            $changes = git log -n 10 --pretty=format:"- %s (%h)"
           }
           if (-not $changes) {
             $changes = '- No commits found since the previous tag.'
+          } elseif ($changes -is [array]) {
+            # External command output can be a string array in pwsh; join with newlines for markdown lists.
+            $changes = $changes -join "`n"
           }
 
           $notes = @"
