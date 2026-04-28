@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import '../../data/models/stock_identity.dart';
+import '../../data/models/market_sentiment_snapshot.dart';
 import '../../data/models/stock_quote_snapshot.dart';
 import '../../data/models/stock_search_result.dart';
 import 'ashare_market_data_service.dart';
@@ -70,6 +71,63 @@ class SinaMarketDataProvider extends MarketDataProvider {
       throw const HttpException('Sina quote payload is empty');
     }
     return quote;
+  }
+
+  @override
+  Future<MarketSentimentSnapshot> fetchMarketSentiment() async {
+    final payload = await _getText(
+      Uri.parse(
+        'https://push2.eastmoney.com/api/qt/clist/get'
+        '?pn=1'
+        '&pz=6000'
+        '&po=1'
+        '&np=1'
+        '&fltt=2'
+        '&invt=2'
+        '&fid=f3'
+        '&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23'
+        '&fields=f3',
+      ),
+    );
+    final decoded = jsonDecode(payload);
+    if (decoded is! Map<String, dynamic>) {
+      throw const HttpException('Market sentiment payload format is invalid');
+    }
+    final data = decoded['data'];
+    if (data is! Map<String, dynamic>) {
+      throw const HttpException('Market sentiment data is invalid');
+    }
+    final diff = data['diff'];
+    final rows = diff is List ? diff : const [];
+    var advancingCount = 0;
+    var decliningCount = 0;
+    var flatCount = 0;
+    var limitUpCount = 0;
+    for (final row in rows) {
+      if (row is! Map) {
+        continue;
+      }
+      final map = row.cast<String, dynamic>();
+      final changePercent = _parseChangePercent(map['f3']);
+      if (changePercent > 0.01) {
+        advancingCount += 1;
+      } else if (changePercent < -0.01) {
+        decliningCount += 1;
+      } else {
+        flatCount += 1;
+      }
+      if (changePercent >= 9.8) {
+        limitUpCount += 1;
+      }
+    }
+
+    return MarketSentimentSnapshot(
+      advancingCount: advancingCount,
+      decliningCount: decliningCount,
+      flatCount: flatCount,
+      limitUpCount: limitUpCount,
+      capturedAt: DateTime.now(),
+    );
   }
 
   @override
@@ -352,6 +410,13 @@ class SinaMarketDataProvider extends MarketDataProvider {
       return 0;
     }
     return double.tryParse(fields[index].trim()) ?? 0;
+  }
+
+  double _parseChangePercent(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    return double.tryParse('$value') ?? 0.0;
   }
 
   String _prefixedCode(StockIdentity stock) {

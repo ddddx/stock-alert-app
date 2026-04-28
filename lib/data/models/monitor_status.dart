@@ -12,6 +12,10 @@ class MonitorStatus {
     required this.androidOnboardingShown,
     required this.watchlistSortOrder,
     required this.webDavConfig,
+    this.openingBriefingEnabled = false,
+    this.closingReviewEnabled = false,
+    this.lastOpeningBriefingDayKey = '',
+    this.lastClosingReviewDayKey = '',
     this.marketDataProviderId = 'ashare',
   });
 
@@ -37,6 +41,12 @@ class MonitorStatus {
           _ => null,
         },
       ),
+      openingBriefingEnabled: json['openingBriefingEnabled'] as bool? ?? false,
+      closingReviewEnabled: json['closingReviewEnabled'] as bool? ?? false,
+      lastOpeningBriefingDayKey:
+          json['lastOpeningBriefingDayKey'] as String? ?? '',
+      lastClosingReviewDayKey:
+          json['lastClosingReviewDayKey'] as String? ?? '',
       marketDataProviderId: json['marketDataProviderId'] as String? ?? 'ashare',
     );
   }
@@ -51,6 +61,10 @@ class MonitorStatus {
     bool? androidOnboardingShown,
     WatchlistSortOrder? watchlistSortOrder,
     WebDavConfig? webDavConfig,
+    bool? openingBriefingEnabled,
+    bool? closingReviewEnabled,
+    String? lastOpeningBriefingDayKey,
+    String? lastClosingReviewDayKey,
     String? marketDataProviderId,
   }) {
     return MonitorStatus(
@@ -64,6 +78,13 @@ class MonitorStatus {
           androidOnboardingShown ?? this.androidOnboardingShown,
       watchlistSortOrder: watchlistSortOrder ?? this.watchlistSortOrder,
       webDavConfig: webDavConfig ?? this.webDavConfig,
+      openingBriefingEnabled:
+          openingBriefingEnabled ?? this.openingBriefingEnabled,
+      closingReviewEnabled: closingReviewEnabled ?? this.closingReviewEnabled,
+      lastOpeningBriefingDayKey:
+          lastOpeningBriefingDayKey ?? this.lastOpeningBriefingDayKey,
+      lastClosingReviewDayKey:
+          lastClosingReviewDayKey ?? this.lastClosingReviewDayKey,
       marketDataProviderId: marketDataProviderId ?? this.marketDataProviderId,
     );
   }
@@ -77,6 +98,10 @@ class MonitorStatus {
   final bool androidOnboardingShown;
   final WatchlistSortOrder watchlistSortOrder;
   final WebDavConfig webDavConfig;
+  final bool openingBriefingEnabled;
+  final bool closingReviewEnabled;
+  final String lastOpeningBriefingDayKey;
+  final String lastClosingReviewDayKey;
   final String marketDataProviderId;
 
   Map<String, dynamic> toJson() {
@@ -90,6 +115,10 @@ class MonitorStatus {
       'androidOnboardingShown': androidOnboardingShown,
       'watchlistSortOrder': watchlistSortOrder.name,
       'webDavConfig': webDavConfig.toJson(),
+      'openingBriefingEnabled': openingBriefingEnabled,
+      'closingReviewEnabled': closingReviewEnabled,
+      'lastOpeningBriefingDayKey': lastOpeningBriefingDayKey,
+      'lastClosingReviewDayKey': lastClosingReviewDayKey,
       'marketDataProviderId': marketDataProviderId,
     };
   }

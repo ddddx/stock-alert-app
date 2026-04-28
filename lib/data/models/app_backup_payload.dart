@@ -8,6 +8,8 @@ class AppBackupPreferences {
     required this.pollIntervalSeconds,
     required this.alertCooldownSeconds,
     required this.watchlistSortOrder,
+    this.openingBriefingEnabled = false,
+    this.closingReviewEnabled = false,
     this.marketDataProviderId = 'ashare',
   });
 
@@ -19,6 +21,8 @@ class AppBackupPreferences {
       watchlistSortOrder: WatchlistSortOrderX.fromName(
         json['watchlistSortOrder'] as String?,
       ),
+      openingBriefingEnabled: json['openingBriefingEnabled'] as bool? ?? false,
+      closingReviewEnabled: json['closingReviewEnabled'] as bool? ?? false,
       marketDataProviderId: json['marketDataProviderId'] as String? ?? 'ashare',
     );
   }
@@ -27,6 +31,8 @@ class AppBackupPreferences {
   final int pollIntervalSeconds;
   final int alertCooldownSeconds;
   final WatchlistSortOrder watchlistSortOrder;
+  final bool openingBriefingEnabled;
+  final bool closingReviewEnabled;
   final String marketDataProviderId;
 
   Map<String, dynamic> toJson() {
@@ -35,6 +41,8 @@ class AppBackupPreferences {
       'pollIntervalSeconds': pollIntervalSeconds,
       'alertCooldownSeconds': alertCooldownSeconds,
       'watchlistSortOrder': watchlistSortOrder.name,
+      'openingBriefingEnabled': openingBriefingEnabled,
+      'closingReviewEnabled': closingReviewEnabled,
       'marketDataProviderId': marketDataProviderId,
     };
   }

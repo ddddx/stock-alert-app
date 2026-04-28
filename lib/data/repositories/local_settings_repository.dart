@@ -19,6 +19,10 @@ class LocalSettingsRepository implements SettingsRepository {
     androidOnboardingShown: false,
     watchlistSortOrder: WatchlistSortOrder.none,
     webDavConfig: WebDavConfig(endpoint: '', username: ''),
+    openingBriefingEnabled: false,
+    closingReviewEnabled: false,
+    lastOpeningBriefingDayKey: '',
+    lastClosingReviewDayKey: '',
     marketDataProviderId: 'ashare',
   );
 
@@ -58,6 +62,18 @@ class LocalSettingsRepository implements SettingsRepository {
   @override
   Future<void> updateSound(bool enabled) async {
     _status = _status.copyWith(soundEnabled: enabled);
+    await _persist();
+  }
+
+  @override
+  Future<void> updateOpeningBriefing(bool enabled) async {
+    _status = _status.copyWith(openingBriefingEnabled: enabled);
+    await _persist();
+  }
+
+  @override
+  Future<void> updateClosingReview(bool enabled) async {
+    _status = _status.copyWith(closingReviewEnabled: enabled);
     await _persist();
   }
 
@@ -115,6 +131,20 @@ class LocalSettingsRepository implements SettingsRepository {
   Future<void> markChecked(
       {required DateTime checkedAt, required String message}) async {
     _status = _status.copyWith(lastCheckAt: checkedAt, lastMessage: message);
+    await _persist();
+  }
+
+  @override
+  Future<void> markOpeningBriefingBroadcasted(String tradingDayKey) async {
+    _status =
+        _status.copyWith(lastOpeningBriefingDayKey: tradingDayKey.trim());
+    await _persist();
+  }
+
+  @override
+  Future<void> markClosingReviewBroadcasted(String tradingDayKey) async {
+    _status =
+        _status.copyWith(lastClosingReviewDayKey: tradingDayKey.trim());
     await _persist();
   }
 

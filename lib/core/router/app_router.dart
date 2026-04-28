@@ -16,6 +16,7 @@ import '../../features/watchlist/presentation/pages/watchlist_page.dart';
 import '../../services/alerts/alert_message_builder.dart';
 import '../../services/alerts/alert_rule_engine.dart';
 import '../../services/audio/audio_alert_service.dart';
+import '../../services/background/daily_briefing_service.dart';
 import '../../services/background/monitor_service.dart';
 import '../../services/market/ashare_market_data_service.dart';
 import '../../services/market/market_data_provider.dart';
@@ -83,6 +84,13 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     ruleEngine: _ruleEngine,
     platformBridgeService: _platformBridgeService,
   );
+  late final _dailyBriefingService = AshareDailyBriefingService(
+    watchlistRepository: _watchlistRepository,
+    historyRepository: _historyRepository,
+    settingsRepository: _settingsRepository,
+    marketDataProviderResolver: () => _currentMarketDataProvider,
+    audioAlertService: _audioService,
+  );
 
   MarketDataProvider get _currentMarketDataProvider {
     final providerId = _settingsRepository.getStatus().marketDataProviderId;
@@ -115,6 +123,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void dispose() {
     _foregroundRefreshTimer?.cancel();
+    unawaited(_dailyBriefingService.stop());
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -277,6 +286,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     await _alertRepository.initialize();
     await _historyRepository.initialize();
     await _settingsRepository.initialize();
+    await _dailyBriefingService.start();
     await restoreBackgroundMonitorOnLaunch(
       settingsRepository: _settingsRepository,
       monitorService: _monitorService,
@@ -471,6 +481,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         pollIntervalSeconds: status.pollIntervalSeconds,
         alertCooldownSeconds: status.alertCooldownSeconds,
         watchlistSortOrder: status.watchlistSortOrder,
+        openingBriefingEnabled: status.openingBriefingEnabled,
+        closingReviewEnabled: status.closingReviewEnabled,
         marketDataProviderId: status.marketDataProviderId,
       ),
     );
@@ -498,6 +510,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     await _settingsRepository.updateWatchlistSortOrder(
       payload.preferences.watchlistSortOrder,
     );
+    await _settingsRepository.updateOpeningBriefing(
+      payload.preferences.openingBriefingEnabled,
+    );
+    await _settingsRepository.updateClosingReview(
+      payload.preferences.closingReviewEnabled,
+    );
     await _settingsRepository.updateMarketDataProviderId(
       payload.preferences.marketDataProviderId,
     );
@@ -516,6 +534,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Future<void> _handleResume() async {
     await _settingsRepository.initialize();
     await _historyRepository.initialize();
+    await _dailyBriefingService.syncNow();
     _syncForegroundRefreshTimer();
     if (mounted) {
       setState(() {});
@@ -545,6 +564,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   void _markDirty() {
     _syncForegroundRefreshTimer();
+    unawaited(_dailyBriefingService.syncNow());
     if (mounted) {
       setState(() {});
     }

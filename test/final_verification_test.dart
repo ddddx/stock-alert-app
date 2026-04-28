@@ -686,6 +686,26 @@ class _FakeSettingsRepository implements SettingsRepository {
   Future<void> updateSound(bool enabled) async {
     _status = _status.copyWith(soundEnabled: enabled);
   }
+
+  @override
+  Future<void> updateOpeningBriefing(bool enabled) async {
+    _status = _status.copyWith(openingBriefingEnabled: enabled);
+  }
+
+  @override
+  Future<void> updateClosingReview(bool enabled) async {
+    _status = _status.copyWith(closingReviewEnabled: enabled);
+  }
+
+  @override
+  Future<void> markOpeningBriefingBroadcasted(String tradingDayKey) async {
+    _status = _status.copyWith(lastOpeningBriefingDayKey: tradingDayKey);
+  }
+
+  @override
+  Future<void> markClosingReviewBroadcasted(String tradingDayKey) async {
+    _status = _status.copyWith(lastClosingReviewDayKey: tradingDayKey);
+  }
 }
 
 class _FakeAudioAlertService implements AudioAlertService {

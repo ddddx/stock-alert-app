@@ -232,6 +232,30 @@ void main() {
     expect(ranked.first.code, '161226');
   });
 
+  test('numeric six-digit query prefers index result over same-code equity', () {
+    final ranked = AshareMarketDataService.rankSearchResults(
+      const [
+        StockSearchResult(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          securityTypeName: 'A股',
+        ),
+        StockSearchResult(
+          code: '000001',
+          name: '上证指数',
+          market: 'SH',
+          securityTypeName: '指数',
+        ),
+      ],
+      '000001',
+    );
+
+    expect(ranked, hasLength(2));
+    expect(ranked.first.market, 'SH');
+    expect(ranked.first.name, contains('上证'));
+  });
+
   test('subtitle localizes visible security type labels to Chinese', () {
     const etf = StockIdentity(
       code: '510300',

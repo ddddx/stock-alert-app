@@ -57,7 +57,9 @@ class HistoryPage extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      '${_displayName(entry.stockCode, entry.stockName, watchlistByCode)} (${entry.stockCode})',
+                                      _isSystemBriefingEntry(entry)
+                                          ? entry.stockName
+                                          : '${_displayName(entry.stockCode, entry.stockName, watchlistByCode)} (${entry.stockCode})',
                                       style: Theme.of(context)
                                           .textTheme
                                           .titleSmall,
@@ -76,14 +78,16 @@ class HistoryPage extends StatelessWidget {
                               Text(_messageText(entry, watchlistByCode)),
                               const SizedBox(height: 6),
                               Text(_spokenTextLabel(entry, watchlistByCode)),
-                              const SizedBox(height: 6),
-                              Text(
-                                '\u73b0\u4ef7 ${Formatters.priceForSecurity(entry.currentPrice, code: entry.stockCode, securityTypeName: entry.securityTypeName, priceDecimalDigits: entry.priceDecimalDigits)} / \u53c2\u8003 ${Formatters.priceForSecurity(entry.referencePrice, code: entry.stockCode, securityTypeName: entry.securityTypeName, priceDecimalDigits: entry.priceDecimalDigits)}',
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '\u53d8\u52a8 ${Formatters.signedPriceForSecurity(entry.changeAmount, code: entry.stockCode, securityTypeName: entry.securityTypeName, priceDecimalDigits: entry.priceDecimalDigits)} / ${Formatters.percent(entry.changePercent)}',
-                              ),
+                              if (!_isSystemBriefingEntry(entry)) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  '\u73b0\u4ef7 ${Formatters.priceForSecurity(entry.currentPrice, code: entry.stockCode, securityTypeName: entry.securityTypeName, priceDecimalDigits: entry.priceDecimalDigits)} / \u53c2\u8003 ${Formatters.priceForSecurity(entry.referencePrice, code: entry.stockCode, securityTypeName: entry.securityTypeName, priceDecimalDigits: entry.priceDecimalDigits)}',
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '\u53d8\u52a8 ${Formatters.signedPriceForSecurity(entry.changeAmount, code: entry.stockCode, securityTypeName: entry.securityTypeName, priceDecimalDigits: entry.priceDecimalDigits)} / ${Formatters.percent(entry.changePercent)}',
+                                ),
+                              ],
                               const SizedBox(height: 6),
                               Text(
                                 '\u65f6\u95f4 ${Formatters.compactDateTime(entry.triggeredAt)}',
@@ -152,5 +156,10 @@ class HistoryPage extends StatelessWidget {
       spokenText = spokenText.replaceAll(entry.stockCode, fallbackName);
     }
     return '\u64ad\u62a5\u6587\u6848\uff1a$spokenText';
+  }
+
+  bool _isSystemBriefingEntry(AlertHistoryEntry entry) {
+    return entry.ruleId == 'system:opening-briefing' ||
+        entry.ruleId == 'system:closing-review';
   }
 }

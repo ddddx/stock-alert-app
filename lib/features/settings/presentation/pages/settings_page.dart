@@ -363,6 +363,18 @@ class _SettingsPageState extends State<SettingsPage> {
     _showFeedback(message);
   }
 
+  Future<void> _handleOpeningBriefingToggle(bool enabled) async {
+    await widget.repository.updateOpeningBriefing(enabled);
+    _showFeedback(enabled ? '开盘简报已开启，每个交易日 9:30 自动播报。' : '开盘简报已关闭。');
+    widget.onChanged();
+  }
+
+  Future<void> _handleClosingReviewToggle(bool enabled) async {
+    await widget.repository.updateClosingReview(enabled);
+    _showFeedback(enabled ? '收盘复盘已开启，每个交易日 15:05 自动播报。' : '收盘复盘已关闭。');
+    widget.onChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = widget.repository.getStatus();
@@ -376,6 +388,8 @@ class _SettingsPageState extends State<SettingsPage> {
         _buildOverviewSection(status),
         const SizedBox(height: 12),
         _buildMonitoringSection(status),
+        const SizedBox(height: 12),
+        _buildBriefingSection(status),
         const SizedBox(height: 12),
         _buildMarketDataSection(status),
         const SizedBox(height: 12),
@@ -634,6 +648,37 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ],
             ),
+    );
+  }
+
+  Widget _buildBriefingSection(dynamic status) {
+    return SectionCard(
+      title: '定时简报',
+      subtitle: '按交易日关键时点自动播报开盘和收盘摘要，并写入提醒历史。',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('开盘简报'),
+            subtitle: const Text('每个交易日 9:30 播报自选开盘表现与全市场情绪。'),
+            value: status.openingBriefingEnabled,
+            onChanged: _handleOpeningBriefingToggle,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('收盘复盘'),
+            subtitle: const Text('每个交易日 15:05 播报自选收盘表现与当日提醒统计。'),
+            value: status.closingReviewEnabled,
+            onChanged: _handleClosingReviewToggle,
+          ),
+          _SettingsSubpanel(
+            icon: Icons.record_voice_over_outlined,
+            title: '播报说明',
+            body: '定时简报遵循A股交易日判断；关闭“启用语音播报”后仍会写入历史，但不会发声。',
+          ),
+        ],
+      ),
     );
   }
 

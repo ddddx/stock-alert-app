@@ -1,4 +1,5 @@
 import '../../data/models/stock_identity.dart';
+import '../../data/models/market_sentiment_snapshot.dart';
 import '../../data/models/stock_quote_snapshot.dart';
 import '../../data/models/stock_search_result.dart';
 
@@ -11,6 +12,8 @@ abstract class MarketDataProvider {
   String get providerName;
 
   Future<List<StockSearchResult>> searchStocks(String keyword);
+
+  Future<MarketSentimentSnapshot> fetchMarketSentiment();
 
   Future<StockQuoteSnapshot> fetchQuote(StockIdentity stock);
 

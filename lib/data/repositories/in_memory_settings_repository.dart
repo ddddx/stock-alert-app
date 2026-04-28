@@ -14,6 +14,10 @@ class InMemorySettingsRepository {
     androidOnboardingShown: false,
     watchlistSortOrder: WatchlistSortOrder.none,
     webDavConfig: WebDavConfig(endpoint: '', username: ''),
+    openingBriefingEnabled: false,
+    closingReviewEnabled: false,
+    lastOpeningBriefingDayKey: '',
+    lastClosingReviewDayKey: '',
     marketDataProviderId: 'ashare',
   );
 
@@ -31,6 +35,14 @@ class InMemorySettingsRepository {
     _status = _status.copyWith(
       pollIntervalSeconds: normalizeMonitorPollIntervalSeconds(seconds),
     );
+  }
+
+  void updateOpeningBriefing(bool enabled) {
+    _status = _status.copyWith(openingBriefingEnabled: enabled);
+  }
+
+  void updateClosingReview(bool enabled) {
+    _status = _status.copyWith(closingReviewEnabled: enabled);
   }
 
   void updateAlertCooldownSeconds(int seconds) {
@@ -56,5 +68,13 @@ class InMemorySettingsRepository {
 
   void markChecked({required DateTime checkedAt, required String message}) {
     _status = _status.copyWith(lastCheckAt: checkedAt, lastMessage: message);
+  }
+
+  void markOpeningBriefingBroadcasted(String tradingDayKey) {
+    _status = _status.copyWith(lastOpeningBriefingDayKey: tradingDayKey);
+  }
+
+  void markClosingReviewBroadcasted(String tradingDayKey) {
+    _status = _status.copyWith(lastClosingReviewDayKey: tradingDayKey);
   }
 }

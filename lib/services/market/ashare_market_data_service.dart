@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import '../../core/utils/stock_text_sanitizer.dart';
+import '../../data/models/market_sentiment_snapshot.dart';
 import '../../data/models/stock_identity.dart';
 import '../../data/models/stock_quote_snapshot.dart';
 import '../../data/models/stock_search_result.dart';
@@ -111,6 +112,7 @@ class AshareMarketDataService extends MarketDataProvider {
           name: name,
           market: market,
           securityTypeName: securityTypeName,
+          query: query,
         )) {
           continue;
         }
@@ -144,6 +146,64 @@ class AshareMarketDataService extends MarketDataProvider {
   @override
   Future<StockQuoteSnapshot> fetchQuote(StockIdentity stock) {
     return _fetchSingleQuote(stock);
+  }
+
+  @override
+  Future<MarketSentimentSnapshot> fetchMarketSentiment() async {
+    final uri = Uri.parse(
+      'https://push2.eastmoney.com/api/qt/clist/get'
+      '?pn=1'
+      '&pz=6000'
+      '&po=1'
+      '&np=1'
+      '&fltt=2'
+      '&invt=2'
+      '&fid=f3'
+      '&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23'
+      '&fields=f3',
+    );
+    final payload = await _getJson(uri);
+    if (payload is! Map<String, dynamic>) {
+      throw const HttpException('Market sentiment payload format is invalid');
+    }
+
+    final data = payload['data'];
+    if (data is! Map<String, dynamic>) {
+      throw const HttpException('Market sentiment data is invalid');
+    }
+
+    final diff = data['diff'];
+    final rows = diff is List ? diff : const [];
+    var advancingCount = 0;
+    var decliningCount = 0;
+    var flatCount = 0;
+    var limitUpCount = 0;
+
+    for (final row in rows) {
+      if (row is! Map) {
+        continue;
+      }
+      final map = row.cast<String, dynamic>();
+      final changePercent = _tryParseFiniteNumber(map['f3']) ?? 0.0;
+      if (changePercent > 0.01) {
+        advancingCount += 1;
+      } else if (changePercent < -0.01) {
+        decliningCount += 1;
+      } else {
+        flatCount += 1;
+      }
+      if (changePercent >= 9.8) {
+        limitUpCount += 1;
+      }
+    }
+
+    return MarketSentimentSnapshot(
+      advancingCount: advancingCount,
+      decliningCount: decliningCount,
+      flatCount: flatCount,
+      limitUpCount: limitUpCount,
+      capturedAt: DateTime.now(),
+    );
   }
 
   @override
@@ -622,6 +682,7 @@ class AshareMarketDataService extends MarketDataProvider {
     List<StockSearchResult> results,
     String query,
   ) {
+    final exactSixDigitCode = _exactSixDigitCode(query);
     final ranked =
         results.where((item) => _matchScore(item, query) > 0).toList()
           ..sort((left, right) {
@@ -629,6 +690,15 @@ class AshareMarketDataService extends MarketDataProvider {
                 _matchScore(right, query).compareTo(_matchScore(left, query));
             if (scoreCompare != 0) {
               return scoreCompare;
+            }
+
+            final exactCodeCompare = _exactCodePriority(
+              left,
+              right,
+              exactSixDigitCode: exactSixDigitCode,
+            );
+            if (exactCodeCompare != 0) {
+              return exactCodeCompare;
             }
 
             final marketCompare = left.market.compareTo(right.market);
@@ -640,6 +710,34 @@ class AshareMarketDataService extends MarketDataProvider {
           });
 
     return ranked.take(20).toList(growable: false);
+  }
+
+  static int _exactCodePriority(
+    StockSearchResult left,
+    StockSearchResult right, {
+    required String? exactSixDigitCode,
+  }) {
+    if (exactSixDigitCode == null) {
+      return 0;
+    }
+
+    final leftExact = left.code == exactSixDigitCode;
+    final rightExact = right.code == exactSixDigitCode;
+    if (leftExact != rightExact) {
+      return leftExact ? -1 : 1;
+    }
+
+    if (!leftExact || !rightExact) {
+      return 0;
+    }
+
+    final leftIndex = _isLikelyIndex(left);
+    final rightIndex = _isLikelyIndex(right);
+    if (leftIndex != rightIndex) {
+      return leftIndex ? -1 : 1;
+    }
+
+    return 0;
   }
 
   List<String> _buildSearchInputs(String query) {
@@ -711,6 +809,14 @@ class AshareMarketDataService extends MarketDataProvider {
     }
 
     return score;
+  }
+
+  static String? _exactSixDigitCode(String query) {
+    final trimmed = query.trim();
+    if (RegExp(r'^\d{6}$').hasMatch(trimmed)) {
+      return trimmed;
+    }
+    return null;
   }
 
   Future<dynamic> _getJson(Uri uri) async {
@@ -962,6 +1068,7 @@ class AshareMarketDataService extends MarketDataProvider {
     required String name,
     required String market,
     required String securityTypeName,
+    required String query,
   }) {
     if (!RegExp(r'^\d{6}$').hasMatch(code)) {
       return false;
@@ -981,13 +1088,44 @@ class AshareMarketDataService extends MarketDataProvider {
       'REPO',
       '港股',
       '美股',
-      '指数',
       '期货',
       '期权',
       '外汇',
       '回购',
     ];
-    return !rejectedKeywords.any(normalized.contains);
+    if (rejectedKeywords.any(normalized.contains)) {
+      return false;
+    }
+
+    final isIndexLike = _looksLikeIndexNameOrType(name, securityTypeName);
+    final exactSixDigitQuery = _exactSixDigitCode(query);
+    if (isIndexLike &&
+        (exactSixDigitQuery == null || exactSixDigitQuery != code)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  static bool _isLikelyIndex(StockSearchResult result) {
+    return _looksLikeIndexNameOrType(result.name, result.securityTypeName);
+  }
+
+  static bool _looksLikeIndexNameOrType(String name, String typeName) {
+    final normalized = _normalizeKeyword('$name $typeName');
+    const indexKeywords = [
+      'INDEX',
+      '指数',
+      '综指',
+      '成指',
+      '上证',
+      '深证',
+      '创业板',
+      '沪深300',
+      '科创50',
+      '中证',
+    ];
+    return indexKeywords.any(normalized.contains);
   }
 
   static String _normalizeKeyword(String value) {
