@@ -24,6 +24,29 @@ int normalizeAlertCooldownSeconds(int seconds) {
 class AshareMarketHours {
   const AshareMarketHours();
 
+  static const Set<String> _holidayDates = {
+    // 2026 A-share holiday closures from SSE/SZSE annual notice.
+    '2026-01-01',
+    '2026-01-02',
+    '2026-02-16',
+    '2026-02-17',
+    '2026-02-18',
+    '2026-02-19',
+    '2026-02-20',
+    '2026-02-23',
+    '2026-04-06',
+    '2026-05-01',
+    '2026-05-04',
+    '2026-05-05',
+    '2026-06-19',
+    '2026-09-25',
+    '2026-10-01',
+    '2026-10-02',
+    '2026-10-05',
+    '2026-10-06',
+    '2026-10-07',
+  };
+
   static const Duration _shanghaiOffset = Duration(hours: 8);
   static const int _morningSessionStartMinutes = 9 * 60 + 30;
   static const int _morningSessionEndMinutes = 11 * 60 + 30;
@@ -32,7 +55,7 @@ class AshareMarketHours {
 
   bool isTradingTime(DateTime moment) {
     final shanghaiMoment = _toShanghaiClock(moment);
-    if (_isWeekend(shanghaiMoment.weekday)) {
+    if (_isWeekend(shanghaiMoment.weekday) || _isHoliday(shanghaiMoment)) {
       return false;
     }
 
@@ -56,8 +79,8 @@ class AshareMarketHours {
   }
 
   DateTime _nextSessionStartInShanghai(DateTime shanghaiMoment) {
-    if (_isWeekend(shanghaiMoment.weekday)) {
-      return _nextWeekdayMorningSession(shanghaiMoment, includeToday: false);
+    if (_isWeekend(shanghaiMoment.weekday) || _isHoliday(shanghaiMoment)) {
+      return _nextOpenMorningSession(shanghaiMoment, includeToday: false);
     }
 
     final minutes = _minutesSinceMidnight(shanghaiMoment);
@@ -73,10 +96,10 @@ class AshareMarketHours {
     if (minutes < _afternoonSessionEndMinutes) {
       return shanghaiMoment;
     }
-    return _nextWeekdayMorningSession(shanghaiMoment, includeToday: false);
+    return _nextOpenMorningSession(shanghaiMoment, includeToday: false);
   }
 
-  DateTime _nextWeekdayMorningSession(
+  DateTime _nextOpenMorningSession(
     DateTime shanghaiMoment, {
     required bool includeToday,
   }) {
@@ -84,7 +107,7 @@ class AshareMarketHours {
     if (!includeToday) {
       candidate = candidate.add(const Duration(days: 1));
     }
-    while (_isWeekend(candidate.weekday)) {
+    while (_isWeekend(candidate.weekday) || _isHoliday(candidate)) {
       candidate = candidate.add(const Duration(days: 1));
     }
     return _sessionStartForDay(candidate, hour: 9, minute: 30);
@@ -165,6 +188,17 @@ class AshareMarketHours {
 
   bool _isWeekend(int weekday) {
     return weekday == DateTime.saturday || weekday == DateTime.sunday;
+  }
+
+  bool _isHoliday(DateTime shanghaiMoment) {
+    return _holidayDates.contains(_dateKey(shanghaiMoment));
+  }
+
+  String _dateKey(DateTime value) {
+    final year = value.year.toString().padLeft(4, '0');
+    final month = _twoDigits(value.month);
+    final day = _twoDigits(value.day);
+    return '$year-$month-$day';
   }
 
   String _formatShanghaiLabel(DateTime shanghaiMoment) {

@@ -10,6 +10,12 @@ void main() {
     expect(normalizeMonitorPollIntervalSeconds(999), 300);
   });
 
+  test('alert cooldown normalization supports disable and upper bound', () {
+    expect(normalizeAlertCooldownSeconds(-1), 0);
+    expect(normalizeAlertCooldownSeconds(120), 120);
+    expect(normalizeAlertCooldownSeconds(99999), 3600);
+  });
+
   test('market hours treat midday break as closed and afternoon as open', () {
     expect(marketHours.isTradingTime(DateTime(2026, 3, 23, 11, 29)), isTrue);
     expect(marketHours.isTradingTime(DateTime(2026, 3, 23, 11, 30)), isFalse);
@@ -32,5 +38,18 @@ void main() {
     final message = marketHours.buildClosedMessage(saturday);
     expect(message, contains('当前不在A股交易时段'));
     expect(message, contains('09:30'));
+  });
+
+  test('market hours treat exchange holiday as closed', () {
+    final holiday = DateTime(2026, 5, 4, 10, 0);
+
+    expect(marketHours.isTradingTime(holiday), isFalse);
+
+    final nextSession = marketHours.nextSessionStart(holiday);
+    expect(nextSession.year, 2026);
+    expect(nextSession.month, 5);
+    expect(nextSession.day, 6);
+    expect(nextSession.hour, 9);
+    expect(nextSession.minute, 30);
   });
 }

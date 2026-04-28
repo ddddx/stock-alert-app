@@ -11,6 +11,28 @@ private const val MORNING_SESSION_START_MINUTES = 9 * 60 + 30
 private const val MORNING_SESSION_END_MINUTES = 11 * 60 + 30
 private const val AFTERNOON_SESSION_START_MINUTES = 13 * 60
 private const val AFTERNOON_SESSION_END_MINUTES = 15 * 60
+private val ASHARE_HOLIDAY_DATES = setOf(
+    // 2026 A-share holiday closures from SSE/SZSE annual notice.
+    "2026-01-01",
+    "2026-01-02",
+    "2026-02-16",
+    "2026-02-17",
+    "2026-02-18",
+    "2026-02-19",
+    "2026-02-20",
+    "2026-02-23",
+    "2026-04-06",
+    "2026-05-01",
+    "2026-05-04",
+    "2026-05-05",
+    "2026-06-19",
+    "2026-09-25",
+    "2026-10-01",
+    "2026-10-02",
+    "2026-10-05",
+    "2026-10-06",
+    "2026-10-07",
+)
 
 data class AshareMarketSession(
     val isTradingOpen: Boolean,
@@ -39,10 +61,11 @@ object AshareMarketSchedule {
         val minutesSinceMidnight = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
         val weekday = now.get(Calendar.DAY_OF_WEEK)
         val isWeekday = weekday != Calendar.SATURDAY && weekday != Calendar.SUNDAY
+        val isHoliday = isHoliday(now)
         val isTradingOpen = isWeekday && (
             (minutesSinceMidnight >= MORNING_SESSION_START_MINUTES && minutesSinceMidnight < MORNING_SESSION_END_MINUTES) ||
                 (minutesSinceMidnight >= AFTERNOON_SESSION_START_MINUTES && minutesSinceMidnight < AFTERNOON_SESSION_END_MINUTES)
-            )
+            ) && !isHoliday
         val nextOpenAtMillis = nextOpenAt(now).timeInMillis
         return AshareMarketSession(
             isTradingOpen = isTradingOpen,
@@ -65,8 +88,8 @@ object AshareMarketSchedule {
         val weekday = next.get(Calendar.DAY_OF_WEEK)
         val minutesSinceMidnight = next.get(Calendar.HOUR_OF_DAY) * 60 + next.get(Calendar.MINUTE)
 
-        if (weekday == Calendar.SATURDAY || weekday == Calendar.SUNDAY) {
-            return moveToNextWeekdayMorning(next)
+        if (weekday == Calendar.SATURDAY || weekday == Calendar.SUNDAY || isHoliday(next)) {
+            return moveToNextOpenMorning(next)
         }
         if (minutesSinceMidnight < MORNING_SESSION_START_MINUTES) {
             return setSessionStart(next, hour = 9, minute = 30)
@@ -82,16 +105,26 @@ object AshareMarketSchedule {
         }
 
         next.add(Calendar.DAY_OF_MONTH, 1)
-        return moveToNextWeekdayMorning(next)
+        return moveToNextOpenMorning(next)
     }
 
-    private fun moveToNextWeekdayMorning(calendar: Calendar): Calendar {
+    private fun moveToNextOpenMorning(calendar: Calendar): Calendar {
         while (calendar.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY ||
-            calendar.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+            calendar.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY ||
+            isHoliday(calendar)
         ) {
             calendar.add(Calendar.DAY_OF_MONTH, 1)
         }
         return setSessionStart(calendar, hour = 9, minute = 30)
+    }
+
+    private fun isHoliday(calendar: Calendar): Boolean {
+        val dateKey = "%04d-%02d-%02d".format(
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH) + 1,
+            calendar.get(Calendar.DAY_OF_MONTH),
+        )
+        return ASHARE_HOLIDAY_DATES.contains(dateKey)
     }
 
     private fun setSessionStart(calendar: Calendar, hour: Int, minute: Int): Calendar {
