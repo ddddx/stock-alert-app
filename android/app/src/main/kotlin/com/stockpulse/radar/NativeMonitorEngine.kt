@@ -76,7 +76,13 @@ class NativeMonitorEngine {
             val quoteResult = marketDataSource.fetchQuotes(monitoredWatchlist)
             val quotes = quoteResult.quotes
             quotes.forEach { appendHistory(runtimeState, it) }
-            val triggers = evaluateRules(rules, quotes, runtimeState, nowMillis)
+            val triggers = evaluateRules(
+                rules = rules,
+                quotes = quotes,
+                runtimeState = runtimeState,
+                nowMillis = nowMillis,
+                alertCooldownSeconds = settings.alertCooldownSeconds,
+            )
             val summary = if (quoteResult.failedCount > 0 && triggers.isEmpty()) {
                 "已刷新 ${quotes.size} 只 A 股，另有 ${quoteResult.failedCount} 只刷新失败。"
             } else if (quoteResult.failedCount > 0) {
@@ -116,6 +122,7 @@ class NativeMonitorEngine {
         quotes: List<NativeQuote>,
         runtimeState: NativeRuntimeState,
         nowMillis: Long,
+        alertCooldownSeconds: Int,
     ): List<NativeAlertTrigger> {
         val liveStateKeys = mutableSetOf<String>()
         val triggers = mutableListOf<NativeAlertTrigger>()
@@ -132,7 +139,7 @@ class NativeMonitorEngine {
                             result = result,
                             state = state,
                             nowMillis = nowMillis,
-                            alertCooldownSeconds = settings.alertCooldownSeconds,
+                            alertCooldownSeconds = alertCooldownSeconds,
                         )
                         runtimeState.ruleStates[stateKey] = cooldownAwareResult.first
                         cooldownAwareResult.second?.let(triggers::add)
@@ -144,7 +151,7 @@ class NativeMonitorEngine {
                             current = quote,
                             state = state,
                             nowMillis = nowMillis,
-                            alertCooldownSeconds = settings.alertCooldownSeconds,
+                            alertCooldownSeconds = alertCooldownSeconds,
                         )
                         runtimeState.ruleStates[stateKey] = result.first
                         result.second?.let(triggers::add)
