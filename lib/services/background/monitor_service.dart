@@ -201,6 +201,11 @@ class AshareMonitorService implements MonitorService {
         if (soundEnabled) {
           playedSound = await _audioAlertService.speak(trigger.spokenText);
         }
+        await _platformBridgeService.showAlertNotification(
+          title: _buildAlertNotificationTitle(trigger.quote),
+          message: trigger.message,
+          notificationId: _buildAlertNotificationId(trigger),
+        );
         await _historyRepository
             .add(trigger.toHistoryEntry(playedSound: playedSound));
       }
@@ -288,5 +293,19 @@ class AshareMonitorService implements MonitorService {
         message: '后台监控刷新失败，已自动关闭后台守护，请重新启用。',
       );
     }
+  }
+
+  String _buildAlertNotificationTitle(StockQuoteSnapshot quote) {
+    final name = quote.name.trim();
+    if (name.isNotEmpty && name != quote.code) {
+      return '$name ${quote.code}';
+    }
+    return quote.code;
+  }
+
+  int _buildAlertNotificationId(AlertTrigger trigger) {
+    final seed =
+        '${trigger.rule.id}:${trigger.quote.code}:${trigger.triggeredAt.millisecondsSinceEpoch}';
+    return seed.hashCode & 0x7fffffff;
   }
 }

@@ -192,6 +192,82 @@ void main() {
     expect(historyRepository.entries.single.playedSound, isFalse);
   });
 
+  test('monitor refresh publishes a local alert notification on trigger',
+      () async {
+    final historyRepository = _FakeHistoryRepository();
+    final settingsRepository = _FakeSettingsRepository(soundEnabled: false);
+    final platformBridgeService = _FakePlatformBridgeService();
+    final marketDataService = _SequenceMarketDataService([
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1500,
+          previousClose: 1490,
+          changeAmount: 3,
+          changePercent: 0.2,
+          openPrice: 1492,
+          highPrice: 1500,
+          lowPrice: 1490,
+          volume: 1000,
+          timestamp: DateTime(2026, 3, 23, 10, 0),
+        ),
+      ],
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1502,
+          previousClose: 1490,
+          changeAmount: 12,
+          changePercent: 0.8,
+          openPrice: 1492,
+          highPrice: 1502,
+          lowPrice: 1490,
+          volume: 1100,
+          timestamp: DateTime(2026, 3, 23, 10, 1),
+        ),
+      ],
+    ]);
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(),
+      alertRepository: _FakeAlertRepository(
+        rules: [
+          AlertRule.stepAlert(
+            id: 'rule-step',
+            stockCode: '600519',
+            stockName: '贵州茅台',
+            market: 'SH',
+            stepValue: 0.5,
+            stepMetric: StepMetric.percent,
+            enabled: true,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      ),
+      historyRepository: historyRepository,
+      settingsRepository: settingsRepository,
+      marketDataService: marketDataService,
+      audioAlertService: _FakeAudioAlertService(),
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: platformBridgeService,
+      now: () => DateTime(2026, 3, 23, 10, 0),
+    );
+
+    await service.refreshWatchlist();
+    final result = await service.refreshWatchlist();
+
+    expect(result.triggers, hasLength(1));
+    expect(historyRepository.entries, hasLength(1));
+    expect(platformBridgeService.alertNotifications, hasLength(1));
+    expect(platformBridgeService.alertNotifications.single.title,
+        contains('600519'));
+    expect(platformBridgeService.alertNotifications.single.message,
+        contains('阶梯提醒'));
+  });
+
   test(
       'monitor refresh keeps partial quotes when one fallback stock still fails',
       () async {
@@ -541,7 +617,37 @@ class _FakeAudioAlertService implements AudioAlertService {
 }
 
 class _FakePlatformBridgeService extends PlatformBridgeService {
+  final List<_AlertNotificationRecord> alertNotifications = [];
+
   @override
   Future<void> updateForegroundMonitorSummary(
       {required String summary}) async {}
+
+  @override
+  Future<bool> showAlertNotification({
+    required String title,
+    required String message,
+    required int notificationId,
+  }) async {
+    alertNotifications.add(
+      _AlertNotificationRecord(
+        title: title,
+        message: message,
+        notificationId: notificationId,
+      ),
+    );
+    return true;
+  }
+}
+
+class _AlertNotificationRecord {
+  const _AlertNotificationRecord({
+    required this.title,
+    required this.message,
+    required this.notificationId,
+  });
+
+  final String title;
+  final String message;
+  final int notificationId;
 }

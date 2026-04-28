@@ -195,6 +195,14 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 val soundEnabled = settings.soundEnabled
                 result.triggers.forEach { trigger ->
                     val playedSound = if (soundEnabled) speak(trigger.spokenText) else false
+                    val notificationId = (trigger.rule.id + ":" + trigger.quote.code + ":" + trigger.triggeredAtMillis)
+                        .hashCode() and Int.MAX_VALUE
+                    AlertNotificationPublisher.publish(
+                        context = this,
+                        title = buildAlertNotificationTitle(trigger.quote),
+                        message = trigger.message,
+                        notificationId = notificationId,
+                    )
                     historyEntries += NativeAlertHistoryEntry(
                         id = "${trigger.rule.id}-${trigger.quote.code}-${trigger.triggeredAtMillis}",
                         ruleId = trigger.rule.id,
@@ -417,6 +425,15 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun loadSettings(): NativeMonitorSettings = MonitorStorage.loadSettings(this)
+
+    private fun buildAlertNotificationTitle(quote: NativeQuote): String {
+        val name = quote.name.trim()
+        return if (name.isNotEmpty() && name != quote.code) {
+            "$name ${quote.code}"
+        } else {
+            quote.code
+        }
+    }
 
     companion object {
         private const val CHANNEL_ID = "stock_monitor_guard"

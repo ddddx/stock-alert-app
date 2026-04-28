@@ -204,4 +204,24 @@ class PlatformBridgeService {
       // Ignore.
     }
   }
+
+  Future<bool> showAlertNotification({
+    required String title,
+    required String message,
+    required int notificationId,
+  }) async {
+    if (!Platform.isAndroid) {
+      return true;
+    }
+    try {
+      return await _channel.invokeMethod<bool>('showAlertNotification', {
+            'title': title,
+            'message': message,
+            'notificationId': notificationId,
+          }) ??
+          false;
+    } on PlatformException {
+      return false;
+    }
+  }
 }

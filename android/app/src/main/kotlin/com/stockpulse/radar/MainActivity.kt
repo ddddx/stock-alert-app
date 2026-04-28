@@ -86,6 +86,20 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
 
+                    showAlertNotificationMethod() -> {
+                        val title = call.argument<String>(notificationTitleArgument()).orEmpty()
+                        val message = call.argument<String>(notificationMessageArgument()).orEmpty()
+                        val notificationId = call.argument<Int>(notificationIdArgument())
+                            ?: (System.currentTimeMillis().toInt() and Int.MAX_VALUE)
+                        val published = AlertNotificationPublisher.publish(
+                            context = this,
+                            title = title,
+                            message = message,
+                            notificationId = notificationId,
+                        )
+                        result.success(published)
+                    }
+
                     else -> result.notImplemented()
                 }
             }
@@ -220,6 +234,9 @@ class MainActivity : FlutterActivity() {
     private fun summaryArgument(): String = "summary"
 
     private fun keywordArgument(): String = "keyword"
+    private fun notificationTitleArgument(): String = "title"
+    private fun notificationMessageArgument(): String = "message"
+    private fun notificationIdArgument(): String = "notificationId"
 
     private fun getStorageDirectoryMethod(): String = "getStorageDirectoryPath"
 
@@ -242,6 +259,7 @@ class MainActivity : FlutterActivity() {
     private fun openBatterySettingsMethod(): String = "openBatteryOptimizationSettings"
 
     private fun openNotificationSettingsMethod(): String = "openNotificationSettings"
+    private fun showAlertNotificationMethod(): String = "showAlertNotification"
 
     private fun searchSinaStocksMethod(): String = "searchSinaStocks"
 
