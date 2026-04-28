@@ -48,10 +48,14 @@ class AlertTrigger {
 }
 
 class AlertRuleEngine {
-  AlertRuleEngine({required AlertMessageBuilder messageBuilder})
-      : _messageBuilder = messageBuilder;
+  AlertRuleEngine({
+    required AlertMessageBuilder messageBuilder,
+    DateTime Function()? now,
+  })  : _messageBuilder = messageBuilder,
+        _now = now ?? DateTime.now;
 
   final AlertMessageBuilder _messageBuilder;
+  final DateTime Function() _now;
   final Map<String, List<StockQuoteSnapshot>> _historyByCode = {};
   final Map<String, RuleEvaluationState> _states = {};
   String? _activeTradingDayKey;
@@ -59,6 +63,7 @@ class AlertRuleEngine {
   List<AlertTrigger> processQuotes({
     required List<AlertRule> rules,
     required List<StockQuoteSnapshot> quotes,
+    int alertCooldownSeconds = 0,
   }) {
     _resetStateForTradingDayIfNeeded(quotes);
 
@@ -66,7 +71,7 @@ class AlertRuleEngine {
       _appendHistory(quote);
     }
 
-    final now = DateTime.now();
+    final now = _now();
     final enabledRules =
         rules.where((item) => item.enabled).toList(growable: false);
     final liveStateKeys = <String>{};
@@ -82,16 +87,30 @@ class AlertRuleEngine {
         switch (rule.type) {
           case AlertRuleType.shortWindowMove:
             final outcome = _evaluateShortWindowRule(rule, quote, state, now);
-            _states[stateKey] = outcome.state;
-            if (outcome.trigger != null) {
-              triggers.add(outcome.trigger!);
+            final cooldownAwareOutcome = _applyCooldownToShortWindowOutcome(
+              outcome: outcome,
+              state: state,
+              now: now,
+              alertCooldownSeconds: alertCooldownSeconds,
+            );
+            _states[stateKey] = cooldownAwareOutcome.state;
+            if (cooldownAwareOutcome.trigger != null) {
+              triggers.add(cooldownAwareOutcome.trigger!);
             }
+            break;
           case AlertRuleType.stepAlert:
-            final outcome = _evaluateStepRule(rule, quote, state, now);
+            final outcome = _evaluateStepRule(
+              rule,
+              quote,
+              state,
+              now,
+              alertCooldownSeconds: alertCooldownSeconds,
+            );
             _states[stateKey] = outcome.state;
             if (outcome.trigger != null) {
               triggers.add(outcome.trigger!);
             }
+            break;
         }
       }
     }
@@ -238,12 +257,9 @@ class AlertRuleEngine {
     );
   }
 
-  _EvaluationOutcome _evaluateStepRule(
-    AlertRule rule,
-    StockQuoteSnapshot current,
-    RuleEvaluationState state,
-    DateTime now,
-  ) {
+  _EvaluationOutcome _evaluateStepRule(AlertRule rule,
+      StockQuoteSnapshot current, RuleEvaluationState state, DateTime now,
+      {required int alertCooldownSeconds}) {
     final stepValue = rule.stepValue ?? 0;
     if (stepValue <= 0) {
       return _EvaluationOutcome(state: state);
@@ -281,6 +297,17 @@ class AlertRuleEngine {
     if (rule.stepMetric == StepMetric.percent && currentIndex == 0) {
       return _EvaluationOutcome(
         state: state.copyWith(lastStepIndex: currentIndex, active: false),
+      );
+    }
+    if (_isInCooldown(state.lastTriggeredAt, now, alertCooldownSeconds)) {
+      return _EvaluationOutcome(
+        state: state.copyWith(
+          active: true,
+          lastStepIndex: currentIndex,
+          stepAnchorPrice: rule.stepMetric == StepMetric.price
+              ? referenceValue
+              : state.stepAnchorPrice,
+        ),
       );
     }
     final previousIndex = state.lastStepIndex!;
@@ -352,6 +379,34 @@ class AlertRuleEngine {
       return value.floor();
     }
     return value.ceil();
+  }
+
+  _EvaluationOutcome _applyCooldownToShortWindowOutcome({
+    required _EvaluationOutcome outcome,
+    required RuleEvaluationState state,
+    required DateTime now,
+    required int alertCooldownSeconds,
+  }) {
+    if (outcome.trigger == null) {
+      return outcome;
+    }
+    if (!_isInCooldown(state.lastTriggeredAt, now, alertCooldownSeconds)) {
+      return outcome;
+    }
+    return _EvaluationOutcome(
+      state: state.copyWith(active: true),
+    );
+  }
+
+  bool _isInCooldown(
+    DateTime? lastTriggeredAt,
+    DateTime now,
+    int alertCooldownSeconds,
+  ) {
+    if (alertCooldownSeconds <= 0 || lastTriggeredAt == null) {
+      return false;
+    }
+    return now.difference(lastTriggeredAt).inSeconds < alertCooldownSeconds;
   }
 }
 

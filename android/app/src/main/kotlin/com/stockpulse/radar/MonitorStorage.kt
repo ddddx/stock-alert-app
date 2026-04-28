@@ -13,6 +13,7 @@ data class NativeMonitorSettings(
     val serviceEnabled: Boolean,
     val soundEnabled: Boolean,
     val pollIntervalSeconds: Int,
+    val alertCooldownSeconds: Int,
     val lastMessage: String,
     val marketDataProviderId: String,
 )
@@ -256,10 +257,14 @@ object MonitorStorage {
         val interval = AshareMarketSchedule.normalizePollIntervalSeconds(
             json?.optInt("pollIntervalSeconds", 20) ?: 20,
         )
+        val alertCooldownSeconds = AshareMarketSchedule.normalizeAlertCooldownSeconds(
+            json?.optInt("alertCooldownSeconds", 120) ?: 120,
+        )
         return NativeMonitorSettings(
             serviceEnabled = json?.optBoolean("serviceEnabled", false) ?: false,
             soundEnabled = json?.optBoolean("soundEnabled", true) ?: true,
             pollIntervalSeconds = interval,
+            alertCooldownSeconds = alertCooldownSeconds,
             lastMessage = json?.optString("lastMessage", DEFAULT_MESSAGE).orEmpty().ifBlank {
                 DEFAULT_MESSAGE
             },
@@ -281,6 +286,9 @@ object MonitorStorage {
         if (!current.has("pollIntervalSeconds")) {
             current.put("pollIntervalSeconds", 20)
         }
+        if (!current.has("alertCooldownSeconds")) {
+            current.put("alertCooldownSeconds", 120)
+        }
         if (!current.has("marketDataProviderId")) {
             current.put("marketDataProviderId", "ashare")
         }
@@ -300,6 +308,9 @@ object MonitorStorage {
         }
         if (!current.has("pollIntervalSeconds")) {
             current.put("pollIntervalSeconds", 20)
+        }
+        if (!current.has("alertCooldownSeconds")) {
+            current.put("alertCooldownSeconds", 120)
         }
         if (!current.has("marketDataProviderId")) {
             current.put("marketDataProviderId", "ashare")

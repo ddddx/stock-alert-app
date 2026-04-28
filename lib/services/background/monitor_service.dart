@@ -193,6 +193,8 @@ class AshareMonitorService implements MonitorService {
       final triggers = _ruleEngine.processQuotes(
         rules: _alertRepository.getEnabledRules(),
         quotes: quotes,
+        alertCooldownSeconds:
+            _settingsRepository.getStatus().alertCooldownSeconds,
       );
 
       final soundEnabled = _settingsRepository.getStatus().soundEnabled;

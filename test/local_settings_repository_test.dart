@@ -50,4 +50,24 @@ void main() {
 
     expect(repository.getStatus().pollIntervalSeconds, 1);
   });
+
+  test('update clamps alert cooldown to non-negative seconds', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'stock-alert-settings-',
+    );
+    addTearDown(() async {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    });
+
+    final store = JsonFileStore(fileName: 'monitor_settings.json');
+    await store.initialize(directory.path);
+    final repository = LocalSettingsRepository(store: store);
+    await repository.initialize();
+
+    await repository.updateAlertCooldownSeconds(-5);
+
+    expect(repository.getStatus().alertCooldownSeconds, 0);
+  });
 }

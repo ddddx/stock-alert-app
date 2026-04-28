@@ -268,6 +268,97 @@ void main() {
         contains('阶梯提醒'));
   });
 
+  test('monitor refresh enforces alert cooldown for repeated triggers',
+      () async {
+    final historyRepository = _FakeHistoryRepository();
+    final settingsRepository = _FakeSettingsRepository(
+      soundEnabled: false,
+      alertCooldownSeconds: 120,
+    );
+    final marketDataService = _SequenceMarketDataService([
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1500,
+          previousClose: 1490,
+          changeAmount: 3,
+          changePercent: 0.2,
+          openPrice: 1492,
+          highPrice: 1500,
+          lowPrice: 1490,
+          volume: 1000,
+          timestamp: DateTime(2026, 3, 23, 10, 0),
+        ),
+      ],
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1502,
+          previousClose: 1490,
+          changeAmount: 12,
+          changePercent: 0.8,
+          openPrice: 1492,
+          highPrice: 1502,
+          lowPrice: 1490,
+          volume: 1100,
+          timestamp: DateTime(2026, 3, 23, 10, 1),
+        ),
+      ],
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1510,
+          previousClose: 1490,
+          changeAmount: 20,
+          changePercent: 1.34,
+          openPrice: 1492,
+          highPrice: 1510,
+          lowPrice: 1490,
+          volume: 1500,
+          timestamp: DateTime(2026, 3, 23, 10, 2),
+        ),
+      ],
+    ]);
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(),
+      alertRepository: _FakeAlertRepository(
+        rules: [
+          AlertRule.stepAlert(
+            id: 'rule-step',
+            stockCode: '600519',
+            stockName: '贵州茅台',
+            market: 'SH',
+            stepValue: 0.5,
+            stepMetric: StepMetric.percent,
+            enabled: true,
+            createdAt: DateTime(2026, 1, 1),
+          ),
+        ],
+      ),
+      historyRepository: historyRepository,
+      settingsRepository: settingsRepository,
+      marketDataService: marketDataService,
+      audioAlertService: _FakeAudioAlertService(),
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: _FakePlatformBridgeService(),
+      now: () => DateTime(2026, 3, 23, 10, 0),
+    );
+
+    await service.refreshWatchlist();
+    final firstTrigger = await service.refreshWatchlist();
+    final secondTrigger = await service.refreshWatchlist();
+
+    expect(firstTrigger.triggers, hasLength(1));
+    expect(secondTrigger.triggers, isEmpty);
+    expect(historyRepository.entries, hasLength(1));
+  });
+
   test(
       'monitor refresh keeps partial quotes when one fallback stock still fails',
       () async {
@@ -532,10 +623,12 @@ class _FakeSettingsRepository implements SettingsRepository {
   _FakeSettingsRepository({
     bool serviceEnabled = false,
     bool soundEnabled = true,
+    int alertCooldownSeconds = 120,
   }) : _status = MonitorStatus(
           serviceEnabled: serviceEnabled,
           soundEnabled: soundEnabled,
           pollIntervalSeconds: 5,
+          alertCooldownSeconds: alertCooldownSeconds,
           lastCheckAt: null,
           lastMessage: 'ready',
           androidOnboardingShown: false,
@@ -572,6 +665,11 @@ class _FakeSettingsRepository implements SettingsRepository {
   @override
   Future<void> updatePollIntervalSeconds(int seconds) async {
     _status = _status.copyWith(pollIntervalSeconds: seconds);
+  }
+
+  @override
+  Future<void> updateAlertCooldownSeconds(int seconds) async {
+    _status = _status.copyWith(alertCooldownSeconds: seconds);
   }
 
   @override

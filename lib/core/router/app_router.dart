@@ -469,6 +469,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       preferences: AppBackupPreferences(
         soundEnabled: status.soundEnabled,
         pollIntervalSeconds: status.pollIntervalSeconds,
+        alertCooldownSeconds: status.alertCooldownSeconds,
         watchlistSortOrder: status.watchlistSortOrder,
         marketDataProviderId: status.marketDataProviderId,
       ),
@@ -490,6 +491,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     await _settingsRepository.updateSound(payload.preferences.soundEnabled);
     await _settingsRepository.updatePollIntervalSeconds(
       payload.preferences.pollIntervalSeconds,
+    );
+    await _settingsRepository.updateAlertCooldownSeconds(
+      payload.preferences.alertCooldownSeconds,
     );
     await _settingsRepository.updateWatchlistSortOrder(
       payload.preferences.watchlistSortOrder,
@@ -524,7 +528,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   Future<void> _handleMarketDataProviderChanged(String providerId) async {
-    final currentProviderId = _settingsRepository.getStatus().marketDataProviderId;
+    final currentProviderId =
+        _settingsRepository.getStatus().marketDataProviderId;
     if (currentProviderId == providerId ||
         !_marketDataProviders.containsKey(providerId)) {
       return;

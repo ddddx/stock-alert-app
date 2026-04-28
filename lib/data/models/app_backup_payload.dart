@@ -6,6 +6,7 @@ class AppBackupPreferences {
   const AppBackupPreferences({
     required this.soundEnabled,
     required this.pollIntervalSeconds,
+    required this.alertCooldownSeconds,
     required this.watchlistSortOrder,
     this.marketDataProviderId = 'ashare',
   });
@@ -14,16 +15,17 @@ class AppBackupPreferences {
     return AppBackupPreferences(
       soundEnabled: json['soundEnabled'] as bool? ?? true,
       pollIntervalSeconds: json['pollIntervalSeconds'] as int? ?? 20,
+      alertCooldownSeconds: json['alertCooldownSeconds'] as int? ?? 120,
       watchlistSortOrder: WatchlistSortOrderX.fromName(
         json['watchlistSortOrder'] as String?,
       ),
-      marketDataProviderId:
-          json['marketDataProviderId'] as String? ?? 'ashare',
+      marketDataProviderId: json['marketDataProviderId'] as String? ?? 'ashare',
     );
   }
 
   final bool soundEnabled;
   final int pollIntervalSeconds;
+  final int alertCooldownSeconds;
   final WatchlistSortOrder watchlistSortOrder;
   final String marketDataProviderId;
 
@@ -31,6 +33,7 @@ class AppBackupPreferences {
     return {
       'soundEnabled': soundEnabled,
       'pollIntervalSeconds': pollIntervalSeconds,
+      'alertCooldownSeconds': alertCooldownSeconds,
       'watchlistSortOrder': watchlistSortOrder.name,
       'marketDataProviderId': marketDataProviderId,
     };

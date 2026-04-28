@@ -128,12 +128,24 @@ class NativeMonitorEngine {
                 when (rule.type) {
                     "shortWindowMove" -> {
                         val result = evaluateShortWindowRule(rule, quote, state, runtimeState, nowMillis)
-                        runtimeState.ruleStates[stateKey] = result.first
-                        result.second?.let(triggers::add)
+                        val cooldownAwareResult = applyCooldownToShortWindowResult(
+                            result = result,
+                            state = state,
+                            nowMillis = nowMillis,
+                            alertCooldownSeconds = settings.alertCooldownSeconds,
+                        )
+                        runtimeState.ruleStates[stateKey] = cooldownAwareResult.first
+                        cooldownAwareResult.second?.let(triggers::add)
                     }
 
                     "stepAlert" -> {
-                        val result = evaluateStepRule(rule, quote, state, nowMillis)
+                        val result = evaluateStepRule(
+                            rule = rule,
+                            current = quote,
+                            state = state,
+                            nowMillis = nowMillis,
+                            alertCooldownSeconds = settings.alertCooldownSeconds,
+                        )
                         runtimeState.ruleStates[stateKey] = result.first
                         result.second?.let(triggers::add)
                     }
@@ -204,6 +216,7 @@ class NativeMonitorEngine {
         current: NativeQuote,
         state: NativeRuleState,
         nowMillis: Long,
+        alertCooldownSeconds: Int,
     ): Pair<NativeRuleState, NativeAlertTrigger?> {
         val stepValue = rule.stepValue ?: 0.0
         if (stepValue <= 0.0) {
@@ -229,6 +242,13 @@ class NativeMonitorEngine {
 
         if (rule.stepMetric == "percent" && currentIndex == 0) {
             return state.copy(lastStepIndex = currentIndex, active = false) to null
+        }
+        if (isInCooldown(state.lastTriggeredAtMillis, nowMillis, alertCooldownSeconds)) {
+            return state.copy(
+                active = true,
+                lastStepIndex = currentIndex,
+                stepAnchorPrice = if (rule.stepMetric == "price") referenceValue else state.stepAnchorPrice,
+            ) to null
         }
         val previousIndex = state.lastStepIndex ?: currentIndex
         val crossedAmount = current.lastPrice - referenceValue
@@ -312,6 +332,30 @@ class NativeMonitorEngine {
 
     private fun bandIndex(value: Double): Int {
         return if (value >= 0.0) floor(value).toInt() else ceil(value).toInt()
+    }
+
+    private fun applyCooldownToShortWindowResult(
+        result: Pair<NativeRuleState, NativeAlertTrigger?>,
+        state: NativeRuleState,
+        nowMillis: Long,
+        alertCooldownSeconds: Int,
+    ): Pair<NativeRuleState, NativeAlertTrigger?> {
+        val trigger = result.second ?: return result
+        if (!isInCooldown(state.lastTriggeredAtMillis, nowMillis, alertCooldownSeconds)) {
+            return result
+        }
+        return state.copy(active = true) to null
+    }
+
+    private fun isInCooldown(
+        lastTriggeredAtMillis: Long?,
+        nowMillis: Long,
+        alertCooldownSeconds: Int,
+    ): Boolean {
+        if (alertCooldownSeconds <= 0 || lastTriggeredAtMillis == null) {
+            return false
+        }
+        return nowMillis - lastTriggeredAtMillis < alertCooldownSeconds * 1000L
     }
 
     private fun buildShortWindowMessage(

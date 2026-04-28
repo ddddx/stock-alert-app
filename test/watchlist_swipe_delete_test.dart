@@ -303,6 +303,7 @@ const _monitoringStatus = MonitorStatus(
   serviceEnabled: true,
   soundEnabled: true,
   pollIntervalSeconds: 20,
+  alertCooldownSeconds: 120,
   lastCheckAt: null,
   lastMessage: 'ready',
   androidOnboardingShown: false,

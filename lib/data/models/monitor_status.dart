@@ -6,6 +6,7 @@ class MonitorStatus {
     required this.serviceEnabled,
     required this.soundEnabled,
     required this.pollIntervalSeconds,
+    required this.alertCooldownSeconds,
     required this.lastCheckAt,
     required this.lastMessage,
     required this.androidOnboardingShown,
@@ -19,6 +20,7 @@ class MonitorStatus {
       serviceEnabled: json['serviceEnabled'] as bool? ?? false,
       soundEnabled: json['soundEnabled'] as bool? ?? true,
       pollIntervalSeconds: (json['pollIntervalSeconds'] as int?) ?? 20,
+      alertCooldownSeconds: (json['alertCooldownSeconds'] as int?) ?? 120,
       lastCheckAt: json['lastCheckAt'] == null
           ? null
           : DateTime.tryParse(json['lastCheckAt'] as String),
@@ -35,8 +37,7 @@ class MonitorStatus {
           _ => null,
         },
       ),
-      marketDataProviderId:
-          json['marketDataProviderId'] as String? ?? 'ashare',
+      marketDataProviderId: json['marketDataProviderId'] as String? ?? 'ashare',
     );
   }
 
@@ -44,6 +45,7 @@ class MonitorStatus {
     bool? serviceEnabled,
     bool? soundEnabled,
     int? pollIntervalSeconds,
+    int? alertCooldownSeconds,
     DateTime? lastCheckAt,
     String? lastMessage,
     bool? androidOnboardingShown,
@@ -55,20 +57,21 @@ class MonitorStatus {
       serviceEnabled: serviceEnabled ?? this.serviceEnabled,
       soundEnabled: soundEnabled ?? this.soundEnabled,
       pollIntervalSeconds: pollIntervalSeconds ?? this.pollIntervalSeconds,
+      alertCooldownSeconds: alertCooldownSeconds ?? this.alertCooldownSeconds,
       lastCheckAt: lastCheckAt ?? this.lastCheckAt,
       lastMessage: lastMessage ?? this.lastMessage,
       androidOnboardingShown:
           androidOnboardingShown ?? this.androidOnboardingShown,
       watchlistSortOrder: watchlistSortOrder ?? this.watchlistSortOrder,
       webDavConfig: webDavConfig ?? this.webDavConfig,
-      marketDataProviderId:
-          marketDataProviderId ?? this.marketDataProviderId,
+      marketDataProviderId: marketDataProviderId ?? this.marketDataProviderId,
     );
   }
 
   final bool serviceEnabled;
   final bool soundEnabled;
   final int pollIntervalSeconds;
+  final int alertCooldownSeconds;
   final DateTime? lastCheckAt;
   final String lastMessage;
   final bool androidOnboardingShown;
@@ -81,6 +84,7 @@ class MonitorStatus {
       'serviceEnabled': serviceEnabled,
       'soundEnabled': soundEnabled,
       'pollIntervalSeconds': pollIntervalSeconds,
+      'alertCooldownSeconds': alertCooldownSeconds,
       'lastCheckAt': lastCheckAt?.toIso8601String(),
       'lastMessage': lastMessage,
       'androidOnboardingShown': androidOnboardingShown,

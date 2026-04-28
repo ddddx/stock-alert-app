@@ -275,6 +275,72 @@ void main() {
     expect(dayOnePass, isEmpty);
     expect(dayTwoFirstPass, isEmpty);
   });
+
+  test('short-window rule cooldown suppresses rapid repeated triggers', () {
+    final baseTime = DateTime(2026, 1, 1, 9, 30);
+    final engine = AlertRuleEngine(
+      messageBuilder: AlertMessageBuilder(),
+      now: () => baseTime,
+    );
+    final rule = AlertRule.shortWindowMove(
+      id: 'short-cooldown',
+      moveThresholdPercent: 0.5,
+      lookbackMinutes: 5,
+      moveDirection: MoveDirection.either,
+      enabled: true,
+      createdAt: DateTime(2026, 1, 1),
+      targetStocks: const [
+        StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
+      ],
+    );
+
+    engine.processQuotes(
+      rules: [rule],
+      alertCooldownSeconds: 120,
+      quotes: [
+        _quote(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1500,
+          previousClose: 1490,
+          timestamp: DateTime(2026, 1, 1, 9, 30),
+        ),
+      ],
+    );
+
+    final firstTrigger = engine.processQuotes(
+      rules: [rule],
+      alertCooldownSeconds: 120,
+      quotes: [
+        _quote(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1515,
+          previousClose: 1490,
+          timestamp: DateTime(2026, 1, 1, 9, 31),
+        ),
+      ],
+    );
+    final secondTrigger = engine.processQuotes(
+      rules: [rule],
+      alertCooldownSeconds: 120,
+      quotes: [
+        _quote(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1520,
+          previousClose: 1490,
+          timestamp: DateTime(2026, 1, 1, 9, 32),
+        ),
+      ],
+    );
+
+    expect(firstTrigger, hasLength(1));
+    expect(secondTrigger, isEmpty);
+  });
 }
 
 StockQuoteSnapshot _quote({

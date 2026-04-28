@@ -56,7 +56,8 @@ void main() {
     );
   });
 
-  test('disabled monitoring items are marked disabled and sorted to the end', () {
+  test('disabled monitoring items are marked disabled and sorted to the end',
+      () {
     final items = resolver.buildItems(
       watchlist: const [
         StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
@@ -100,6 +101,7 @@ MonitorStatus _status({
     serviceEnabled: true,
     soundEnabled: true,
     pollIntervalSeconds: 20,
+    alertCooldownSeconds: 120,
     lastCheckAt: null,
     lastMessage: lastMessage,
     androidOnboardingShown: false,

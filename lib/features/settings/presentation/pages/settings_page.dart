@@ -58,8 +58,10 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   static const List<int> _commonPollIntervals = [5, 10, 15, 30, 60];
+  static const List<int> _commonCooldownSeconds = [0, 30, 60, 120, 300];
 
   late final TextEditingController _intervalController;
+  late final TextEditingController _cooldownController;
   late final TextEditingController _webDavEndpointController;
   late final TextEditingController _webDavUsernameController;
   late final TextEditingController _webDavPasswordController;
@@ -74,6 +76,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _intervalController = TextEditingController(
       text: widget.repository.getStatus().pollIntervalSeconds.toString(),
     );
+    _cooldownController = TextEditingController(
+      text: widget.repository.getStatus().alertCooldownSeconds.toString(),
+    );
     final webDavConfig = widget.repository.getStatus().webDavConfig;
     _webDavEndpointController =
         TextEditingController(text: webDavConfig.endpoint);
@@ -86,6 +91,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _intervalController.dispose();
+    _cooldownController.dispose();
     _webDavEndpointController.dispose();
     _webDavUsernameController.dispose();
     _webDavPasswordController.dispose();
@@ -109,6 +115,17 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
     _intervalController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  void _syncCooldownController(int seconds) {
+    final text = seconds.toString();
+    if (_cooldownController.text == text) {
+      return;
+    }
+    _cooldownController.value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
     );
@@ -246,6 +263,34 @@ class _SettingsPageState extends State<SettingsPage> {
     widget.onChanged();
   }
 
+  Future<void> _applyAlertCooldown() async {
+    final rawValue = _cooldownController.text.trim();
+    final parsed = int.tryParse(rawValue);
+    final statusBeforeUpdate = widget.repository.getStatus();
+    if (parsed == null) {
+      _syncCooldownController(statusBeforeUpdate.alertCooldownSeconds);
+      _showFeedback(
+        '请输入 $minAlertCooldownSeconds 到 $maxAlertCooldownSeconds 秒之间的整数。',
+      );
+      return;
+    }
+
+    final normalized =
+        parsed.clamp(minAlertCooldownSeconds, maxAlertCooldownSeconds).toInt();
+    await widget.repository.updateAlertCooldownSeconds(normalized);
+    if (statusBeforeUpdate.serviceEnabled) {
+      await widget.monitorService.reload();
+    }
+    _syncCooldownController(normalized);
+
+    final cooldownText = normalized == 0 ? '关闭冷却' : '$normalized 秒冷却';
+    final feedback = statusBeforeUpdate.serviceEnabled
+        ? '提醒冷却已更新为 $cooldownText，后台监控会按新策略继续执行。'
+        : '提醒冷却已保存为 $cooldownText，开启后台监控后会按该策略执行。';
+    _showFeedback(feedback);
+    widget.onChanged();
+  }
+
   Future<void> _handleServiceToggle(bool enabled) async {
     if (enabled) {
       final allowed = await widget.onRequestAndroidBackgroundAccess(
@@ -322,6 +367,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final status = widget.repository.getStatus();
     _syncIntervalController(status.pollIntervalSeconds);
+    _syncCooldownController(status.alertCooldownSeconds);
     _syncWebDavControllersIfNeeded(status.webDavConfig);
 
     return ListView(
@@ -385,6 +431,14 @@ class _SettingsPageState extends State<SettingsPage> {
             label: '轮询间隔',
             value: '${status.pollIntervalSeconds} 秒',
             tone: const Color(0xFFEF6C00),
+          ),
+          _SettingsQuickStat(
+            icon: Icons.alarm_on_outlined,
+            label: '提醒冷却',
+            value: status.alertCooldownSeconds == 0
+                ? '已关闭'
+                : '${status.alertCooldownSeconds} 秒',
+            tone: const Color(0xFF5E35B1),
           ),
           _SettingsQuickStat(
             icon: Icons.history_toggle_off_outlined,
@@ -453,6 +507,37 @@ class _SettingsPageState extends State<SettingsPage> {
             }).toList(),
           ),
           const SizedBox(height: 12),
+          TextFormField(
+            key: const Key('alert-cooldown-input'),
+            controller: _cooldownController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(
+              labelText: '提醒冷却时间',
+              border: OutlineInputBorder(),
+              helperText: '允许 0 到 3600 秒。0 表示关闭冷却；用于减少重复轰炸。',
+              suffixIcon: Icon(Icons.alarm_on_outlined),
+            ),
+            onFieldSubmitted: (_) async => _applyAlertCooldown(),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _commonCooldownSeconds.map((seconds) {
+              final isSelected = status.alertCooldownSeconds == seconds;
+              final label = seconds == 0 ? '关闭冷却' : '$seconds 秒';
+              return ChoiceChip(
+                label: Text(label),
+                selected: isSelected,
+                onSelected: (_) async {
+                  _syncCooldownController(seconds);
+                  await _applyAlertCooldown();
+                },
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
           Text(
             '监控操作',
             style: Theme.of(context).textTheme.titleSmall,
@@ -464,6 +549,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 onPressed: _applyPollInterval,
                 icon: Icons.check_circle_outline,
                 label: '应用间隔',
+                emphasis: _SettingsActionEmphasis.primary,
+              ),
+              _SettingsActionButton(
+                onPressed: _applyAlertCooldown,
+                icon: Icons.alarm_on_outlined,
+                label: '应用冷却',
                 emphasis: _SettingsActionEmphasis.primary,
               ),
               _SettingsActionButton(

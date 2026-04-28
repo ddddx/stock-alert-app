@@ -5,6 +5,8 @@ import java.util.TimeZone
 
 private const val MIN_POLL_INTERVAL_SECONDS = 1
 private const val MAX_POLL_INTERVAL_SECONDS = 300
+private const val MIN_ALERT_COOLDOWN_SECONDS = 0
+private const val MAX_ALERT_COOLDOWN_SECONDS = 3600
 private const val MORNING_SESSION_START_MINUTES = 9 * 60 + 30
 private const val MORNING_SESSION_END_MINUTES = 11 * 60 + 30
 private const val AFTERNOON_SESSION_START_MINUTES = 13 * 60
@@ -24,6 +26,10 @@ object AshareMarketSchedule {
 
     fun normalizePollIntervalSeconds(seconds: Int): Int {
         return seconds.coerceIn(MIN_POLL_INTERVAL_SECONDS, MAX_POLL_INTERVAL_SECONDS)
+    }
+
+    fun normalizeAlertCooldownSeconds(seconds: Int): Int {
+        return seconds.coerceIn(MIN_ALERT_COOLDOWN_SECONDS, MAX_ALERT_COOLDOWN_SECONDS)
     }
 
     fun currentSession(nowMillis: Long = System.currentTimeMillis()): AshareMarketSession {

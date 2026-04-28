@@ -13,6 +13,7 @@ class LocalSettingsRepository implements SettingsRepository {
     serviceEnabled: false,
     soundEnabled: true,
     pollIntervalSeconds: 20,
+    alertCooldownSeconds: 120,
     lastCheckAt: null,
     lastMessage: '等待首次刷新A股行情。',
     androidOnboardingShown: false,
@@ -32,8 +33,15 @@ class LocalSettingsRepository implements SettingsRepository {
     final normalized = normalizeMonitorPollIntervalSeconds(
       _status.pollIntervalSeconds,
     );
-    if (_status.pollIntervalSeconds != normalized) {
-      _status = _status.copyWith(pollIntervalSeconds: normalized);
+    final normalizedCooldown = normalizeAlertCooldownSeconds(
+      _status.alertCooldownSeconds,
+    );
+    if (_status.pollIntervalSeconds != normalized ||
+        _status.alertCooldownSeconds != normalizedCooldown) {
+      _status = _status.copyWith(
+        pollIntervalSeconds: normalized,
+        alertCooldownSeconds: normalizedCooldown,
+      );
       await _persist();
     }
   }
@@ -57,6 +65,13 @@ class LocalSettingsRepository implements SettingsRepository {
   Future<void> updatePollIntervalSeconds(int seconds) async {
     final normalized = normalizeMonitorPollIntervalSeconds(seconds);
     _status = _status.copyWith(pollIntervalSeconds: normalized);
+    await _persist();
+  }
+
+  @override
+  Future<void> updateAlertCooldownSeconds(int seconds) async {
+    final normalized = normalizeAlertCooldownSeconds(seconds);
+    _status = _status.copyWith(alertCooldownSeconds: normalized);
     await _persist();
   }
 

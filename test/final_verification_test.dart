@@ -205,6 +205,37 @@ void main() {
     expect(find.textContaining('5 秒'), findsWidgets);
   });
 
+  testWidgets('settings page accepts alert cooldown updates', (tester) async {
+    final settingsRepository = _FakeSettingsRepository();
+    final monitorService = _FakeMonitorService();
+
+    await tester.pumpWidget(
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: monitorService,
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byKey(const Key('alert-cooldown-input')), '45');
+    await tester.tap(find.text('应用冷却'));
+    await tester.pumpAndSettle();
+
+    expect(settingsRepository.getStatus().alertCooldownSeconds, 45);
+    expect(find.textContaining('45 秒'), findsWidgets);
+  });
+
   testWidgets('settings page quick poll interval chip updates setting', (
     tester,
   ) async {
@@ -552,6 +583,7 @@ class _FakeSettingsRepository implements SettingsRepository {
     serviceEnabled: false,
     soundEnabled: true,
     pollIntervalSeconds: 20,
+    alertCooldownSeconds: 120,
     lastCheckAt: null,
     lastMessage: 'ready',
     androidOnboardingShown: false,
@@ -586,6 +618,11 @@ class _FakeSettingsRepository implements SettingsRepository {
   @override
   Future<void> updatePollIntervalSeconds(int seconds) async {
     _status = _status.copyWith(pollIntervalSeconds: seconds);
+  }
+
+  @override
+  Future<void> updateAlertCooldownSeconds(int seconds) async {
+    _status = _status.copyWith(alertCooldownSeconds: seconds);
   }
 
   @override

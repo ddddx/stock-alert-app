@@ -133,6 +133,7 @@ class _FakeSettingsRepository implements SettingsRepository {
           serviceEnabled: serviceEnabled,
           soundEnabled: true,
           pollIntervalSeconds: 20,
+          alertCooldownSeconds: 120,
           lastCheckAt: null,
           lastMessage: 'ready',
           androidOnboardingShown: false,
@@ -169,6 +170,11 @@ class _FakeSettingsRepository implements SettingsRepository {
   @override
   Future<void> updatePollIntervalSeconds(int seconds) async {
     _status = _status.copyWith(pollIntervalSeconds: seconds);
+  }
+
+  @override
+  Future<void> updateAlertCooldownSeconds(int seconds) async {
+    _status = _status.copyWith(alertCooldownSeconds: seconds);
   }
 
   @override

@@ -1,11 +1,22 @@
 const int minMonitorPollIntervalSeconds = 1;
 const int maxMonitorPollIntervalSeconds = 300;
+const int minAlertCooldownSeconds = 0;
+const int maxAlertCooldownSeconds = 3600;
 
 int normalizeMonitorPollIntervalSeconds(int seconds) {
   return seconds
       .clamp(
         minMonitorPollIntervalSeconds,
         maxMonitorPollIntervalSeconds,
+      )
+      .toInt();
+}
+
+int normalizeAlertCooldownSeconds(int seconds) {
+  return seconds
+      .clamp(
+        minAlertCooldownSeconds,
+        maxAlertCooldownSeconds,
       )
       .toInt();
 }

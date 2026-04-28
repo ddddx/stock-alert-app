@@ -8,6 +8,7 @@ class InMemorySettingsRepository {
     serviceEnabled: false,
     soundEnabled: true,
     pollIntervalSeconds: 20,
+    alertCooldownSeconds: 120,
     lastCheckAt: null,
     lastMessage: '等待首次刷新A股行情。',
     androidOnboardingShown: false,
@@ -29,6 +30,12 @@ class InMemorySettingsRepository {
   void updatePollIntervalSeconds(int seconds) {
     _status = _status.copyWith(
       pollIntervalSeconds: normalizeMonitorPollIntervalSeconds(seconds),
+    );
+  }
+
+  void updateAlertCooldownSeconds(int seconds) {
+    _status = _status.copyWith(
+      alertCooldownSeconds: normalizeAlertCooldownSeconds(seconds),
     );
   }
 
