@@ -14,12 +14,28 @@ class BootCompletedReceiver : BroadcastReceiver() {
             return
         }
 
-        MonitorStorage.disableService(
+        val summary = when (action) {
+            Intent.ACTION_BOOT_COMPLETED -> "检测到设备重启，后台守护正在自动恢复。"
+            Intent.ACTION_MY_PACKAGE_REPLACED -> "应用更新完成，后台守护正在自动恢复。"
+            else -> "后台守护正在自动恢复。"
+        }
+        val restored = MonitorServiceLauncher.startMonitorService(
             context = context,
+            action = MonitorForegroundService.ACTION_RELOAD_MONITOR,
+            summary = summary,
+            disableOnFailure = true,
+            failurePrefix = "后台守护自动恢复失败",
+        )
+        if (!restored) {
+            return
+        }
+        MonitorStorage.updateStatus(
+            context = context,
+            checkedAtMillis = System.currentTimeMillis(),
             message = when (action) {
-                Intent.ACTION_BOOT_COMPLETED -> "检测到设备重启。为兼容部分安卓机型，后台守护不会自动恢复，请打开应用后手动重新开启。"
-                Intent.ACTION_MY_PACKAGE_REPLACED -> "应用刚完成更新。为避免升级后冷启动闪退，后台守护已暂时关闭，请打开应用后手动重新开启。"
-                else -> "后台守护已关闭，请打开应用后手动重新开启。"
+                Intent.ACTION_BOOT_COMPLETED -> "检测到设备重启，后台守护已自动恢复。"
+                Intent.ACTION_MY_PACKAGE_REPLACED -> "应用更新完成，后台守护已自动恢复。"
+                else -> "后台守护已自动恢复。"
             },
         )
     }
