@@ -47,8 +47,8 @@ jobs:
         shell: pwsh
         run: |
           if (-not "${{ secrets.ANDROID_KEYSTORE_BASE64 }}") {
-            Write-Host "ANDROID_KEYSTORE_BASE64 not set; building with debug signing."
-            return
+            Write-Error "ANDROID_KEYSTORE_BASE64 is required for release signing."
+            exit 1
           }
 
           $bytes = [Convert]::FromBase64String("${{ secrets.ANDROID_KEYSTORE_BASE64 }}")

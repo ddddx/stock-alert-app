@@ -34,6 +34,17 @@ val hasReleaseSigning =
         !keystoreProperties.getProperty("storePassword").isNullOrBlank() &&
         !keystoreProperties.getProperty("keyAlias").isNullOrBlank() &&
         !keystoreProperties.getProperty("keyPassword").isNullOrBlank()
+val allowDebugReleaseSigning = providers
+    .gradleProperty("ALLOW_DEBUG_RELEASE_SIGNING")
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(false)
+    .get()
+
+if (!hasReleaseSigning && !allowDebugReleaseSigning) {
+    throw GradleException(
+        "Release signing is required. Configure key.properties or pass -PALLOW_DEBUG_RELEASE_SIGNING=true for internal-only local builds.",
+    )
+}
 
 android {
     namespace = "com.stockpulse.radar"

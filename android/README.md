@@ -8,7 +8,7 @@
 - 前台服务常驻通知 `MonitorForegroundService`
 - 开机/升级后恢复入口 `BootCompletedReceiver`
 - 通知权限、电池优化设置跳转
-- release 仍使用 debug 签名，仅供内部测试
+- release 构建要求正式 keystore 签名（CI 必须提供签名 secrets）
 
 建议验证顺序：
 
