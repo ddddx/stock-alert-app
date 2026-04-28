@@ -175,6 +175,7 @@ void main() {
   testWidgets('settings page accepts poll intervals below 15 seconds', (
     tester,
   ) async {
+    _useLargeViewport(tester);
     final settingsRepository = _FakeSettingsRepository();
     final monitorService = _FakeMonitorService();
 
@@ -198,7 +199,10 @@ void main() {
     );
 
     await tester.enterText(find.byKey(const Key('poll-interval-input')), '5');
-    await tester.tap(find.text('应用间隔'));
+    await _scrollAndTap(
+      tester,
+      find.byKey(const Key('apply-poll-interval-button')),
+    );
     await tester.pumpAndSettle();
 
     expect(settingsRepository.getStatus().pollIntervalSeconds, 5);
@@ -206,6 +210,7 @@ void main() {
   });
 
   testWidgets('settings page accepts alert cooldown updates', (tester) async {
+    _useLargeViewport(tester);
     final settingsRepository = _FakeSettingsRepository();
     final monitorService = _FakeMonitorService();
 
@@ -229,7 +234,10 @@ void main() {
     );
 
     await tester.enterText(find.byKey(const Key('alert-cooldown-input')), '45');
-    await tester.tap(find.text('应用冷却'));
+    await _scrollAndTap(
+      tester,
+      find.byKey(const Key('apply-alert-cooldown-button')),
+    );
     await tester.pumpAndSettle();
 
     expect(settingsRepository.getStatus().alertCooldownSeconds, 45);
@@ -239,6 +247,7 @@ void main() {
   testWidgets('settings page quick poll interval chip updates setting', (
     tester,
   ) async {
+    _useLargeViewport(tester);
     final settingsRepository = _FakeSettingsRepository();
     final monitorService = _FakeMonitorService();
 
@@ -261,7 +270,10 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(ChoiceChip, '30 秒'));
+    await _scrollAndTap(
+      tester,
+      find.byKey(const Key('poll-interval-chip-30')),
+    );
     await tester.pumpAndSettle();
 
     expect(settingsRepository.getStatus().pollIntervalSeconds, 30);
@@ -272,6 +284,7 @@ void main() {
       (
     tester,
   ) async {
+    _useLargeViewport(tester);
     final settingsRepository = _FakeSettingsRepository();
     final monitorService = _FakeMonitorService();
 
@@ -294,7 +307,10 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('立即刷新'));
+    await _scrollAndTap(
+      tester,
+      find.byKey(const Key('manual-refresh-button')),
+    );
     await tester.pumpAndSettle();
 
     expect(monitorService.backgroundRefreshCalls, 0);
@@ -305,6 +321,7 @@ void main() {
       (
     tester,
   ) async {
+    _useLargeViewport(tester);
     final settingsRepository = _FakeSettingsRepository();
     await settingsRepository.updateService(true);
     final monitorService = _FakeMonitorService();
@@ -329,7 +346,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('立即刷新'));
+    await _scrollAndTap(
+      tester,
+      find.byKey(const Key('manual-refresh-button')),
+    );
     await tester.pumpAndSettle();
 
     expect(monitorService.backgroundRefreshCalls, 0);
@@ -508,6 +528,23 @@ void main() {
     expect(await service.preload(), isTrue);
     expect(preloadCalls, 1);
   });
+}
+
+Future<void> _scrollAndTap(WidgetTester tester, Finder finder) async {
+  final target = finder.first;
+  await tester.scrollUntilVisible(
+    target,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(target);
+}
+
+void _useLargeViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1080, 2200);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
 }
 
 class _FakeWatchlistRepository implements WatchlistRepository {

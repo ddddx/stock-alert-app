@@ -497,6 +497,7 @@ class _SettingsPageState extends State<SettingsPage> {
             children: _commonPollIntervals.map((seconds) {
               final isSelected = status.pollIntervalSeconds == seconds;
               return ChoiceChip(
+                key: Key('poll-interval-chip-$seconds'),
                 label: Text('$seconds 秒'),
                 selected: isSelected,
                 onSelected: (_) async {
@@ -528,6 +529,7 @@ class _SettingsPageState extends State<SettingsPage> {
               final isSelected = status.alertCooldownSeconds == seconds;
               final label = seconds == 0 ? '关闭冷却' : '$seconds 秒';
               return ChoiceChip(
+                key: Key('alert-cooldown-chip-$seconds'),
                 label: Text(label),
                 selected: isSelected,
                 onSelected: (_) async {
@@ -546,18 +548,21 @@ class _SettingsPageState extends State<SettingsPage> {
           _buildActionGrid(
             children: [
               _SettingsActionButton(
+                key: const Key('apply-poll-interval-button'),
                 onPressed: _applyPollInterval,
                 icon: Icons.check_circle_outline,
                 label: '应用间隔',
                 emphasis: _SettingsActionEmphasis.primary,
               ),
               _SettingsActionButton(
+                key: const Key('apply-alert-cooldown-button'),
                 onPressed: _applyAlertCooldown,
                 icon: Icons.alarm_on_outlined,
                 label: '应用冷却',
                 emphasis: _SettingsActionEmphasis.primary,
               ),
               _SettingsActionButton(
+                key: const Key('manual-refresh-button'),
                 onPressed: () => _handleImmediateRefresh(status.serviceEnabled),
                 icon: Icons.refresh,
                 label: '立即刷新',
@@ -856,6 +861,7 @@ enum _SettingsActionEmphasis {
 
 class _SettingsActionButton extends StatelessWidget {
   const _SettingsActionButton({
+    super.key,
     required this.onPressed,
     required this.icon,
     required this.label,
