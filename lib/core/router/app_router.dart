@@ -6,6 +6,7 @@ import '../../data/repositories/local_alert_repository.dart';
 import '../../data/repositories/local_diagnostic_log_repository.dart';
 import '../../data/repositories/local_history_repository.dart';
 import '../../data/repositories/local_settings_repository.dart';
+import '../../data/repositories/local_trading_calendar_repository.dart';
 import '../../data/repositories/local_watchlist_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/models/stock_quote_snapshot.dart';
@@ -19,6 +20,7 @@ import '../../services/alerts/alert_rule_engine.dart';
 import '../../services/audio/audio_alert_service.dart';
 import '../../services/background/daily_briefing_service.dart';
 import '../../services/background/monitor_service.dart';
+import '../../services/background/monitoring_policy.dart';
 import '../../services/market/ashare_market_data_service.dart';
 import '../../services/market/market_data_provider.dart';
 import '../../services/market/sina_market_data_provider.dart';
@@ -61,6 +63,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   final _historyStore = JsonFileStore(fileName: 'alert_history.json');
   final _settingsStore = JsonFileStore(fileName: 'monitor_settings.json');
   final _diagnosticLogStore = JsonFileStore(fileName: 'diagnostic_log.json');
+  final _tradingCalendarStore =
+      JsonFileStore(fileName: 'trading_calendar.json');
   late final _watchlistRepository =
       LocalWatchlistRepository(store: _watchlistStore);
   late final _alertRepository = LocalAlertRepository(store: _alertStore);
@@ -69,6 +73,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       LocalSettingsRepository(store: _settingsStore);
   late final _diagnosticLogRepository =
       LocalDiagnosticLogRepository(store: _diagnosticLogStore);
+  late final _tradingCalendarRepository =
+      LocalTradingCalendarRepository(store: _tradingCalendarStore);
   late final Map<String, MarketDataProvider> _marketDataProviders = {
     AshareMarketDataService.providerIdValue: AshareMarketDataService(),
     SinaMarketDataProvider.providerIdValue: SinaMarketDataProvider(),
@@ -88,6 +94,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     ruleEngine: _ruleEngine,
     platformBridgeService: _platformBridgeService,
     diagnosticLogRepository: _diagnosticLogRepository,
+    marketHours: _marketHours,
   );
   late final _dailyBriefingService = AshareDailyBriefingService(
     watchlistRepository: _watchlistRepository,
@@ -95,12 +102,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     settingsRepository: _settingsRepository,
     marketDataProviderResolver: () => _currentMarketDataProvider,
     audioAlertService: _audioService,
+    marketHours: _marketHours,
   );
 
   MarketDataProvider get _currentMarketDataProvider {
     final providerId = _settingsRepository.getStatus().marketDataProviderId;
     return _marketDataProviders[providerId] ??
         _marketDataProviders[defaultMarketDataProviderId]!;
+  }
+
+  AshareMarketHours get _marketHours {
+    return AshareMarketHours(
+      calendarResolver: _tradingCalendarRepository.getCalendar,
+    );
   }
 
   static const List<String> _titles = ['自选', '规则', '历史', '设置'];
@@ -155,6 +169,26 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (_bootstrapping) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('股票异动雷达 · ${_titles[_currentIndex]}'),
+        ),
+        body: const SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 12),
+                Text('正在加载本地数据与监控配置...'),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final pages = [
       WatchlistPage(
         repository: _watchlistRepository,
@@ -164,6 +198,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         pendingRefreshCodes: _pendingRefreshCodes,
         isRefreshing: _refreshing,
         monitorStatus: _settingsRepository.getStatus(),
+        marketHours: _marketHours,
         onRefresh: _refreshQuotes,
         onSortOrderChanged: (order) async {
           await _settingsRepository.updateWatchlistSortOrder(order);
@@ -232,18 +267,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         ],
       ),
       body: SafeArea(
-        child: _bootstrapping
-            ? const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 12),
-                    Text('正在加载本地数据与监控配置...'),
-                  ],
-                ),
-              )
-            : pages[_currentIndex],
+        child: pages[_currentIndex],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -287,6 +311,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _historyStore.initialize(storagePath),
       _settingsStore.initialize(storagePath),
       _diagnosticLogStore.initialize(storagePath),
+      _tradingCalendarStore.initialize(storagePath),
     ]);
 
     await _watchlistRepository.initialize();
@@ -294,6 +319,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     await _historyRepository.initialize();
     await _settingsRepository.initialize();
     await _diagnosticLogRepository.initialize();
+    await _tradingCalendarRepository.initialize();
     await _dailyBriefingService.start();
     await restoreBackgroundMonitorOnLaunch(
       settingsRepository: _settingsRepository,
@@ -544,6 +570,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     await _settingsRepository.initialize();
     await _historyRepository.initialize();
     await _diagnosticLogRepository.initialize();
+    await _tradingCalendarRepository.initialize();
     await _dailyBriefingService.syncNow();
     _syncForegroundRefreshTimer();
     if (mounted) {

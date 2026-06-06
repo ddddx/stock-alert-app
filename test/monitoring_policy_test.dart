@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stock_alert_app/data/models/trading_calendar.dart';
 import 'package:stock_alert_app/services/background/monitoring_policy.dart';
 
 void main() {
@@ -51,5 +52,50 @@ void main() {
     expect(nextSession.day, 6);
     expect(nextSession.hour, 9);
     expect(nextSession.minute, 30);
+  });
+
+  test('market hours allow explicitly configured weekend trading day', () {
+    const marketHours = AshareMarketHours(
+      calendar: AshareTradingCalendar(
+        openDates: {'2026-03-28'},
+      ),
+    );
+    final saturday = DateTime(2026, 3, 28, 10, 0);
+
+    expect(marketHours.isTradingTime(saturday), isTrue);
+  });
+
+  test('market hours skip explicitly configured weekday closure', () {
+    const marketHours = AshareMarketHours(
+      calendar: AshareTradingCalendar(
+        closedDates: {'2026-03-24'},
+      ),
+    );
+    final closure = DateTime(2026, 3, 24, 10, 0);
+
+    expect(marketHours.isTradingTime(closure), isFalse);
+
+    final nextSession = marketHours.nextSessionStart(closure);
+    expect(nextSession.year, 2026);
+    expect(nextSession.month, 3);
+    expect(nextSession.day, 25);
+    expect(nextSession.hour, 9);
+    expect(nextSession.minute, 30);
+  });
+
+  test('market hours read the latest calendar from resolver', () {
+    var calendar = AshareTradingCalendar.bundled;
+    final marketHours = AshareMarketHours(
+      calendarResolver: () => calendar,
+    );
+    final saturday = DateTime(2026, 3, 28, 10, 0);
+
+    expect(marketHours.isTradingTime(saturday), isFalse);
+
+    calendar = const AshareTradingCalendar(
+      openDates: {'2026-03-28'},
+    );
+
+    expect(marketHours.isTradingTime(saturday), isTrue);
   });
 }

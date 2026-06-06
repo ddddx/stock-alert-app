@@ -254,6 +254,7 @@ object MonitorStorage {
     private const val HISTORY_FILE = "alert_history.json"
     private const val RUNTIME_FILE = "monitor_runtime_state.json"
     private const val DIAGNOSTIC_LOG_FILE = "diagnostic_log.json"
+    private const val TRADING_CALENDAR_FILE = "trading_calendar.json"
     private const val MAX_DIAGNOSTIC_LOG_ENTRIES = 120
     private const val DEFAULT_MESSAGE = "等待首次刷新 A 股行情。"
 
@@ -420,6 +421,29 @@ object MonitorStorage {
         )
     }
 
+    fun loadTradingCalendar(context: Context): NativeTradingCalendar {
+        val file = storageFile(context, TRADING_CALENDAR_FILE)
+        val json = readJsonObject(file)
+        if (json == null) {
+            val calendar = AshareMarketSchedule.defaultTradingCalendar()
+            writeTradingCalendar(file, calendar)
+            return calendar
+        }
+
+        val calendar = NativeTradingCalendar(
+            closedDates = if (json.optJSONArray("closedDates") == null) {
+                AshareMarketSchedule.defaultTradingCalendar().closedDates
+            } else {
+                json.optDateSet("closedDates")
+            },
+            openDates = json.optDateSet("openDates"),
+        )
+        if (!json.has("schemaVersion") || !json.has("closedDates") || !json.has("openDates")) {
+            writeTradingCalendar(file, calendar)
+        }
+        return calendar
+    }
+
     fun saveRuntimeState(context: Context, runtimeState: NativeRuntimeState) {
         val root = JSONObject()
         val historyByCode = JSONObject()
@@ -583,6 +607,19 @@ object MonitorStorage {
         file.writeText(json.toString(2))
     }
 
+    private fun writeTradingCalendar(file: File, calendar: NativeTradingCalendar) {
+        val closedDates = JSONArray()
+        calendar.closedDates.sorted().forEach(closedDates::put)
+        val openDates = JSONArray()
+        calendar.openDates.sorted().forEach(openDates::put)
+        val json = JSONObject()
+            .put("schemaVersion", 1)
+            .put("closedDates", closedDates)
+            .put("openDates", openDates)
+            .put("updatedAt", formatIso8601(System.currentTimeMillis()))
+        writeJsonObject(file, json)
+    }
+
     fun formatIso8601(timestampMillis: Long): String {
         val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
         formatter.timeZone = TimeZone.getTimeZone("UTC")
@@ -672,6 +709,21 @@ object MonitorStorage {
             is String -> value.toLongOrNull()
             else -> null
         }
+    }
+
+    private fun JSONObject.optDateSet(key: String): Set<String> {
+        if (isNull(key) || !has(key)) {
+            return emptySet()
+        }
+        val array = optJSONArray(key) ?: return emptySet()
+        val dates = linkedSetOf<String>()
+        for (index in 0 until array.length()) {
+            val value = array.optString(index).orEmpty().trim()
+            if (Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(value)) {
+                dates += value
+            }
+        }
+        return dates
     }
 
     private fun JSONObject.toNativeQuote(): NativeQuote {

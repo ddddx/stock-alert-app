@@ -24,6 +24,7 @@ class WatchlistPage extends StatefulWidget {
     this.pendingRefreshCodes = const <String>{},
     this.isRefreshing = false,
     required this.monitorStatus,
+    this.marketHours = const AshareMarketHours(),
     required this.onRefresh,
     required this.onSortOrderChanged,
   });
@@ -35,6 +36,7 @@ class WatchlistPage extends StatefulWidget {
   final Set<String> pendingRefreshCodes;
   final bool isRefreshing;
   final MonitorStatus monitorStatus;
+  final AshareMarketHours marketHours;
   final Future<void> Function() onRefresh;
   final Future<void> Function(WatchlistSortOrder order) onSortOrderChanged;
 
@@ -60,7 +62,7 @@ class _WatchlistPageState extends State<WatchlistPage> {
       watchlist: items,
       quotes: effectiveQuotes,
       monitorStatus: widget.monitorStatus,
-      isTradingTime: const AshareMarketHours().isTradingTime(DateTime.now()),
+      isTradingTime: widget.marketHours.isTradingTime(DateTime.now()),
       pendingRefreshCodes: widget.pendingRefreshCodes,
       isRefreshing: widget.isRefreshing,
     );

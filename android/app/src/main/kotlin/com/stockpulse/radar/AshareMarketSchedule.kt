@@ -1,5 +1,6 @@
 package com.stockpulse.radar
 
+import android.content.Context
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -11,7 +12,7 @@ private const val MORNING_SESSION_START_MINUTES = 9 * 60 + 30
 private const val MORNING_SESSION_END_MINUTES = 11 * 60 + 30
 private const val AFTERNOON_SESSION_START_MINUTES = 13 * 60
 private const val AFTERNOON_SESSION_END_MINUTES = 15 * 60
-private val ASHARE_HOLIDAY_DATES = setOf(
+private val DEFAULT_ASHARE_CLOSED_DATES = setOf(
     // 2026 A-share holiday closures from SSE/SZSE annual notice.
     "2026-01-01",
     "2026-01-02",
@@ -34,6 +35,11 @@ private val ASHARE_HOLIDAY_DATES = setOf(
     "2026-10-07",
 )
 
+data class NativeTradingCalendar(
+    val closedDates: Set<String> = DEFAULT_ASHARE_CLOSED_DATES,
+    val openDates: Set<String> = emptySet(),
+)
+
 data class AshareMarketSession(
     val isTradingOpen: Boolean,
     val nextOpenAtMillis: Long,
@@ -54,19 +60,27 @@ object AshareMarketSchedule {
         return seconds.coerceIn(MIN_ALERT_COOLDOWN_SECONDS, MAX_ALERT_COOLDOWN_SECONDS)
     }
 
-    fun currentSession(nowMillis: Long = System.currentTimeMillis()): AshareMarketSession {
+    fun defaultTradingCalendar(): NativeTradingCalendar {
+        return NativeTradingCalendar(
+            closedDates = DEFAULT_ASHARE_CLOSED_DATES,
+            openDates = emptySet(),
+        )
+    }
+
+    fun currentSession(
+        context: Context,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): AshareMarketSession {
+        val tradingCalendar = MonitorStorage.loadTradingCalendar(context)
         val now = Calendar.getInstance(chinaTimeZone).apply {
             timeInMillis = nowMillis
         }
         val minutesSinceMidnight = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-        val weekday = now.get(Calendar.DAY_OF_WEEK)
-        val isWeekday = weekday != Calendar.SATURDAY && weekday != Calendar.SUNDAY
-        val isHoliday = isHoliday(now)
-        val isTradingOpen = isWeekday && (
+        val isTradingOpen = isTradingDay(now, tradingCalendar) && (
             (minutesSinceMidnight >= MORNING_SESSION_START_MINUTES && minutesSinceMidnight < MORNING_SESSION_END_MINUTES) ||
                 (minutesSinceMidnight >= AFTERNOON_SESSION_START_MINUTES && minutesSinceMidnight < AFTERNOON_SESSION_END_MINUTES)
-            ) && !isHoliday
-        val nextOpenAtMillis = nextOpenAt(now).timeInMillis
+            )
+        val nextOpenAtMillis = nextOpenAt(now, tradingCalendar).timeInMillis
         return AshareMarketSession(
             isTradingOpen = isTradingOpen,
             nextOpenAtMillis = nextOpenAtMillis,
@@ -80,16 +94,18 @@ object AshareMarketSchedule {
         return "当前不在 A 股交易时段，后台监控已暂停，将于${formatSessionLabel(next)}恢复。"
     }
 
-    private fun nextOpenAt(reference: Calendar): Calendar {
+    private fun nextOpenAt(
+        reference: Calendar,
+        tradingCalendar: NativeTradingCalendar,
+    ): Calendar {
         val next = (reference.clone() as Calendar).apply {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-        val weekday = next.get(Calendar.DAY_OF_WEEK)
         val minutesSinceMidnight = next.get(Calendar.HOUR_OF_DAY) * 60 + next.get(Calendar.MINUTE)
 
-        if (weekday == Calendar.SATURDAY || weekday == Calendar.SUNDAY || isHoliday(next)) {
-            return moveToNextOpenMorning(next)
+        if (!isTradingDay(next, tradingCalendar)) {
+            return moveToNextOpenMorning(next, tradingCalendar)
         }
         if (minutesSinceMidnight < MORNING_SESSION_START_MINUTES) {
             return setSessionStart(next, hour = 9, minute = 30)
@@ -105,26 +121,40 @@ object AshareMarketSchedule {
         }
 
         next.add(Calendar.DAY_OF_MONTH, 1)
-        return moveToNextOpenMorning(next)
+        return moveToNextOpenMorning(next, tradingCalendar)
     }
 
-    private fun moveToNextOpenMorning(calendar: Calendar): Calendar {
-        while (calendar.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY ||
-            calendar.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY ||
-            isHoliday(calendar)
-        ) {
+    private fun moveToNextOpenMorning(
+        calendar: Calendar,
+        tradingCalendar: NativeTradingCalendar,
+    ): Calendar {
+        while (!isTradingDay(calendar, tradingCalendar)) {
             calendar.add(Calendar.DAY_OF_MONTH, 1)
         }
         return setSessionStart(calendar, hour = 9, minute = 30)
     }
 
-    private fun isHoliday(calendar: Calendar): Boolean {
-        val dateKey = "%04d-%02d-%02d".format(
+    private fun isTradingDay(
+        calendar: Calendar,
+        tradingCalendar: NativeTradingCalendar,
+    ): Boolean {
+        val dateKey = dateKey(calendar)
+        if (tradingCalendar.openDates.contains(dateKey)) {
+            return true
+        }
+        if (tradingCalendar.closedDates.contains(dateKey)) {
+            return false
+        }
+        val weekday = calendar.get(Calendar.DAY_OF_WEEK)
+        return weekday != Calendar.SATURDAY && weekday != Calendar.SUNDAY
+    }
+
+    fun dateKey(calendar: Calendar): String {
+        return "%04d-%02d-%02d".format(
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH) + 1,
             calendar.get(Calendar.DAY_OF_MONTH),
         )
-        return ASHARE_HOLIDAY_DATES.contains(dateKey)
     }
 
     private fun setSessionStart(calendar: Calendar, hour: Int, minute: Int): Calendar {

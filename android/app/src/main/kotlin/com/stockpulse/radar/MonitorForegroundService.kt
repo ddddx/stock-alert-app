@@ -202,7 +202,10 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
 
     private fun triggerRefresh(reschedule: Boolean) {
         val checkedAtMillis = System.currentTimeMillis()
-        val marketSession = AshareMarketSchedule.currentSession(checkedAtMillis)
+        val marketSession = AshareMarketSchedule.currentSession(
+            context = this,
+            nowMillis = checkedAtMillis,
+        )
         if (!marketSession.isTradingOpen) {
             val summary = AshareMarketSchedule.buildClosedSummary(marketSession)
             MonitorStorage.updateStatus(
@@ -410,7 +413,10 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     private fun scheduleNextPoll(intervalSeconds: Int, updateClosedSummary: Boolean = false) {
         handler.removeCallbacks(pollRunnable)
         val nowMillis = System.currentTimeMillis()
-        val marketSession = AshareMarketSchedule.currentSession(nowMillis)
+        val marketSession = AshareMarketSchedule.currentSession(
+            context = this,
+            nowMillis = nowMillis,
+        )
         if (!marketSession.isTradingOpen) {
             if (updateClosedSummary) {
                 val summary = AshareMarketSchedule.buildClosedSummary(marketSession)
