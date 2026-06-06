@@ -439,6 +439,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           final refreshedCodes = quotes.map((quote) => quote.code).toSet();
           setState(() {
             _progressiveQuotesByCode = {
+              ..._progressiveQuotesByCode,
               for (final quote in quotes) quote.code: quote,
             };
             _pendingRefreshCodes = _pendingRefreshCodes

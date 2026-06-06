@@ -175,21 +175,30 @@ class AshareMonitorService implements MonitorService {
       final latestByCode = {
         for (final quote in _latestQuotes) quote.code: quote,
       };
+      final refreshedByCode = <String, StockQuoteSnapshot>{};
+      List<StockQuoteSnapshot> refreshedQuotesInWatchlistOrder() {
+        return monitoredWatchlist
+            .map((stock) => refreshedByCode[stock.code])
+            .whereType<StockQuoteSnapshot>()
+            .toList(growable: false);
+      }
+
       final progressiveQuotes =
           await _resolvedMarketDataProvider.fetchQuotesProgressively(
         monitoredWatchlist,
         onQuoteReceived: (quote) {
           latestByCode[quote.code] = quote;
+          refreshedByCode[quote.code] = quote;
           _latestQuotes = monitoredWatchlist
               .map((stock) => latestByCode[stock.code])
               .whereType<StockQuoteSnapshot>()
               .toList(growable: false);
-          onQuotesUpdated?.call(latestQuotes);
+          onQuotesUpdated?.call(refreshedQuotesInWatchlistOrder());
         },
       );
       final quotes = progressiveQuotes;
       _latestQuotes = quotes;
-      onQuotesUpdated?.call(latestQuotes);
+      onQuotesUpdated?.call(quotes);
       final triggers = _ruleEngine.processQuotes(
         rules: _alertRepository.getEnabledRules(),
         quotes: quotes,

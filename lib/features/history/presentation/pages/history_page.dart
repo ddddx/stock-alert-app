@@ -48,7 +48,7 @@ class HistoryPage extends StatelessWidget {
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF8FAFD),
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

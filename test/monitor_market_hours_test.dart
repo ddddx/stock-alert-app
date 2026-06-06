@@ -458,6 +458,89 @@ void main() {
     expect(service.latestQuoteFor('000001'), isNull);
     expect(settingsRepository.getStatus().lastMessage, result.summary);
   });
+
+  test('progressive callbacks exclude stale quotes from a previous refresh',
+      () async {
+    final marketDataService = _SequenceMarketDataService([
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1500,
+          previousClose: 1490,
+          changeAmount: 10,
+          changePercent: 0.67,
+          openPrice: 1492,
+          highPrice: 1500,
+          lowPrice: 1490,
+          volume: 1000,
+          timestamp: DateTime(2026, 3, 23, 10, 0),
+        ),
+        StockQuoteSnapshot(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 10.0,
+          previousClose: 9.9,
+          changeAmount: 0.1,
+          changePercent: 1.01,
+          openPrice: 9.95,
+          highPrice: 10.05,
+          lowPrice: 9.9,
+          volume: 2000,
+          timestamp: DateTime(2026, 3, 23, 10, 0),
+        ),
+      ],
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1502,
+          previousClose: 1490,
+          changeAmount: 12,
+          changePercent: 0.81,
+          openPrice: 1492,
+          highPrice: 1502,
+          lowPrice: 1490,
+          volume: 1100,
+          timestamp: DateTime(2026, 3, 23, 10, 1),
+        ),
+      ],
+    ]);
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(
+        items: [
+          StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
+          StockIdentity(code: '000001', name: '平安银行', market: 'SZ'),
+        ],
+      ),
+      alertRepository: _FakeAlertRepository(),
+      historyRepository: _FakeHistoryRepository(),
+      settingsRepository: _FakeSettingsRepository(),
+      marketDataService: marketDataService,
+      audioAlertService: _FakeAudioAlertService(),
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: _FakePlatformBridgeService(),
+      now: () => DateTime(2026, 3, 23, 10, 0),
+    );
+
+    await service.refreshWatchlist();
+    final callbackCodes = <List<String>>[];
+    final result = await service.refreshWatchlist(
+      onQuotesUpdated: (quotes) {
+        callbackCodes.add(quotes.map((quote) => quote.code).toList());
+      },
+    );
+
+    expect(result.quotes.map((quote) => quote.code), ['600519']);
+    expect(callbackCodes, isNotEmpty);
+    expect(
+      callbackCodes.every((codes) => !codes.contains('000001')),
+      isTrue,
+    );
+  });
 }
 
 class _RecordingMarketDataService extends AshareMarketDataService {

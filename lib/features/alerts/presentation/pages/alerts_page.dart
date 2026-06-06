@@ -159,8 +159,7 @@ class _AlertsPageState extends State<AlertsPage> {
                             _ruleType = value;
                           });
                         },
-                        decoration:
-                            const InputDecoration(labelText: '规则类型'),
+                        decoration: const InputDecoration(labelText: '规则类型'),
                       ),
                       const SizedBox(height: 12),
                       SwitchListTile(
@@ -200,7 +199,7 @@ class _AlertsPageState extends State<AlertsPage> {
                               border: Border.all(
                                 color: const Color(0xFFD9E1EC),
                               ),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: SingleChildScrollView(
                               child: Column(
@@ -209,7 +208,8 @@ class _AlertsPageState extends State<AlertsPage> {
                                   for (final stock in availableStocks)
                                     CheckboxListTile(
                                       dense: true,
-                                      value: _selectedCodes.contains(stock.code),
+                                      value:
+                                          _selectedCodes.contains(stock.code),
                                       title: Text(stock.displayName),
                                       subtitle: Text(stock.subtitle),
                                       onChanged: (value) {
@@ -233,15 +233,13 @@ class _AlertsPageState extends State<AlertsPage> {
                           controller: _movePercentController,
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true),
-                          decoration: const InputDecoration(
-                              labelText: '阈值涨跌幅'),
+                          decoration: const InputDecoration(labelText: '阈值涨跌幅'),
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: _lookbackController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                              labelText: '回看分钟数'),
+                          decoration: const InputDecoration(labelText: '回看分钟数'),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<MoveDirection>(
@@ -268,8 +266,7 @@ class _AlertsPageState extends State<AlertsPage> {
                               _moveDirection = value;
                             });
                           },
-                          decoration:
-                              const InputDecoration(labelText: '方向'),
+                          decoration: const InputDecoration(labelText: '方向'),
                         ),
                       ] else ...[
                         TextField(
@@ -299,8 +296,7 @@ class _AlertsPageState extends State<AlertsPage> {
                               _stepMetric = value;
                             });
                           },
-                          decoration:
-                              const InputDecoration(labelText: '阶梯类型'),
+                          decoration: const InputDecoration(labelText: '阶梯类型'),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -586,7 +582,7 @@ class _RuleCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFD),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

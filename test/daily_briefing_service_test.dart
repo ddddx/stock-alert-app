@@ -301,15 +301,6 @@ class _FakeWatchlistRepository implements WatchlistRepository {
   Future<void> remove(String code) async {}
 
   @override
-  Future<void> move({
-    required int fromIndex,
-    required int toIndex,
-  }) async {}
-
-  @override
-  Future<void> updateMonitoring(String code, bool enabled) async {}
-
-  @override
   Future<void> updateMonitoringEnabled(String code, bool enabled) async {}
 
   @override

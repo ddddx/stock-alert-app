@@ -27,7 +27,7 @@ class AppTheme {
         elevation: 0,
         color: Colors.white,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(8),
         ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(

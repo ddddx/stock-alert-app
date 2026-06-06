@@ -29,6 +29,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady = false
     private var ttsInitCompleted = false
+    private var ttsInitializationStarted = false
     private var lastSummary: String = defaultSummary()
 
     private val pollRunnable = object : Runnable {
@@ -40,6 +41,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     override fun onCreate() {
         super.onCreate()
         ensureChannel(this)
+        prewarmTtsIfEnabled()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -115,6 +117,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         synchronized(ttsLock) {
             ttsInitCompleted = true
+            ttsInitializationStarted = false
             val initialized = status == TextToSpeech.SUCCESS
             val configuredPreferredVoice = if (initialized) configureTtsVoice() else false
             ttsReady = initialized
@@ -139,6 +142,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
             stopSelf()
             return
         }
+        prewarmTtsIfEnabled()
         if (triggerImmediateRefresh) {
             triggerRefresh(reschedule = true)
         } else {
@@ -278,19 +282,48 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun ensureTts(): Boolean {
-        if (textToSpeech != null) {
-            return true
-        }
-        return runCatching {
-            synchronized(ttsLock) {
+        synchronized(ttsLock) {
+            if (textToSpeech != null) {
+                if (!ttsInitCompleted || ttsReady) {
+                    return true
+                }
+                textToSpeech?.shutdown()
+                textToSpeech = null
                 ttsReady = false
                 ttsInitCompleted = false
+                ttsInitializationStarted = false
             }
-            textToSpeech = TextToSpeech(applicationContext, this)
+            if (ttsInitializationStarted) {
+                return true
+            }
+            ttsReady = false
+            ttsInitCompleted = false
+            ttsInitializationStarted = true
+        }
+        return runCatching {
+            val tts = TextToSpeech(applicationContext, this)
+            synchronized(ttsLock) {
+                textToSpeech = tts
+            }
             true
         }.getOrElse { error ->
+            synchronized(ttsLock) {
+                ttsInitializationStarted = false
+                ttsInitCompleted = true
+                ttsReady = false
+                ttsLock.notifyAll()
+            }
             Log.w(TAG, "Unable to initialize TTS in foreground service", error)
             false
+        }
+    }
+
+    private fun prewarmTtsIfEnabled() {
+        if (!loadSettings().soundEnabled) {
+            return
+        }
+        handler.post {
+            ensureTts()
         }
     }
 

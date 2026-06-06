@@ -262,174 +262,189 @@ class _WatchlistTileState extends State<_WatchlistTile> {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: SizedBox(
-        height: 156,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 180),
-                    opacity: _revealed ? 1 : 0,
-                    child: SizedBox(
-                      width: _actionPanelWidth,
-                      child: FilledButton.tonalIcon(
-                        key: Key('watchlist-delete-${widget.stock.code}'),
-                        onPressed: _revealed
-                            ? () async {
-                                await widget.onRemove();
-                                if (!mounted) {
-                                  return;
-                                }
-                                _close();
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 180),
+                  opacity: _revealed ? 1 : 0,
+                  child: SizedBox(
+                    width: _actionPanelWidth,
+                    child: FilledButton.tonalIcon(
+                      key: Key('watchlist-delete-${widget.stock.code}'),
+                      onPressed: _revealed
+                          ? () async {
+                              await widget.onRemove();
+                              if (!mounted) {
+                                return;
                               }
-                            : null,
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('删除'),
-                        style: FilledButton.styleFrom(
-                          foregroundColor: const Color(0xFF8B1E1E),
-                          backgroundColor: const Color(0xFFFDECEC),
-                        ),
+                              _close();
+                            }
+                          : null,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('删除'),
+                      style: FilledButton.styleFrom(
+                        foregroundColor: const Color(0xFF8B1E1E),
+                        backgroundColor: const Color(0xFFFDECEC),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-            Positioned.fill(
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                offset: Offset(_offset / 320, 0),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: _revealed ? _close : null,
-                  onHorizontalDragUpdate: (details) {
-                    final next = (_offset + details.delta.dx).clamp(
-                      -_maxRevealOffset,
-                      0.0,
-                    );
-                    if (next == _offset) {
-                      return;
-                    }
-                    setState(() {
-                      _offset = next;
-                    });
-                  },
-                  onHorizontalDragEnd: (details) {
-                    final velocity = details.primaryVelocity ?? 0;
-                    if (velocity < -200 || _offset <= -_maxRevealOffset / 2) {
-                      _open();
-                      return;
-                    }
-                    _close();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFD),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          AnimatedSlide(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            offset: Offset(_offset / 320, 0),
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _revealed ? _close : null,
+              onHorizontalDragUpdate: (details) {
+                final next = (_offset + details.delta.dx).clamp(
+                  -_maxRevealOffset,
+                  0.0,
+                );
+                if (next == _offset) {
+                  return;
+                }
+                setState(() {
+                  _offset = next;
+                });
+              },
+              onHorizontalDragEnd: (details) {
+                final velocity = details.primaryVelocity ?? 0;
+                if (velocity < -200 || _offset <= -_maxRevealOffset / 2) {
+                  _open();
+                  return;
+                }
+                _close();
+              },
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 156),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFD),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.stock.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.stock.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              widget.status.label,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
                             children: [
                               Text(
-                                widget.stock.displayName,
-                                style: Theme.of(context).textTheme.titleSmall,
+                                '后台监控',
+                                style: Theme.of(context).textTheme.labelMedium,
                               ),
-                              const SizedBox(height: 4),
-                              Text(widget.stock.subtitle),
-                              const SizedBox(height: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
+                              const SizedBox(width: 8),
+                              Switch.adaptive(
+                                key: Key(
+                                  'watchlist-monitor-toggle-${widget.stock.code}',
                                 ),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  widget.status.label,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelMedium
-                                      ?.copyWith(
-                                        color: statusColor,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Text(
-                                    '后台监控',
-                                    style:
-                                        Theme.of(context).textTheme.labelMedium,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Switch.adaptive(
-                                    key: Key(
-                                      'watchlist-monitor-toggle-${widget.stock.code}',
-                                    ),
-                                    value: widget.stock.monitoringEnabled,
-                                    onChanged: (value) async {
-                                      await widget.onToggleMonitoring(value);
-                                    },
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                _buildDetailText(quote),
-                                style: Theme.of(context).textTheme.bodySmall,
+                                value: widget.stock.monitoringEnabled,
+                                onChanged: (value) async {
+                                  await widget.onToggleMonitoring(value);
+                                },
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              quote == null
-                                  ? '--'
-                                  : Formatters.priceForSecurity(
-                                      quote.lastPrice,
-                                      code: quote.code,
-                                      securityTypeName: quote.securityTypeName,
-                                      priceDecimalDigits:
-                                          quote.resolvedPriceDecimalDigits,
+                          const SizedBox(height: 6),
+                          Text(
+                            _buildDetailText(quote),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: const Color(0xFF5F6B7A),
                                     ),
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              quote == null
-                                  ? '--'
-                                  : '${Formatters.signedPriceForSecurity(quote.changeAmount, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)} / ${Formatters.percent(quote.changePercent)}',
-                              style: TextStyle(
-                                color: color,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 118,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            quote == null
+                                ? '--'
+                                : Formatters.priceForSecurity(
+                                    quote.lastPrice,
+                                    code: quote.code,
+                                    securityTypeName: quote.securityTypeName,
+                                    priceDecimalDigits:
+                                        quote.resolvedPriceDecimalDigits,
+                                  ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            quote == null
+                                ? '--'
+                                : '${Formatters.signedPriceForSecurity(quote.changeAmount, code: quote.code, securityTypeName: quote.securityTypeName, priceDecimalDigits: quote.resolvedPriceDecimalDigits)} / ${Formatters.percent(quote.changePercent)}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              color: color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
