@@ -138,6 +138,50 @@ void main() {
     expect(find.textContaining('试播失败'), findsWidgets);
   });
 
+  testWidgets('background alert test uses native foreground service path', (
+    tester,
+  ) async {
+    _useLargeViewport(tester);
+    final settingsRepository = _FakeSettingsRepository();
+    final audioService = _FakeAudioAlertService(shouldSucceed: true);
+    final platformBridgeService = _FakePlatformBridgeService(
+      backgroundAlertTestResult: true,
+    );
+    var preflightCalls = 0;
+
+    await tester.pumpWidget(
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: _FakeMonitorService(),
+          audioService: audioService,
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: platformBridgeService,
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async {
+            preflightCalls += 1;
+            return true;
+          },
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
+        ),
+      ),
+    );
+
+    await _scrollAndTap(
+      tester,
+      find.byKey(const Key('background-alert-test-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(preflightCalls, 1);
+    expect(platformBridgeService.backgroundAlertTestCalls, 1);
+    expect(audioService.spokenTexts, isEmpty);
+    expect(find.textContaining('已请求原生后台提醒测试'), findsWidgets);
+  });
+
   testWidgets('background toggle waits for Android access preflight', (
     tester,
   ) async {
@@ -850,9 +894,12 @@ class _FakeMonitorService implements MonitorService {
 class _FakePlatformBridgeService extends PlatformBridgeService {
   _FakePlatformBridgeService({
     this.backgroundAccessStatus,
+    this.backgroundAlertTestResult = true,
   });
 
   final AndroidBackgroundAccessStatus? backgroundAccessStatus;
+  final bool backgroundAlertTestResult;
+  int backgroundAlertTestCalls = 0;
 
   @override
   Future<bool> startForegroundMonitorService({required String summary}) async {
@@ -862,6 +909,12 @@ class _FakePlatformBridgeService extends PlatformBridgeService {
   @override
   Future<bool> reloadForegroundMonitorService() async {
     return true;
+  }
+
+  @override
+  Future<bool> testForegroundMonitorAlert() async {
+    backgroundAlertTestCalls += 1;
+    return backgroundAlertTestResult;
   }
 
   @override

@@ -77,6 +77,12 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                     stopSelf()
                 }
 
+                ACTION_TEST_ALERT -> {
+                    logDiagnostic("info", "service", "收到后台提醒链路测试请求。")
+                    startAsForeground(testAlertSummary())
+                    triggerBackgroundAlertTest()
+                }
+
                 else -> {
                     logDiagnostic("warning", "service", "收到未知后台监控请求：$action")
                     startAsForeground(loadBootSummary())
@@ -86,7 +92,20 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
             START_STICKY
         } catch (error: Exception) {
             Log.e(TAG, "Failed to start monitor foreground service", error)
-            val message = "后台监控启动失败：${error.message ?: error.javaClass.simpleName}；已自动关闭后台监控。"
+            if (action == ACTION_TEST_ALERT) {
+                val message = "后台提醒测试启动失败：${error.message ?: error.javaClass.simpleName}"
+                MonitorStorage.updateStatus(
+                    context = this,
+                    checkedAtMillis = System.currentTimeMillis(),
+                    message = message,
+                )
+                logDiagnostic("error", "service", message)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            val message =
+                "后台监控启动失败：${error.message ?: error.javaClass.simpleName}；已自动关闭后台监控。"
             logDiagnostic("error", "service", message)
             MonitorStorage.disableService(
                 context = this,
@@ -309,6 +328,83 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 runningRefresh.set(false)
             }
         }
+    }
+
+    private fun triggerBackgroundAlertTest() {
+        executor.execute {
+            val timestampMillis = System.currentTimeMillis()
+            val message = "股票异动雷达后台提醒测试：通知和语音链路已触发。"
+            try {
+                val notificationPublished = AlertNotificationPublisher.publish(
+                    context = this,
+                    title = "后台提醒测试",
+                    message = message,
+                    notificationId = testAlertNotificationId(timestampMillis),
+                )
+                if (!notificationPublished) {
+                    logDiagnostic("warning", "notification", "后台提醒测试通知发布失败。", timestampMillis)
+                }
+
+                val settings = loadSettings()
+                val playedSound = if (settings.soundEnabled) {
+                    speak(message)
+                } else {
+                    logDiagnostic("info", "speech", "语音播报已关闭，后台提醒测试未执行语音。", timestampMillis)
+                    false
+                }
+                if (settings.soundEnabled && !playedSound) {
+                    logDiagnostic("warning", "speech", "后台提醒测试语音播报未成功。", timestampMillis)
+                }
+
+                val summary = when {
+                    notificationPublished && playedSound -> "后台提醒测试完成：通知和语音均已请求。"
+                    notificationPublished && !settings.soundEnabled -> "后台提醒测试完成：通知已请求，语音播报当前关闭。"
+                    notificationPublished -> "后台提醒测试完成：通知已请求，语音未成功。"
+                    playedSound -> "后台提醒测试完成：语音已请求，通知未成功。"
+                    else -> "后台提醒测试完成：通知和语音均未成功。"
+                }
+                MonitorStorage.updateStatus(this, timestampMillis, summary)
+                logDiagnostic(
+                    if (notificationPublished || playedSound || !settings.soundEnabled) "info" else "warning",
+                    "service",
+                    summary,
+                    timestampMillis,
+                )
+                handler.post {
+                    updateSummary(this, summary)
+                    restoreOrStopAfterBackgroundAlertTest()
+                }
+            } catch (error: Exception) {
+                val summary = "后台提醒测试失败：${error.message ?: error.javaClass.simpleName}"
+                MonitorStorage.updateStatus(this, timestampMillis, summary)
+                logDiagnostic("error", "service", summary, timestampMillis)
+                handler.post {
+                    updateSummary(this, summary)
+                    restoreOrStopAfterBackgroundAlertTest()
+                }
+            }
+        }
+    }
+
+    private fun restoreOrStopAfterBackgroundAlertTest() {
+        if (MonitorStorage.isServiceEnabled(this)) {
+            handler.postDelayed(
+                {
+                    startAsForeground(loadBootSummary())
+                    ensureMonitoringActive(triggerImmediateRefresh = false)
+                },
+                2500L,
+            )
+            return
+        }
+
+        handler.postDelayed(
+            {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            },
+            3500L,
+        )
     }
 
     private fun scheduleNextPoll(intervalSeconds: Int, updateClosedSummary: Boolean = false) {
@@ -562,6 +658,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         const val ACTION_REFRESH_NOW = "com.stockpulse.radar.action.REFRESH_NOW"
         const val ACTION_RELOAD_MONITOR = "com.stockpulse.radar.action.RELOAD_MONITOR"
         const val ACTION_STOP_MONITOR = "com.stockpulse.radar.action.STOP_MONITOR"
+        const val ACTION_TEST_ALERT = "com.stockpulse.radar.action.TEST_ALERT"
 
         fun updateSummary(context: Context, summary: String) {
             ensureChannel(context)
@@ -620,6 +717,12 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
 
         private fun defaultSummary(): String = "等待下一次行情刷新。"
 
+        private fun testAlertSummary(): String = "正在执行后台提醒链路测试。"
+
         private fun summaryArgument(): String = "summary"
+
+        private fun testAlertNotificationId(timestampMillis: Long): Int {
+            return ("background-alert-test:$timestampMillis").hashCode() and Int.MAX_VALUE
+        }
     }
 }

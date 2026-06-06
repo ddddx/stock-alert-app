@@ -379,6 +379,26 @@ class _SettingsPageState extends State<SettingsPage> {
     _showFeedback(message);
   }
 
+  Future<void> _handleBackgroundAlertTest() async {
+    final allowed = await widget.onRequestAndroidBackgroundAccess(
+      onboarding: false,
+    );
+    if (!allowed) {
+      _showFeedback('后台提醒测试未启动：请先允许通知，并按提示完成电池优化设置。');
+      _refreshBackgroundAccessStatus();
+      widget.onChanged();
+      return;
+    }
+
+    final started =
+        await widget.platformBridgeService.testForegroundMonitorAlert();
+    _showFeedback(
+      started ? '已请求原生后台提醒测试，请留意系统通知和语音播报。' : '后台提醒测试启动失败，请检查通知/前台服务权限后重试。',
+    );
+    _refreshBackgroundAccessStatus();
+    widget.onChanged();
+  }
+
   Future<void> _handleOpeningBriefingToggle(bool enabled) async {
     await widget.repository.updateOpeningBriefing(enabled);
     _showFeedback(enabled ? '开盘简报已开启，每个交易日 9:30 自动播报。' : '开盘简报已关闭。');
@@ -840,6 +860,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 onPressed: _handleAudioPreload,
                 icon: Icons.precision_manufacturing_outlined,
                 label: '预热播报',
+              ),
+              _SettingsActionButton(
+                key: const Key('background-alert-test-button'),
+                onPressed: _handleBackgroundAlertTest,
+                icon: Icons.campaign_outlined,
+                label: '测试后台提醒',
               ),
             ],
           ),

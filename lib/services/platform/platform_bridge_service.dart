@@ -142,6 +142,18 @@ class PlatformBridgeService {
     }
   }
 
+  Future<bool> testForegroundMonitorAlert() async {
+    if (!Platform.isAndroid) {
+      return true;
+    }
+    try {
+      return await _channel.invokeMethod<bool>('testForegroundMonitorAlert') ??
+          false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   Future<bool> stopForegroundMonitorService() async {
     if (!Platform.isAndroid) {
       return true;

@@ -72,6 +72,23 @@ class MainActivity : FlutterActivity() {
                         result.success(started)
                     }
 
+                    testForegroundAlertMethod() -> {
+                        val started = MonitorServiceLauncher.startMonitorService(
+                            context = this,
+                            action = MonitorForegroundService.ACTION_TEST_ALERT,
+                            disableOnFailure = false,
+                        )
+                        if (!started) {
+                            MonitorStorage.appendDiagnosticLog(
+                                context = this,
+                                level = "error",
+                                category = "service",
+                                message = "后台提醒测试启动失败，请检查通知/前台服务权限后重试。",
+                            )
+                        }
+                        result.success(started)
+                    }
+
                     stopForegroundServiceMethod() -> {
                         result.success(MonitorServiceLauncher.stopMonitorService(this))
                     }
@@ -253,6 +270,8 @@ class MainActivity : FlutterActivity() {
     private fun reloadForegroundServiceMethod(): String = "reloadForegroundMonitorService"
 
     private fun refreshForegroundServiceMethod(): String = "refreshForegroundMonitorService"
+
+    private fun testForegroundAlertMethod(): String = "testForegroundMonitorAlert"
 
     private fun stopForegroundServiceMethod(): String = "stopForegroundMonitorService"
 
