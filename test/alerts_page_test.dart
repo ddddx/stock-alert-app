@@ -133,7 +133,52 @@ void main() {
     expect(find.text('还没有提醒规则，添加一条后即可开始监控。'), findsOneWidget);
   });
 
-  testWidgets('editing a global rule still saves after adding a new watchlist stock',
+  testWidgets('alerts page can add a price threshold rule', (tester) async {
+    final alertRepository = _FakeAlertRepository();
+    final watchlistRepository = _FakeWatchlistRepository(
+      items: const [
+        StockIdentity(code: '000001', name: 'Beta', market: 'SZ'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _buildApp(
+        AlertsPage(
+          repository: alertRepository,
+          watchlistRepository: watchlistRepository,
+          quotes: const [],
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('添加规则'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('短时波动').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('价格提醒').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('price-threshold-target-input')),
+      '18.50',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(alertRepository.rules, hasLength(1));
+    expect(alertRepository.rules.single.type, AlertRuleType.priceThreshold);
+    expect(alertRepository.rules.single.targetPrice, 18.50);
+    expect(
+      alertRepository.rules.single.priceThresholdDirection,
+      PriceThresholdDirection.below,
+    );
+    expect(find.text('价格提醒'), findsOneWidget);
+    expect(find.textContaining('跌破 18.50 元'), findsOneWidget);
+  });
+
+  testWidgets(
+      'editing a global rule still saves after adding a new watchlist stock',
       (tester) async {
     final alertRepository = _FakeAlertRepository(
       rules: [

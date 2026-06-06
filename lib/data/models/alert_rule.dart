@@ -3,6 +3,7 @@ import 'stock_identity.dart';
 enum AlertRuleType {
   shortWindowMove,
   stepAlert,
+  priceThreshold,
 }
 
 enum MoveDirection {
@@ -14,6 +15,11 @@ enum MoveDirection {
 enum StepMetric {
   price,
   percent,
+}
+
+enum PriceThresholdDirection {
+  above,
+  below,
 }
 
 class AlertRule {
@@ -35,6 +41,8 @@ class AlertRule {
     double? anchorPrice,
     Map<String, double> anchorPrices = const {},
     Map<String, double> anchorPricesByCode = const {},
+    double? targetPrice,
+    PriceThresholdDirection? priceThresholdDirection,
     String? note,
   }) {
     final resolvedTargets = _resolveTargets(
@@ -68,6 +76,8 @@ class AlertRule {
       stepValue: stepValue,
       stepMetric: stepMetric,
       anchorPricesByCode: normalizedAnchors,
+      targetPrice: targetPrice,
+      priceThresholdDirection: priceThresholdDirection,
       note: note,
     );
   }
@@ -138,6 +148,35 @@ class AlertRule {
     );
   }
 
+  factory AlertRule.priceThreshold({
+    required String id,
+    required double targetPrice,
+    required PriceThresholdDirection direction,
+    required bool enabled,
+    required DateTime createdAt,
+    String stockCode = '',
+    String stockName = '',
+    String market = 'SZ',
+    bool applyToAllWatchlist = false,
+    List<StockIdentity> targetStocks = const [],
+    String? note,
+  }) {
+    return AlertRule(
+      id: id,
+      stockCode: stockCode,
+      stockName: stockName,
+      market: market,
+      applyToAllWatchlist: applyToAllWatchlist,
+      targetStocks: targetStocks,
+      type: AlertRuleType.priceThreshold,
+      enabled: enabled,
+      createdAt: createdAt,
+      targetPrice: targetPrice,
+      priceThresholdDirection: direction,
+      note: note,
+    );
+  }
+
   factory AlertRule.fromJson(Map<String, dynamic> json) {
     final fallbackCode = json['stockCode'] as String? ?? '';
     final legacyAnchor = (json['anchorPrice'] as num?)?.toDouble();
@@ -168,6 +207,12 @@ class AlertRule {
       stepMetric: json['stepMetric'] == null
           ? null
           : StepMetric.values.byName(json['stepMetric'] as String),
+      targetPrice: (json['targetPrice'] as num?)?.toDouble(),
+      priceThresholdDirection: json['priceThresholdDirection'] == null
+          ? null
+          : PriceThresholdDirection.values.byName(
+              json['priceThresholdDirection'] as String,
+            ),
       anchorPricesByCode: anchors,
       note: json['note'] as String?,
     );
@@ -189,6 +234,8 @@ class AlertRule {
     this.moveDirection,
     this.stepValue,
     this.stepMetric,
+    this.targetPrice,
+    this.priceThresholdDirection,
     this.note,
   })  : targetStocks = List<StockIdentity>.unmodifiable(targetStocks),
         anchorPricesByCode = Map<String, double>.unmodifiable(
@@ -209,6 +256,8 @@ class AlertRule {
   final MoveDirection? moveDirection;
   final double? stepValue;
   final StepMetric? stepMetric;
+  final double? targetPrice;
+  final PriceThresholdDirection? priceThresholdDirection;
   final Map<String, double> anchorPricesByCode;
   final String? note;
 
@@ -243,6 +292,8 @@ class AlertRule {
     double? anchorPrice,
     Map<String, double>? anchorPrices,
     Map<String, double>? anchorPricesByCode,
+    double? targetPrice,
+    PriceThresholdDirection? priceThresholdDirection,
     String? note,
   }) {
     return AlertRule(
@@ -263,6 +314,9 @@ class AlertRule {
       anchorPrice: anchorPrice ?? this.anchorPrice,
       anchorPrices: anchorPrices ?? this.anchorPricesByCode,
       anchorPricesByCode: anchorPricesByCode ?? this.anchorPricesByCode,
+      targetPrice: targetPrice ?? this.targetPrice,
+      priceThresholdDirection:
+          priceThresholdDirection ?? this.priceThresholdDirection,
       note: note ?? this.note,
     );
   }
@@ -283,6 +337,8 @@ class AlertRule {
       'moveDirection': moveDirection?.name,
       'stepValue': stepValue,
       'stepMetric': stepMetric?.name,
+      'targetPrice': targetPrice,
+      'priceThresholdDirection': priceThresholdDirection?.name,
       'anchorPrice': anchorPrice,
       'anchorPrices': anchorPricesByCode,
       'anchorPricesByCode': anchorPricesByCode,
@@ -340,6 +396,8 @@ class AlertRule {
       stepValue?.toStringAsFixed(4) ?? '',
       stepMetric?.name ?? '',
       anchorPriceFor(code)?.toStringAsFixed(4) ?? '',
+      targetPrice?.toStringAsFixed(4) ?? '',
+      priceThresholdDirection?.name ?? '',
     ].join(':');
   }
 
@@ -368,6 +426,8 @@ class AlertRule {
         return '短时波动';
       case AlertRuleType.stepAlert:
         return '阶梯提醒';
+      case AlertRuleType.priceThreshold:
+        return '价格提醒';
     }
   }
 
@@ -384,6 +444,12 @@ class AlertRule {
       case AlertRuleType.stepAlert:
         final unit = stepMetric == StepMetric.percent ? '%' : '元';
         return '每跨过 ${(stepValue ?? 0).toStringAsFixed(2)}$unit 提醒一次';
+      case AlertRuleType.priceThreshold:
+        final directionLabel =
+            priceThresholdDirection == PriceThresholdDirection.below
+                ? '跌破'
+                : '上穿';
+        return '现价$directionLabel ${(targetPrice ?? 0).toStringAsFixed(2)} 元';
     }
   }
 

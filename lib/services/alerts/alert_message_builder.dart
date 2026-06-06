@@ -56,8 +56,26 @@ class AlertMessageBuilder {
         '最新价${Formatters.priceForSecurity(current.lastPrice, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}。';
   }
 
+  String buildPriceThresholdMessage({
+    required AlertRule rule,
+    required StockQuoteSnapshot current,
+  }) {
+    final directionLabel =
+        rule.priceThresholdDirection == PriceThresholdDirection.below
+            ? '跌破'
+            : '上穿';
+    final targetPrice = rule.targetPrice ?? 0;
+    return '${_stockSubject(current)}触发价格提醒，'
+        '现价$directionLabel${Formatters.priceForSecurity(targetPrice, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}，'
+        '最新价${Formatters.priceForSecurity(current.lastPrice, code: current.code, securityTypeName: current.securityTypeName, priceDecimalDigits: current.resolvedPriceDecimalDigits)}。';
+  }
+
   String _signedPercentThreshold(double value) {
-    final sign = value > 0 ? '+' : value < 0 ? '-' : '';
+    final sign = value > 0
+        ? '+'
+        : value < 0
+            ? '-'
+            : '';
     return '$sign${value.abs().toStringAsFixed(2)}%';
   }
 

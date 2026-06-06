@@ -156,6 +156,18 @@ class NativeMonitorEngine {
                         runtimeState.ruleStates[stateKey] = result.first
                         result.second?.let(triggers::add)
                     }
+
+                    "priceThreshold" -> {
+                        val result = evaluatePriceThresholdRule(
+                            rule = rule,
+                            current = quote,
+                            state = state,
+                            nowMillis = nowMillis,
+                            alertCooldownSeconds = alertCooldownSeconds,
+                        )
+                        runtimeState.ruleStates[stateKey] = result.first
+                        result.second?.let(triggers::add)
+                    }
                 }
             }
         }
@@ -287,6 +299,48 @@ class NativeMonitorEngine {
         )
     }
 
+    private fun evaluatePriceThresholdRule(
+        rule: NativeRule,
+        current: NativeQuote,
+        state: NativeRuleState,
+        nowMillis: Long,
+        alertCooldownSeconds: Int,
+    ): Pair<NativeRuleState, NativeAlertTrigger?> {
+        val targetPrice = rule.targetPrice ?: 0.0
+        if (targetPrice <= 0.0) {
+            return state.copy(active = false) to null
+        }
+
+        val matches = when (rule.priceThresholdDirection ?: "above") {
+            "below" -> current.lastPrice <= targetPrice
+            else -> current.lastPrice >= targetPrice
+        }
+        if (!matches) {
+            return state.copy(active = false) to null
+        }
+
+        if (state.active) {
+            return state.copy(active = true) to null
+        }
+        if (isInCooldown(state.lastTriggeredAtMillis, nowMillis, alertCooldownSeconds)) {
+            return state.copy(active = true) to null
+        }
+
+        val changeAmount = current.lastPrice - targetPrice
+        val changePercent = if (targetPrice == 0.0) 0.0 else changeAmount / targetPrice * 100.0
+        val message = buildPriceThresholdMessage(rule, current)
+        return state.copy(active = true, lastTriggeredAtMillis = nowMillis) to NativeAlertTrigger(
+            rule = rule,
+            quote = current,
+            triggeredAtMillis = nowMillis,
+            referencePrice = targetPrice,
+            changeAmount = changeAmount,
+            changePercent = changePercent,
+            message = message,
+            spokenText = message,
+        )
+    }
+
     private fun stepReferencePrice(
         rule: NativeRule,
         quote: NativeQuote,
@@ -398,6 +452,12 @@ class NativeMonitorEngine {
         } else {
             "${stockSubject(current)}触发阶梯提醒，${directionLabel(crossedAmount)}跨越价格台阶，价格从${formatPrice(referenceValue + previousIndex * stepValue, current)}跨到${formatPrice(referenceValue + currentIndex * stepValue, current)}这一档，最新价${formatPrice(current.lastPrice, current)}。"
         }
+    }
+
+    private fun buildPriceThresholdMessage(rule: NativeRule, current: NativeQuote): String {
+        val targetPrice = rule.targetPrice ?: 0.0
+        val direction = if (rule.priceThresholdDirection == "below") "跌破" else "上穿"
+        return "${stockSubject(current)}触发价格提醒，现价${direction}${formatPrice(targetPrice, current)}，最新价${formatPrice(current.lastPrice, current)}。"
     }
 
     private fun formatPrice(value: Double, quote: NativeQuote): String {

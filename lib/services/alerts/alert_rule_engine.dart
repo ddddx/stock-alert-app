@@ -111,6 +111,19 @@ class AlertRuleEngine {
               triggers.add(outcome.trigger!);
             }
             break;
+          case AlertRuleType.priceThreshold:
+            final outcome = _evaluatePriceThresholdRule(
+              rule,
+              quote,
+              state,
+              now,
+              alertCooldownSeconds: alertCooldownSeconds,
+            );
+            _states[stateKey] = outcome.state;
+            if (outcome.trigger != null) {
+              triggers.add(outcome.trigger!);
+            }
+            break;
         }
       }
     }
@@ -142,6 +155,9 @@ class AlertRuleEngine {
         previousRule.stepMetric != nextRule.stepMetric ||
         previousRule.anchorPricesByCode.toString() !=
             nextRule.anchorPricesByCode.toString() ||
+        previousRule.targetPrice != nextRule.targetPrice ||
+        previousRule.priceThresholdDirection !=
+            nextRule.priceThresholdDirection ||
         previousTargets.join(',') != nextTargets.join(',')) {
       removeRule(previousRule.id);
     }
@@ -372,6 +388,62 @@ class AlertRuleEngine {
       return _bandIndex(quote.changePercent / stepValue);
     }
     return _bandIndex((quote.lastPrice - referenceValue) / stepValue);
+  }
+
+  _EvaluationOutcome _evaluatePriceThresholdRule(
+    AlertRule rule,
+    StockQuoteSnapshot current,
+    RuleEvaluationState state,
+    DateTime now, {
+    required int alertCooldownSeconds,
+  }) {
+    final targetPrice = rule.targetPrice ?? 0;
+    if (targetPrice <= 0) {
+      return _EvaluationOutcome(state: state.copyWith(active: false));
+    }
+
+    final direction =
+        rule.priceThresholdDirection ?? PriceThresholdDirection.above;
+    final matches = switch (direction) {
+      PriceThresholdDirection.above => current.lastPrice >= targetPrice,
+      PriceThresholdDirection.below => current.lastPrice <= targetPrice,
+    };
+
+    if (!matches) {
+      return _EvaluationOutcome(state: state.copyWith(active: false));
+    }
+
+    if (state.active) {
+      return _EvaluationOutcome(state: state.copyWith(active: true));
+    }
+
+    if (_isInCooldown(state.lastTriggeredAt, now, alertCooldownSeconds)) {
+      return _EvaluationOutcome(
+        state: state.copyWith(active: true),
+      );
+    }
+
+    final changeAmount = current.lastPrice - targetPrice;
+    final changePercent =
+        targetPrice == 0 ? 0.0 : changeAmount / targetPrice * 100.0;
+    final message = _messageBuilder.buildPriceThresholdMessage(
+      rule: rule,
+      current: current,
+    );
+
+    return _EvaluationOutcome(
+      state: state.copyWith(active: true, lastTriggeredAt: now),
+      trigger: AlertTrigger(
+        rule: rule,
+        quote: current,
+        triggeredAt: now,
+        referencePrice: targetPrice,
+        changeAmount: changeAmount,
+        changePercent: changePercent,
+        message: message,
+        spokenText: message,
+      ),
+    );
   }
 
   int _bandIndex(double value) {

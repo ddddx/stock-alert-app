@@ -32,11 +32,14 @@ class _AlertsPageState extends State<AlertsPage> {
   AlertRuleType _ruleType = AlertRuleType.shortWindowMove;
   MoveDirection _moveDirection = MoveDirection.either;
   StepMetric _stepMetric = StepMetric.percent;
+  PriceThresholdDirection _priceThresholdDirection =
+      PriceThresholdDirection.below;
   bool _applyToAllWatchlist = false;
   final Set<String> _selectedCodes = <String>{};
   late final TextEditingController _movePercentController;
   late final TextEditingController _lookbackController;
   late final TextEditingController _stepValueController;
+  late final TextEditingController _targetPriceController;
   late final TextEditingController _noteController;
 
   @override
@@ -45,6 +48,7 @@ class _AlertsPageState extends State<AlertsPage> {
     _movePercentController = TextEditingController(text: '1.00');
     _lookbackController = TextEditingController(text: '5');
     _stepValueController = TextEditingController(text: '0.50');
+    _targetPriceController = TextEditingController(text: '18.50');
     _noteController = TextEditingController();
   }
 
@@ -53,6 +57,7 @@ class _AlertsPageState extends State<AlertsPage> {
     _movePercentController.dispose();
     _lookbackController.dispose();
     _stepValueController.dispose();
+    _targetPriceController.dispose();
     _noteController.dispose();
     super.dispose();
   }
@@ -149,6 +154,10 @@ class _AlertsPageState extends State<AlertsPage> {
                           DropdownMenuItem(
                             value: AlertRuleType.stepAlert,
                             child: Text('阶梯提醒'),
+                          ),
+                          DropdownMenuItem(
+                            value: AlertRuleType.priceThreshold,
+                            child: Text('价格提醒'),
                           ),
                         ],
                         onChanged: (value) {
@@ -268,6 +277,41 @@ class _AlertsPageState extends State<AlertsPage> {
                           },
                           decoration: const InputDecoration(labelText: '方向'),
                         ),
+                      ] else if (_ruleType == AlertRuleType.priceThreshold) ...[
+                        TextField(
+                          key: const Key('price-threshold-target-input'),
+                          controller: _targetPriceController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: '目标价格',
+                            helperText: '例如：现价跌破 18.50 或上穿 25.00 时提醒。',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<PriceThresholdDirection>(
+                          initialValue: _priceThresholdDirection,
+                          items: const [
+                            DropdownMenuItem(
+                              value: PriceThresholdDirection.below,
+                              child: Text('跌破目标价'),
+                            ),
+                            DropdownMenuItem(
+                              value: PriceThresholdDirection.above,
+                              child: Text('上穿目标价'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setDialogState(() {
+                              _priceThresholdDirection = value;
+                            });
+                          },
+                          decoration: const InputDecoration(labelText: '触发方向'),
+                        ),
                       ] else ...[
                         TextField(
                           controller: _stepValueController,
@@ -336,7 +380,7 @@ class _AlertsPageState extends State<AlertsPage> {
                     );
                     if (rule == null) {
                       _showMessage(
-                        '请输入有效规则参数。定向规则至少需要选择一只股票；按价格阶梯的全局规则需要当前已有自选股。',
+                        '请输入有效规则参数。定向规则至少需要选择一只股票；价格、涨跌幅和分钟数必须大于 0。',
                       );
                       return;
                     }
@@ -400,6 +444,7 @@ class _AlertsPageState extends State<AlertsPage> {
     _ruleType = AlertRuleType.shortWindowMove;
     _moveDirection = MoveDirection.either;
     _stepMetric = StepMetric.percent;
+    _priceThresholdDirection = PriceThresholdDirection.below;
     _applyToAllWatchlist = watchlist.isEmpty;
     _selectedCodes.clear();
     if (watchlist.isNotEmpty) {
@@ -408,6 +453,7 @@ class _AlertsPageState extends State<AlertsPage> {
     _movePercentController.text = '1.00';
     _lookbackController.text = '5';
     _stepValueController.text = '0.50';
+    _targetPriceController.text = _defaultTargetPriceText(watchlist);
     _noteController.clear();
   }
 
@@ -415,6 +461,8 @@ class _AlertsPageState extends State<AlertsPage> {
     _ruleType = rule.type;
     _moveDirection = rule.moveDirection ?? MoveDirection.either;
     _stepMetric = rule.stepMetric ?? StepMetric.percent;
+    _priceThresholdDirection =
+        rule.priceThresholdDirection ?? PriceThresholdDirection.below;
     _applyToAllWatchlist = rule.applyToAllWatchlist;
     _selectedCodes
       ..clear()
@@ -428,6 +476,8 @@ class _AlertsPageState extends State<AlertsPage> {
         (rule.moveThresholdPercent ?? 1).toStringAsFixed(2);
     _lookbackController.text = '${rule.lookbackMinutes ?? 5}';
     _stepValueController.text = (rule.stepValue ?? 0.5).toStringAsFixed(2);
+    _targetPriceController.text =
+        (rule.targetPrice ?? _defaultTargetPrice(watchlist)).toStringAsFixed(2);
     _noteController.text = rule.note ?? '';
   }
 
@@ -487,6 +537,26 @@ class _AlertsPageState extends State<AlertsPage> {
       );
     }
 
+    if (_ruleType == AlertRuleType.priceThreshold) {
+      final targetPrice = double.tryParse(_targetPriceController.text.trim());
+      if (targetPrice == null || targetPrice <= 0) {
+        return null;
+      }
+      return AlertRule.priceThreshold(
+        id: id,
+        stockCode: primary?.code ?? '',
+        stockName: primary?.name ?? '',
+        market: primary?.market ?? 'SZ',
+        applyToAllWatchlist: _applyToAllWatchlist,
+        targetStocks: selectedStocks,
+        targetPrice: targetPrice,
+        direction: _priceThresholdDirection,
+        enabled: enabled,
+        createdAt: createdAt,
+        note: note,
+      );
+    }
+
     final stepValue = double.tryParse(_stepValueController.text.trim());
     if (stepValue == null || stepValue <= 0) {
       return null;
@@ -535,6 +605,22 @@ class _AlertsPageState extends State<AlertsPage> {
       }
     }
     return anchors;
+  }
+
+  String _defaultTargetPriceText(List<StockIdentity> watchlist) {
+    return _defaultTargetPrice(watchlist).toStringAsFixed(2);
+  }
+
+  double _defaultTargetPrice(List<StockIdentity> watchlist) {
+    final primaryCode = watchlist.firstOrNull?.code;
+    if (primaryCode != null) {
+      final quote =
+          widget.quotes.where((item) => item.code == primaryCode).firstOrNull;
+      if (quote != null && quote.lastPrice > 0) {
+        return quote.lastPrice;
+      }
+    }
+    return 18.50;
   }
 
   List<StockIdentity> _mergeAvailableStocks(

@@ -341,6 +341,131 @@ void main() {
     expect(firstTrigger, hasLength(1));
     expect(secondTrigger, isEmpty);
   });
+
+  test('price threshold rule triggers once while price stays beyond target',
+      () {
+    final engine = AlertRuleEngine(messageBuilder: AlertMessageBuilder());
+    final rule = AlertRule.priceThreshold(
+      id: 'price-below',
+      targetPrice: 18.50,
+      direction: PriceThresholdDirection.below,
+      enabled: true,
+      createdAt: DateTime(2026, 1, 1),
+      targetStocks: const [
+        StockIdentity(code: '000001', name: '平安银行', market: 'SZ'),
+      ],
+    );
+
+    final firstTrigger = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 18.49,
+          previousClose: 18.8,
+          timestamp: DateTime(2026, 1, 1, 9, 30),
+        ),
+      ],
+    );
+    final secondTrigger = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 18.45,
+          previousClose: 18.8,
+          timestamp: DateTime(2026, 1, 1, 9, 31),
+        ),
+      ],
+    );
+
+    expect(firstTrigger, hasLength(1));
+    expect(firstTrigger.single.referencePrice, 18.50);
+    expect(firstTrigger.single.message, contains('跌破¥18.50'));
+    expect(secondTrigger, isEmpty);
+  });
+
+  test('price threshold rule can trigger again after price leaves target zone',
+      () {
+    final engine = AlertRuleEngine(messageBuilder: AlertMessageBuilder());
+    final rule = AlertRule.priceThreshold(
+      id: 'price-above',
+      targetPrice: 25,
+      direction: PriceThresholdDirection.above,
+      enabled: true,
+      createdAt: DateTime(2026, 1, 1),
+      applyToAllWatchlist: true,
+    );
+
+    final firstTrigger = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 25.01,
+          previousClose: 24.8,
+          timestamp: DateTime(2026, 1, 1, 9, 30),
+        ),
+      ],
+    );
+    final resetPass = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 24.90,
+          previousClose: 24.8,
+          timestamp: DateTime(2026, 1, 1, 9, 31),
+        ),
+      ],
+    );
+    final secondTrigger = engine.processQuotes(
+      rules: [rule],
+      quotes: [
+        _quote(
+          code: '000001',
+          name: '平安银行',
+          market: 'SZ',
+          lastPrice: 25.05,
+          previousClose: 24.8,
+          timestamp: DateTime(2026, 1, 1, 9, 32),
+        ),
+      ],
+    );
+
+    expect(firstTrigger, hasLength(1));
+    expect(resetPass, isEmpty);
+    expect(secondTrigger, hasLength(1));
+    expect(secondTrigger.single.message, contains('上穿¥25.00'));
+  });
+
+  test('price threshold rule serializes strategy fields', () {
+    final rule = AlertRule.priceThreshold(
+      id: 'price-serialize',
+      targetPrice: 18.50,
+      direction: PriceThresholdDirection.below,
+      enabled: true,
+      createdAt: DateTime(2026, 1, 1),
+      stockCode: '000001',
+      stockName: '平安银行',
+      market: 'SZ',
+    );
+
+    final restored = AlertRule.fromJson(rule.toJson());
+
+    expect(restored.type, AlertRuleType.priceThreshold);
+    expect(restored.targetPrice, 18.50);
+    expect(restored.priceThresholdDirection, PriceThresholdDirection.below);
+    expect(restored.summary, contains('跌破 18.50 元'));
+  });
 }
 
 StockQuoteSnapshot _quote({

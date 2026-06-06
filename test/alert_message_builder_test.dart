@@ -114,4 +114,23 @@ void main() {
     expect(text, contains('最新价'));
     expect(text, isNot(contains('涨跌幅')));
   });
+
+  test('price threshold message announces target and current price', () {
+    final text = builder.buildPriceThresholdMessage(
+      rule: AlertRule.priceThreshold(
+        id: 'rule-5',
+        targetPrice: 1700,
+        direction: PriceThresholdDirection.above,
+        enabled: true,
+        createdAt: DateTime(2026, 3, 29),
+      ),
+      current: quote,
+    );
+
+    expect(text, contains('贵州茅台'));
+    expect(text, isNot(contains('600519')));
+    expect(text, contains('价格提醒'));
+    expect(text, contains('上穿¥1700.00'));
+    expect(text, contains('最新价¥1688.00'));
+  });
 }

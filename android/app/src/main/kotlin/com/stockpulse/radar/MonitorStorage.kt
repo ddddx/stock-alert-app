@@ -64,6 +64,8 @@ data class NativeRule(
     val stepMetric: String?,
     val anchorPrice: Double?,
     val anchorPricesByCode: Map<String, Double>,
+    val targetPrice: Double?,
+    val priceThresholdDirection: String?,
 )
 
 fun NativeRule.resolvedTargetStocks(): List<NativeStock> {
@@ -104,6 +106,8 @@ fun NativeRule.stateKeyFor(code: String): String {
         stepValue?.let { String.format(Locale.US, "%.4f", it) }.orEmpty(),
         stepMetric.orEmpty(),
         anchorPriceFor(code)?.let { String.format(Locale.US, "%.4f", it) }.orEmpty(),
+        targetPrice?.let { String.format(Locale.US, "%.4f", it) }.orEmpty(),
+        priceThresholdDirection.orEmpty(),
     ).joinToString(":")
 }
 
@@ -366,6 +370,8 @@ object MonitorStorage {
                 anchorPrice = item.optNullableDouble("anchorPrice"),
                 anchorPricesByCode = item.optDoubleMap("anchorPricesByCode")
                     .ifEmpty { item.optDoubleMap("anchorPrices") },
+                targetPrice = item.optNullableDouble("targetPrice"),
+                priceThresholdDirection = item.optNullableString("priceThresholdDirection"),
             )
         }
         return rules
