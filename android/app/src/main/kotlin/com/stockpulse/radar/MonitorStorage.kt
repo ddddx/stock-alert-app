@@ -253,6 +253,8 @@ object MonitorStorage {
     private const val RULES_FILE = "alert_rules.json"
     private const val HISTORY_FILE = "alert_history.json"
     private const val RUNTIME_FILE = "monitor_runtime_state.json"
+    private const val DIAGNOSTIC_LOG_FILE = "diagnostic_log.json"
+    private const val MAX_DIAGNOSTIC_LOG_ENTRIES = 120
     private const val DEFAULT_MESSAGE = "等待首次刷新 A 股行情。"
 
     fun loadSettings(context: Context): NativeMonitorSettings {
@@ -496,6 +498,47 @@ object MonitorStorage {
             merged.put(existing.opt(index))
         }
         writeJsonArray(storageFile(context, HISTORY_FILE), merged)
+    }
+
+    @Synchronized
+    fun appendDiagnosticLog(
+        context: Context,
+        level: String,
+        category: String,
+        message: String,
+        timestampMillis: Long = System.currentTimeMillis(),
+    ) {
+        val normalizedMessage = message.trim()
+        if (normalizedMessage.isEmpty()) {
+            return
+        }
+
+        val normalizedLevel = when (level.trim().lowercase(Locale.ROOT)) {
+            "warning" -> "warning"
+            "error" -> "error"
+            else -> "info"
+        }
+        val normalizedCategory = category.trim().ifBlank { "general" }
+        val entry = JSONObject()
+            .put(
+                "id",
+                "${timestampMillis * 1000}-$normalizedCategory-${normalizedMessage.hashCode() and Int.MAX_VALUE}",
+            )
+            .put("timestamp", formatIso8601(timestampMillis))
+            .put("level", normalizedLevel)
+            .put("category", normalizedCategory)
+            .put("message", normalizedMessage)
+
+        val existing = readJsonArray(storageFile(context, DIAGNOSTIC_LOG_FILE)) ?: JSONArray()
+        val merged = JSONArray()
+        merged.put(entry)
+        for (index in 0 until existing.length()) {
+            if (merged.length() >= MAX_DIAGNOSTIC_LOG_ENTRIES) {
+                break
+            }
+            merged.put(existing.opt(index))
+        }
+        writeJsonArray(storageFile(context, DIAGNOSTIC_LOG_FILE), merged)
     }
 
     fun storageDirectory(context: Context): File {

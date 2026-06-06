@@ -41,6 +41,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     override fun onCreate() {
         super.onCreate()
         ensureChannel(this)
+        logDiagnostic("info", "service", "前台监控服务已创建。")
         prewarmTtsIfEnabled()
     }
 
@@ -49,6 +50,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         return try {
             when (action) {
                 ACTION_START_MONITOR -> {
+                    logDiagnostic("info", "service", "收到后台监控启动请求。")
                     val summary = intent?.getStringExtra(summaryArgument()).orEmpty().ifBlank {
                         loadBootSummary()
                     }
@@ -57,22 +59,26 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 }
 
                 ACTION_REFRESH_NOW -> {
+                    logDiagnostic("info", "service", "收到后台即时刷新请求。")
                     startAsForeground(lastSummary)
                     ensureMonitoringActive(triggerImmediateRefresh = true)
                 }
 
                 ACTION_RELOAD_MONITOR -> {
+                    logDiagnostic("info", "service", "收到后台监控恢复请求。")
                     startAsForeground(loadBootSummary())
                     ensureMonitoringActive(triggerImmediateRefresh = false)
                 }
 
                 ACTION_STOP_MONITOR -> {
+                    logDiagnostic("info", "service", "收到后台监控停止请求。")
                     stopMonitoring()
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }
 
                 else -> {
+                    logDiagnostic("warning", "service", "收到未知后台监控请求：$action")
                     startAsForeground(loadBootSummary())
                     ensureMonitoringActive(triggerImmediateRefresh = true)
                 }
@@ -80,9 +86,11 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
             START_STICKY
         } catch (error: Exception) {
             Log.e(TAG, "Failed to start monitor foreground service", error)
+            val message = "后台监控启动失败：${error.message ?: error.javaClass.simpleName}；已自动关闭后台监控。"
+            logDiagnostic("error", "service", message)
             MonitorStorage.disableService(
                 context = this,
-                message = "后台监控启动失败：${error.message ?: error.javaClass.simpleName}；已自动关闭后台监控。",
+                message = message,
             )
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -98,14 +106,17 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         textToSpeech?.stop()
         textToSpeech?.shutdown()
         textToSpeech = null
+        logDiagnostic("info", "service", "前台监控服务已销毁。")
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         if (MonitorStorage.isServiceEnabled(this)) {
+            val message = "后台监控在应用任务被移除后已暂停。为避免系统限制导致异常，请重新打开应用后手动开启。"
+            logDiagnostic("warning", "service", message)
             MonitorStorage.disableService(
                 context = this,
-                message = "后台监控在应用任务被移除后已暂停。为避免系统限制导致异常，请重新打开应用后手动开启。",
+                message = message,
             )
             handler.removeCallbacks(pollRunnable)
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -132,11 +143,21 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
             )
             ttsLock.notifyAll()
         }
+        logDiagnostic(
+            if (ttsReady) "info" else "warning",
+            "speech",
+            if (ttsReady) {
+                "前台服务语音初始化完成。"
+            } else {
+                "前台服务语音初始化失败，状态码：$status。"
+            },
+        )
     }
 
     private fun ensureMonitoringActive(triggerImmediateRefresh: Boolean) {
         handler.removeCallbacks(pollRunnable)
         if (!MonitorStorage.isServiceEnabled(this)) {
+            logDiagnostic("info", "service", "后台监控未开启，前台服务将停止。")
             stopMonitoring()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -171,11 +192,13 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 message = summary,
             )
             updateSummary(this, summary)
+            logDiagnostic("info", "refresh", summary, checkedAtMillis)
             scheduleNextPoll(loadSettings().pollIntervalSeconds)
             return
         }
 
         if (!runningRefresh.compareAndSet(false, true)) {
+            logDiagnostic("warning", "refresh", "上一轮后台刷新仍在执行，已跳过本次请求。", checkedAtMillis)
             if (reschedule) {
                 scheduleNextPoll(loadSettings().pollIntervalSeconds)
             }
@@ -199,14 +222,38 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 val soundEnabled = settings.soundEnabled
                 result.triggers.forEach { trigger ->
                     val playedSound = if (soundEnabled) speak(trigger.spokenText) else false
+                    if (!soundEnabled) {
+                        logDiagnostic(
+                            "info",
+                            "speech",
+                            "语音播报已关闭，未播报：${trigger.message}",
+                            trigger.triggeredAtMillis,
+                        )
+                    } else if (!playedSound) {
+                        logDiagnostic(
+                            "warning",
+                            "speech",
+                            "前台服务语音播报未成功：${trigger.message}",
+                            trigger.triggeredAtMillis,
+                        )
+                    }
                     val notificationId = (trigger.rule.id + ":" + trigger.quote.code + ":" + trigger.triggeredAtMillis)
                         .hashCode() and Int.MAX_VALUE
-                    AlertNotificationPublisher.publish(
+                    val notificationPublished = AlertNotificationPublisher.publish(
                         context = this,
                         title = buildAlertNotificationTitle(trigger.quote),
                         message = trigger.message,
                         notificationId = notificationId,
                     )
+                    if (!notificationPublished) {
+                        logDiagnostic(
+                            "warning",
+                            "notification",
+                            "提醒通知发布失败：${trigger.message}",
+                            trigger.triggeredAtMillis,
+                        )
+                    }
+                    logDiagnostic("info", "alert", "触发提醒：${trigger.message}", trigger.triggeredAtMillis)
                     historyEntries += NativeAlertHistoryEntry(
                         id = "${trigger.rule.id}-${trigger.quote.code}-${trigger.triggeredAtMillis}",
                         ruleId = trigger.rule.id,
@@ -233,6 +280,12 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                     result.summary
                 }
                 MonitorStorage.updateStatus(this, result.checkedAtMillis, summary)
+                logDiagnostic(
+                    if (result.hasError) "error" else "info",
+                    "refresh",
+                    summary,
+                    result.checkedAtMillis,
+                )
                 handler.post {
                     updateSummary(this, summary)
                     if (reschedule) {
@@ -245,6 +298,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 val summary =
                     "后台监控刷新失败：${error.message ?: error.javaClass.simpleName}"
                 MonitorStorage.updateStatus(this, checkedAtMillis, summary)
+                logDiagnostic("error", "refresh", summary, checkedAtMillis)
                 handler.post {
                     updateSummary(this, summary)
                     if (reschedule) {
@@ -270,6 +324,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                     message = summary,
                 )
                 updateSummary(this, summary)
+                logDiagnostic("info", "refresh", summary, nowMillis)
             }
             handler.postDelayed(pollRunnable, marketSession.delayUntilNextOpenMillis(nowMillis))
             return
@@ -314,16 +369,25 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 ttsLock.notifyAll()
             }
             Log.w(TAG, "Unable to initialize TTS in foreground service", error)
+            logDiagnostic(
+                "warning",
+                "speech",
+                "前台服务语音初始化异常：${error.message ?: error.javaClass.simpleName}",
+            )
             false
         }
     }
 
     private fun prewarmTtsIfEnabled() {
         if (!loadSettings().soundEnabled) {
+            logDiagnostic("info", "speech", "语音播报已关闭，跳过前台服务预热。")
             return
         }
         handler.post {
-            ensureTts()
+            val initialized = ensureTts()
+            if (!initialized) {
+                logDiagnostic("warning", "speech", "前台服务语音预热未能启动。")
+            }
         }
     }
 
@@ -334,6 +398,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         }
         if (!awaitTtsReady()) {
             Log.w(TAG, "Foreground service TTS not ready; skipping speech")
+            logDiagnostic("warning", "speech", "语音引擎未就绪，跳过播报。")
             return false
         }
         val utteranceId = "stock-pulse-service-${System.currentTimeMillis()}"
@@ -345,6 +410,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
         ) == TextToSpeech.SUCCESS
         if (!queued) {
             Log.w(TAG, "Foreground service TTS speak returned non-success for $utteranceId")
+            logDiagnostic("warning", "speech", "语音播报请求未被系统接受。")
         }
         return queued
     }
@@ -458,6 +524,25 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun loadSettings(): NativeMonitorSettings = MonitorStorage.loadSettings(this)
+
+    private fun logDiagnostic(
+        level: String,
+        category: String,
+        message: String,
+        timestampMillis: Long = System.currentTimeMillis(),
+    ) {
+        runCatching {
+            MonitorStorage.appendDiagnosticLog(
+                context = this,
+                level = level,
+                category = category,
+                message = message,
+                timestampMillis = timestampMillis,
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Unable to append diagnostic log", error)
+        }
+    }
 
     private fun buildAlertNotificationTitle(quote: NativeQuote): String {
         val name = quote.name.trim()

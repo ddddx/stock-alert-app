@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_alert_app/data/models/alert_history_entry.dart';
 import 'package:stock_alert_app/data/models/alert_rule.dart';
+import 'package:stock_alert_app/data/models/diagnostic_log_entry.dart';
 import 'package:stock_alert_app/data/models/monitor_status.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/models/stock_quote_snapshot.dart';
 import 'package:stock_alert_app/data/models/watchlist_sort_order.dart';
 import 'package:stock_alert_app/data/models/webdav_config.dart';
 import 'package:stock_alert_app/data/repositories/alert_repository.dart';
+import 'package:stock_alert_app/data/repositories/diagnostic_log_repository.dart';
 import 'package:stock_alert_app/data/repositories/history_repository.dart';
 import 'package:stock_alert_app/data/repositories/settings_repository.dart';
 import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
@@ -45,6 +47,7 @@ void main() {
 
   test('monitor refresh fetches quotes during A-share trading hours', () async {
     final marketDataService = _RecordingMarketDataService();
+    final diagnosticLogRepository = _FakeDiagnosticLogRepository();
     final service = AshareMonitorService(
       watchlistRepository: const _FakeWatchlistRepository(),
       alertRepository: _FakeAlertRepository(),
@@ -54,6 +57,7 @@ void main() {
       audioAlertService: _FakeAudioAlertService(),
       ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
       platformBridgeService: _FakePlatformBridgeService(),
+      diagnosticLogRepository: diagnosticLogRepository,
       now: () => DateTime(2026, 3, 23, 10, 0),
     );
 
@@ -63,6 +67,33 @@ void main() {
     expect(marketDataService.lastRequestedCodes, ['600519']);
     expect(result.summary, isNotEmpty);
     expect(result.summary, isNot(contains('13:00')));
+    expect(diagnosticLogRepository.entries.single.category, 'refresh');
+    expect(diagnosticLogRepository.entries.single.message, result.summary);
+  });
+
+  test('monitor refresh failure records diagnostic log', () async {
+    final diagnosticLogRepository = _FakeDiagnosticLogRepository();
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(),
+      alertRepository: _FakeAlertRepository(),
+      historyRepository: _FakeHistoryRepository(),
+      settingsRepository: _FakeSettingsRepository(),
+      marketDataService: _ThrowingMarketDataService(),
+      audioAlertService: _FakeAudioAlertService(),
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: _FakePlatformBridgeService(),
+      diagnosticLogRepository: diagnosticLogRepository,
+      now: () => DateTime(2026, 3, 23, 10, 0),
+    );
+
+    final result = await service.refreshWatchlist();
+
+    expect(result.hasError, isTrue);
+    expect(result.summary, contains('行情刷新失败'));
+    expect(
+        diagnosticLogRepository.entries.single.level, DiagnosticLogLevel.error);
+    expect(diagnosticLogRepository.entries.single.category, 'refresh');
+    expect(diagnosticLogRepository.entries.single.message, result.summary);
   });
 
   test('monitor refresh filters out stocks with monitoring disabled', () async {
@@ -591,6 +622,17 @@ class _RecordingMarketDataService extends AshareMarketDataService {
   }
 }
 
+class _ThrowingMarketDataService extends AshareMarketDataService {
+  @override
+  Future<List<StockQuoteSnapshot>> fetchQuotesProgressively(
+    List<StockIdentity> watchlist, {
+    void Function(StockQuoteSnapshot quote)? onQuoteReceived,
+    bool preferSingleQuoteRetrieval = false,
+  }) async {
+    throw const SocketException('network down');
+  }
+}
+
 class _SequenceMarketDataService extends AshareMarketDataService {
   _SequenceMarketDataService(this._quotesByCall);
 
@@ -851,4 +893,24 @@ class _AlertNotificationRecord {
   final String title;
   final String message;
   final int notificationId;
+}
+
+class _FakeDiagnosticLogRepository implements DiagnosticLogRepository {
+  final List<DiagnosticLogEntry> entries = [];
+
+  @override
+  Future<void> add(DiagnosticLogEntry entry) async {
+    entries.insert(0, entry);
+  }
+
+  @override
+  Future<void> clear() async {
+    entries.clear();
+  }
+
+  @override
+  List<DiagnosticLogEntry> getAll() => List.unmodifiable(entries);
+
+  @override
+  Future<void> initialize() async {}
 }

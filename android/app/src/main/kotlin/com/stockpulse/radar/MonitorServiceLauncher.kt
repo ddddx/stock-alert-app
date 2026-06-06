@@ -27,9 +27,17 @@ object MonitorServiceLauncher {
             true
         }.getOrElse { error ->
             if (disableOnFailure) {
+                val message =
+                    "$failurePrefix：${error.safeMessage()}；已自动关闭后台监控，请重新打开应用后再尝试。"
                 MonitorStorage.disableService(
                     context = context,
-                    message = "$failurePrefix：${error.safeMessage()}；已自动关闭后台监控，请重新打开应用后再尝试。",
+                    message = message,
+                )
+                MonitorStorage.appendDiagnosticLog(
+                    context = context,
+                    level = "error",
+                    category = "service",
+                    message = message,
                 )
             }
             false

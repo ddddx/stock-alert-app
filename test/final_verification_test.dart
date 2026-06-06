@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stock_alert_app/data/models/diagnostic_log_entry.dart';
 import 'package:stock_alert_app/data/models/monitor_status.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/models/stock_quote_snapshot.dart';
 import 'package:stock_alert_app/data/models/stock_search_result.dart';
 import 'package:stock_alert_app/data/models/watchlist_sort_order.dart';
 import 'package:stock_alert_app/data/models/webdav_config.dart';
+import 'package:stock_alert_app/data/repositories/diagnostic_log_repository.dart';
 import 'package:stock_alert_app/data/repositories/settings_repository.dart';
 import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
 import 'package:stock_alert_app/features/settings/presentation/pages/settings_page.dart';
@@ -359,6 +361,7 @@ void main() {
   testWidgets('poll preset updates interval and current summary together', (
     tester,
   ) async {
+    _useLargeViewport(tester);
     final settingsRepository = _FakeSettingsRepository();
     await settingsRepository.updateService(true);
     final monitorService = _FakeMonitorService();
@@ -383,12 +386,75 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(ChoiceChip, '5 秒'));
+    await _scrollAndTap(
+      tester,
+      find.byKey(const Key('poll-interval-chip-5')),
+    );
     await tester.pumpAndSettle();
 
     expect(settingsRepository.getStatus().pollIntervalSeconds, 5);
     expect(monitorService.reloadCalls, 1);
     expect(find.textContaining('后台轮询间隔已更新为 5 秒'), findsWidgets);
+  });
+
+  testWidgets('settings page shows background health and diagnostic logs', (
+    tester,
+  ) async {
+    _useLargeViewport(tester);
+    final settingsRepository = _FakeSettingsRepository();
+    await settingsRepository.updateService(true);
+    final diagnosticLogRepository = _FakeDiagnosticLogRepository([
+      DiagnosticLogEntry.create(
+        level: DiagnosticLogLevel.warning,
+        category: 'speech',
+        message: '语音播报未成功',
+        timestamp: DateTime(2026, 3, 23, 10, 0),
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: _FakeMonitorService(running: true),
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(
+            backgroundAccessStatus: const AndroidBackgroundAccessStatus(
+              isAndroid: true,
+              sdkInt: 35,
+              notificationsRuntimePermissionRequired: true,
+              notificationPermissionGranted: false,
+              notificationsEnabled: true,
+              ignoringBatteryOptimizations: false,
+            ),
+          ),
+          diagnosticLogRepository: diagnosticLogRepository,
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('后台健康检查'), findsOneWidget);
+    expect(find.text('运行诊断'), findsOneWidget);
+    expect(find.text('通知权限'), findsWidgets);
+    expect(find.text('电池优化'), findsOneWidget);
+    expect(find.text('服务运行'), findsOneWidget);
+    expect(find.textContaining('通知未完全开启'), findsOneWidget);
+    expect(find.text('语音播报未成功'), findsOneWidget);
+
+    await tester.tap(find.text('清空'));
+    await tester.pumpAndSettle();
+
+    expect(diagnosticLogRepository.entries, isEmpty);
+    expect(find.text('暂无诊断日志。完成一次刷新或启动后台监控后会在这里记录关键事件。'), findsOneWidget);
   });
 
   testWidgets('webdav draft survives rebuild before save', (tester) async {
@@ -735,12 +801,15 @@ class _FakeAudioAlertService implements AudioAlertService {
 }
 
 class _FakeMonitorService implements MonitorService {
+  _FakeMonitorService({this.running = false});
+
+  final bool running;
   int startCalls = 0;
   int reloadCalls = 0;
   int backgroundRefreshCalls = 0;
 
   @override
-  bool get isRunning => false;
+  bool get isRunning => running;
 
   @override
   List<StockQuoteSnapshot> get latestQuotes => const [];
@@ -779,7 +848,11 @@ class _FakeMonitorService implements MonitorService {
 }
 
 class _FakePlatformBridgeService extends PlatformBridgeService {
-  _FakePlatformBridgeService();
+  _FakePlatformBridgeService({
+    this.backgroundAccessStatus,
+  });
+
+  final AndroidBackgroundAccessStatus? backgroundAccessStatus;
 
   @override
   Future<bool> startForegroundMonitorService({required String summary}) async {
@@ -790,6 +863,35 @@ class _FakePlatformBridgeService extends PlatformBridgeService {
   Future<bool> reloadForegroundMonitorService() async {
     return true;
   }
+
+  @override
+  Future<AndroidBackgroundAccessStatus>
+      getAndroidBackgroundAccessStatus() async {
+    return backgroundAccessStatus ?? AndroidBackgroundAccessStatus.notAndroid();
+  }
+}
+
+class _FakeDiagnosticLogRepository implements DiagnosticLogRepository {
+  _FakeDiagnosticLogRepository([List<DiagnosticLogEntry> entries = const []])
+      : entries = List<DiagnosticLogEntry>.from(entries);
+
+  final List<DiagnosticLogEntry> entries;
+
+  @override
+  Future<void> add(DiagnosticLogEntry entry) async {
+    entries.insert(0, entry);
+  }
+
+  @override
+  Future<void> clear() async {
+    entries.clear();
+  }
+
+  @override
+  List<DiagnosticLogEntry> getAll() => List.unmodifiable(entries);
+
+  @override
+  Future<void> initialize() async {}
 }
 
 StockQuoteSnapshot _sampleQuote() {

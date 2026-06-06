@@ -11,6 +11,12 @@ class BootCompletedReceiver : BroadcastReceiver() {
             return
         }
         if (!MonitorStorage.isServiceEnabled(context)) {
+            MonitorStorage.appendDiagnosticLog(
+                context = context,
+                level = "info",
+                category = "service",
+                message = "系统广播触发后台守护检查，但后台监控未开启，已跳过自动恢复。",
+            )
             return
         }
 
@@ -27,16 +33,29 @@ class BootCompletedReceiver : BroadcastReceiver() {
             failurePrefix = "后台守护自动恢复失败",
         )
         if (!restored) {
+            MonitorStorage.appendDiagnosticLog(
+                context = context,
+                level = "error",
+                category = "service",
+                message = "后台守护自动恢复失败。",
+            )
             return
+        }
+        val restoredMessage = when (action) {
+                Intent.ACTION_BOOT_COMPLETED -> "检测到设备重启，后台守护已自动恢复。"
+                Intent.ACTION_MY_PACKAGE_REPLACED -> "应用更新完成，后台守护已自动恢复。"
+                else -> "后台守护已自动恢复。"
         }
         MonitorStorage.updateStatus(
             context = context,
             checkedAtMillis = System.currentTimeMillis(),
-            message = when (action) {
-                Intent.ACTION_BOOT_COMPLETED -> "检测到设备重启，后台守护已自动恢复。"
-                Intent.ACTION_MY_PACKAGE_REPLACED -> "应用更新完成，后台守护已自动恢复。"
-                else -> "后台守护已自动恢复。"
-            },
+            message = restoredMessage,
+        )
+        MonitorStorage.appendDiagnosticLog(
+            context = context,
+            level = "info",
+            category = "service",
+            message = restoredMessage,
         )
     }
 }

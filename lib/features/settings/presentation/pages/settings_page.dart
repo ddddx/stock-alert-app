@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/utils/formatters.dart';
+import '../../../../data/models/diagnostic_log_entry.dart';
 import '../../../../data/models/stock_quote_snapshot.dart';
 import '../../../../data/models/webdav_config.dart';
+import '../../../../data/repositories/diagnostic_log_repository.dart';
 import '../../../../data/repositories/settings_repository.dart';
 import '../../../../services/alerts/alert_message_builder.dart';
 import '../../../../services/audio/audio_alert_service.dart';
@@ -33,6 +35,7 @@ class SettingsPage extends StatefulWidget {
     this.currentMarketDataProviderId = 'ashare',
     this.availableMarketDataProviders = const [],
     this.onMarketDataProviderChanged = _noopMarketDataProviderChanged,
+    this.diagnosticLogRepository = const NoopDiagnosticLogRepository(),
   });
 
   final SettingsRepository repository;
@@ -51,6 +54,7 @@ class SettingsPage extends StatefulWidget {
   final String currentMarketDataProviderId;
   final List<MarketDataProvider> availableMarketDataProviders;
   final Future<void> Function(String providerId) onMarketDataProviderChanged;
+  final DiagnosticLogRepository diagnosticLogRepository;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -66,6 +70,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _webDavUsernameController;
   late final TextEditingController _webDavPasswordController;
   late WebDavConfig _lastSyncedWebDavConfig;
+  late Future<AndroidBackgroundAccessStatus> _backgroundAccessFuture;
 
   bool _webDavBusy = false;
   String? _toast;
@@ -86,6 +91,8 @@ class _SettingsPageState extends State<SettingsPage> {
         TextEditingController(text: webDavConfig.username);
     _webDavPasswordController = TextEditingController();
     _lastSyncedWebDavConfig = webDavConfig;
+    _backgroundAccessFuture =
+        widget.platformBridgeService.getAndroidBackgroundAccessStatus();
   }
 
   @override
@@ -106,6 +113,13 @@ class _SettingsPageState extends State<SettingsPage> {
         .showSnackBar(SnackBar(content: Text(message)));
     setState(() {
       _toast = message;
+    });
+  }
+
+  void _refreshBackgroundAccessStatus() {
+    setState(() {
+      _backgroundAccessFuture =
+          widget.platformBridgeService.getAndroidBackgroundAccessStatus();
     });
   }
 
@@ -347,11 +361,13 @@ class _SettingsPageState extends State<SettingsPage> {
     _showFeedback(
       granted ? '通知权限已授予。' : '未能直接获取通知权限，已打开系统通知设置，请确认允许通知。',
     );
+    _refreshBackgroundAccessStatus();
   }
 
   Future<void> _handleBatteryWhitelist() async {
     await widget.platformBridgeService.openBatteryOptimizationSettings();
     _showFeedback('已打开电池优化设置，建议将本应用加入白名单。');
+    _refreshBackgroundAccessStatus();
   }
 
   Future<void> _handlePreviewSpeech() async {
@@ -387,7 +403,11 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         _buildOverviewSection(status),
         const SizedBox(height: 12),
+        _buildBackgroundHealthSection(status),
+        const SizedBox(height: 12),
         _buildMonitoringSection(status),
+        const SizedBox(height: 12),
+        _buildDiagnosticsSection(),
         const SizedBox(height: 12),
         _buildBriefingSection(status),
         const SizedBox(height: 12),
@@ -605,6 +625,109 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBackgroundHealthSection(dynamic status) {
+    return SectionCard(
+      title: '后台健康检查',
+      subtitle: '集中查看通知、电池优化、服务配置和实际运行状态。',
+      trailing: TextButton.icon(
+        onPressed: _refreshBackgroundAccessStatus,
+        icon: const Icon(Icons.refresh),
+        label: const Text('重新检查'),
+      ),
+      child: FutureBuilder<AndroidBackgroundAccessStatus>(
+        future: _backgroundAccessFuture,
+        builder: (context, snapshot) {
+          final access = snapshot.data;
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              access == null) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(),
+            );
+          }
+          final isAndroid = access?.isAndroid ?? false;
+          final canPostNotifications = access?.canPostNotifications ?? true;
+          final ignoringBattery = access?.ignoringBatteryOptimizations ?? true;
+          return Column(
+            children: [
+              _HealthCheckRow(
+                icon: Icons.notifications_active_outlined,
+                title: '通知权限',
+                detail: isAndroid
+                    ? (canPostNotifications
+                        ? '已允许通知，前台服务和提醒通知可显示。'
+                        : '通知未完全开启，后台监控无法稳定常驻。')
+                    : '当前不是 Android 环境，跳过系统通知检查。',
+                healthy: canPostNotifications,
+              ),
+              const SizedBox(height: 8),
+              _HealthCheckRow(
+                icon: Icons.battery_saver_outlined,
+                title: '电池优化',
+                detail: isAndroid
+                    ? (ignoringBattery
+                        ? '已忽略电池优化，后台服务更不容易被系统回收。'
+                        : '尚未加入电池白名单，部分 ROM 可能杀死后台服务。')
+                    : '当前不是 Android 环境，跳过电池白名单检查。',
+                healthy: ignoringBattery,
+              ),
+              const SizedBox(height: 8),
+              _HealthCheckRow(
+                icon: Icons.tune_outlined,
+                title: '后台配置',
+                detail: status.serviceEnabled
+                    ? '后台守护配置已开启，应用会尝试恢复原生前台服务。'
+                    : '后台守护未开启，应用退到后台后不会持续轮询。',
+                healthy: status.serviceEnabled,
+              ),
+              const SizedBox(height: 8),
+              _HealthCheckRow(
+                icon: Icons.shield_outlined,
+                title: '服务运行',
+                detail: widget.monitorService.isRunning
+                    ? '当前 Flutter 侧确认原生前台服务已启动。'
+                    : (status.serviceEnabled
+                        ? '配置已开启，但当前会话还未确认服务运行；可重新开启或查看诊断日志。'
+                        : '服务未运行。'),
+                healthy: widget.monitorService.isRunning,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDiagnosticsSection() {
+    final logs = widget.diagnosticLogRepository.getAll();
+    final latest = logs.take(5).toList(growable: false);
+    return SectionCard(
+      title: '运行诊断',
+      subtitle: '记录刷新、后台服务、通知和语音播报的关键事件。',
+      trailing: TextButton.icon(
+        onPressed: logs.isEmpty
+            ? null
+            : () async {
+                await widget.diagnosticLogRepository.clear();
+                _showFeedback('诊断日志已清空。');
+                widget.onChanged();
+              },
+        icon: const Icon(Icons.delete_outline),
+        label: const Text('清空'),
+      ),
+      child: latest.isEmpty
+          ? const Text('暂无诊断日志。完成一次刷新或启动后台监控后会在这里记录关键事件。')
+          : Column(
+              children: [
+                for (final entry in latest) ...[
+                  _DiagnosticLogTile(entry: entry),
+                  if (entry != latest.last) const SizedBox(height: 8),
+                ],
+              ],
+            ),
     );
   }
 
@@ -1058,6 +1181,110 @@ class _SettingsSubpanel extends StatelessWidget {
             const SizedBox(width: 8),
             trailing!,
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthCheckRow extends StatelessWidget {
+  const _HealthCheckRow({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.healthy,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+  final bool healthy;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = healthy ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(detail),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            healthy ? Icons.check_circle_outline : Icons.error_outline,
+            color: color,
+            size: 20,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DiagnosticLogTile extends StatelessWidget {
+  const _DiagnosticLogTile({required this.entry});
+
+  final DiagnosticLogEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (entry.level) {
+      DiagnosticLogLevel.info => const Color(0xFF1565C0),
+      DiagnosticLogLevel.warning => const Color(0xFFEF6C00),
+      DiagnosticLogLevel.error => const Color(0xFFC62828),
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFD),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE3EAF3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.receipt_long_outlined, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${entry.levelLabel} · ${entry.category} · ${Formatters.compactDateTime(entry.timestamp)}',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(entry.message),
+              ],
+            ),
+          ),
         ],
       ),
     );

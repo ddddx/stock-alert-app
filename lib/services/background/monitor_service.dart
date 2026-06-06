@@ -1,5 +1,7 @@
+import '../../data/models/diagnostic_log_entry.dart';
 import '../../data/models/stock_quote_snapshot.dart';
 import '../../data/repositories/alert_repository.dart';
+import '../../data/repositories/diagnostic_log_repository.dart';
 import '../../data/repositories/history_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/watchlist_repository.dart';
@@ -53,6 +55,8 @@ class AshareMonitorService implements MonitorService {
     required AudioAlertService audioAlertService,
     required AlertRuleEngine ruleEngine,
     required PlatformBridgeService platformBridgeService,
+    DiagnosticLogRepository diagnosticLogRepository =
+        const NoopDiagnosticLogRepository(),
     AshareMarketHours marketHours = const AshareMarketHours(),
     DateTime Function()? now,
   })  : _watchlistRepository = watchlistRepository,
@@ -64,6 +68,7 @@ class AshareMonitorService implements MonitorService {
         _audioAlertService = audioAlertService,
         _ruleEngine = ruleEngine,
         _platformBridgeService = platformBridgeService,
+        _diagnosticLogRepository = diagnosticLogRepository,
         _marketHours = marketHours,
         _now = now ?? DateTime.now;
 
@@ -76,6 +81,7 @@ class AshareMonitorService implements MonitorService {
   final AudioAlertService _audioAlertService;
   final AlertRuleEngine _ruleEngine;
   final PlatformBridgeService _platformBridgeService;
+  final DiagnosticLogRepository _diagnosticLogRepository;
   final AshareMarketHours _marketHours;
   final DateTime Function() _now;
 
@@ -107,9 +113,19 @@ class AshareMonitorService implements MonitorService {
     if (!ready) {
       final reason = _audioAlertService.lastErrorMessage ?? '语音插件未完成初始化。';
       await _settingsRepository.markPrepared('语音播报预热失败：$reason');
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.warning,
+        category: 'speech',
+        message: '语音播报预热失败：$reason',
+      );
       return;
     }
     await _settingsRepository.markPrepared('已完成语音播报预热，可执行A股扫描。');
+    await _logDiagnostic(
+      level: DiagnosticLogLevel.info,
+      category: 'speech',
+      message: '语音播报预热完成。',
+    );
   }
 
   @override
@@ -125,6 +141,12 @@ class AshareMonitorService implements MonitorService {
           checkedAt: checkedAt, message: summary);
       await _platformBridgeService.updateForegroundMonitorSummary(
           summary: summary);
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.info,
+        category: 'refresh',
+        message: summary,
+        timestamp: checkedAt,
+      );
       return MonitorRunResult(
         quotes: const [],
         triggers: const [],
@@ -146,6 +168,12 @@ class AshareMonitorService implements MonitorService {
       await _platformBridgeService.updateForegroundMonitorSummary(
         summary: summary,
       );
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.warning,
+        category: 'refresh',
+        message: summary,
+        timestamp: checkedAt,
+      );
       return MonitorRunResult(
         quotes: const [],
         triggers: const [],
@@ -162,6 +190,12 @@ class AshareMonitorService implements MonitorService {
       );
       await _platformBridgeService.updateForegroundMonitorSummary(
         summary: summary,
+      );
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.info,
+        category: 'refresh',
+        message: summary,
+        timestamp: checkedAt,
       );
       return MonitorRunResult(
         quotes: _latestQuotes,
@@ -211,14 +245,37 @@ class AshareMonitorService implements MonitorService {
         var playedSound = false;
         if (soundEnabled) {
           playedSound = await _audioAlertService.speak(trigger.spokenText);
+          if (!playedSound) {
+            await _logDiagnostic(
+              level: DiagnosticLogLevel.warning,
+              category: 'speech',
+              message: '语音播报未成功：${trigger.quote.code} ${trigger.message}',
+              timestamp: checkedAt,
+            );
+          }
         }
-        await _platformBridgeService.showAlertNotification(
+        final notificationPublished =
+            await _platformBridgeService.showAlertNotification(
           title: _buildAlertNotificationTitle(trigger.quote),
           message: trigger.message,
           notificationId: _buildAlertNotificationId(trigger),
         );
+        if (!notificationPublished) {
+          await _logDiagnostic(
+            level: DiagnosticLogLevel.warning,
+            category: 'notification',
+            message: '本地通知发布失败：${trigger.quote.code} ${trigger.message}',
+            timestamp: checkedAt,
+          );
+        }
         await _historyRepository
             .add(trigger.toHistoryEntry(playedSound: playedSound));
+        await _logDiagnostic(
+          level: DiagnosticLogLevel.info,
+          category: 'alert',
+          message: '触发提醒：${trigger.message}',
+          timestamp: checkedAt,
+        );
       }
 
       final summary = triggers.isEmpty
@@ -228,6 +285,12 @@ class AshareMonitorService implements MonitorService {
           checkedAt: checkedAt, message: summary);
       await _platformBridgeService.updateForegroundMonitorSummary(
           summary: summary);
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.info,
+        category: 'refresh',
+        message: summary,
+        timestamp: checkedAt,
+      );
       return MonitorRunResult(
         quotes: quotes,
         triggers: triggers,
@@ -240,6 +303,12 @@ class AshareMonitorService implements MonitorService {
           checkedAt: checkedAt, message: summary);
       await _platformBridgeService.updateForegroundMonitorSummary(
           summary: summary);
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.error,
+        category: 'refresh',
+        message: summary,
+        timestamp: checkedAt,
+      );
       return MonitorRunResult(
         quotes: _latestQuotes,
         triggers: const [],
@@ -262,19 +331,40 @@ class AshareMonitorService implements MonitorService {
         checkedAt: _now(),
         message: '后台监控启动失败，已自动关闭后台守护，请检查通知/前台服务权限后重试。',
       );
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.error,
+        category: 'service',
+        message: '后台监控启动失败，已自动关闭后台守护。',
+      );
+      return;
     }
+    await _logDiagnostic(
+      level: DiagnosticLogLevel.info,
+      category: 'service',
+      message: '后台监控启动成功。',
+    );
   }
 
   @override
   Future<void> stop() async {
     _running = false;
     await _platformBridgeService.stopForegroundMonitorService();
+    await _logDiagnostic(
+      level: DiagnosticLogLevel.info,
+      category: 'service',
+      message: '后台监控守护已关闭。',
+    );
   }
 
   @override
   Future<void> reload() async {
     if (!_settingsRepository.getStatus().serviceEnabled) {
       _running = false;
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.info,
+        category: 'service',
+        message: '后台监控未开启，跳过服务恢复。',
+      );
       return;
     }
     final started =
@@ -286,12 +376,28 @@ class AshareMonitorService implements MonitorService {
         checkedAt: _now(),
         message: '后台监控恢复失败，已自动关闭后台守护，请重新启用。',
       );
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.error,
+        category: 'service',
+        message: '后台监控恢复失败，已自动关闭后台守护。',
+      );
+      return;
     }
+    await _logDiagnostic(
+      level: DiagnosticLogLevel.info,
+      category: 'service',
+      message: '后台监控恢复成功。',
+    );
   }
 
   @override
   Future<void> requestBackgroundRefresh() async {
     if (!_settingsRepository.getStatus().serviceEnabled) {
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.info,
+        category: 'service',
+        message: '后台监控未开启，跳过后台即时刷新。',
+      );
       return;
     }
     final started =
@@ -303,7 +409,18 @@ class AshareMonitorService implements MonitorService {
         checkedAt: _now(),
         message: '后台监控刷新失败，已自动关闭后台守护，请重新启用。',
       );
+      await _logDiagnostic(
+        level: DiagnosticLogLevel.error,
+        category: 'service',
+        message: '后台监控即时刷新失败，已自动关闭后台守护。',
+      );
+      return;
     }
+    await _logDiagnostic(
+      level: DiagnosticLogLevel.info,
+      category: 'service',
+      message: '已请求后台即时刷新。',
+    );
   }
 
   String _buildAlertNotificationTitle(StockQuoteSnapshot quote) {
@@ -318,5 +435,25 @@ class AshareMonitorService implements MonitorService {
     final seed =
         '${trigger.rule.id}:${trigger.quote.code}:${trigger.triggeredAt.millisecondsSinceEpoch}';
     return seed.hashCode & 0x7fffffff;
+  }
+
+  Future<void> _logDiagnostic({
+    required DiagnosticLogLevel level,
+    required String category,
+    required String message,
+    DateTime? timestamp,
+  }) async {
+    try {
+      await _diagnosticLogRepository.add(
+        DiagnosticLogEntry.create(
+          level: level,
+          category: category,
+          message: message,
+          timestamp: timestamp ?? _now(),
+        ),
+      );
+    } catch (_) {
+      // Diagnostics must never break monitoring.
+    }
   }
 }

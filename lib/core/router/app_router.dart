@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/repositories/local_alert_repository.dart';
+import '../../data/repositories/local_diagnostic_log_repository.dart';
 import '../../data/repositories/local_history_repository.dart';
 import '../../data/repositories/local_settings_repository.dart';
 import '../../data/repositories/local_watchlist_repository.dart';
@@ -59,12 +60,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   final _alertStore = JsonFileStore(fileName: 'alert_rules.json');
   final _historyStore = JsonFileStore(fileName: 'alert_history.json');
   final _settingsStore = JsonFileStore(fileName: 'monitor_settings.json');
+  final _diagnosticLogStore = JsonFileStore(fileName: 'diagnostic_log.json');
   late final _watchlistRepository =
       LocalWatchlistRepository(store: _watchlistStore);
   late final _alertRepository = LocalAlertRepository(store: _alertStore);
   late final _historyRepository = LocalHistoryRepository(store: _historyStore);
   late final _settingsRepository =
       LocalSettingsRepository(store: _settingsStore);
+  late final _diagnosticLogRepository =
+      LocalDiagnosticLogRepository(store: _diagnosticLogStore);
   late final Map<String, MarketDataProvider> _marketDataProviders = {
     AshareMarketDataService.providerIdValue: AshareMarketDataService(),
     SinaMarketDataProvider.providerIdValue: SinaMarketDataProvider(),
@@ -83,6 +87,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     audioAlertService: _audioService,
     ruleEngine: _ruleEngine,
     platformBridgeService: _platformBridgeService,
+    diagnosticLogRepository: _diagnosticLogRepository,
   );
   late final _dailyBriefingService = AshareDailyBriefingService(
     watchlistRepository: _watchlistRepository,
@@ -186,6 +191,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         audioService: _audioService,
         messageBuilder: _messageBuilder,
         platformBridgeService: _platformBridgeService,
+        diagnosticLogRepository: _diagnosticLogRepository,
         previewQuote: _monitorService.latestQuotes.isEmpty
             ? null
             : _monitorService.latestQuotes.first,
@@ -280,12 +286,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _alertStore.initialize(storagePath),
       _historyStore.initialize(storagePath),
       _settingsStore.initialize(storagePath),
+      _diagnosticLogStore.initialize(storagePath),
     ]);
 
     await _watchlistRepository.initialize();
     await _alertRepository.initialize();
     await _historyRepository.initialize();
     await _settingsRepository.initialize();
+    await _diagnosticLogRepository.initialize();
     await _dailyBriefingService.start();
     await restoreBackgroundMonitorOnLaunch(
       settingsRepository: _settingsRepository,
@@ -535,6 +543,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   Future<void> _handleResume() async {
     await _settingsRepository.initialize();
     await _historyRepository.initialize();
+    await _diagnosticLogRepository.initialize();
     await _dailyBriefingService.syncNow();
     _syncForegroundRefreshTimer();
     if (mounted) {

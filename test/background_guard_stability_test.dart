@@ -2,12 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_alert_app/core/router/app_router.dart';
 import 'package:stock_alert_app/data/models/alert_history_entry.dart';
 import 'package:stock_alert_app/data/models/alert_rule.dart';
+import 'package:stock_alert_app/data/models/diagnostic_log_entry.dart';
 import 'package:stock_alert_app/data/models/monitor_status.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/models/stock_quote_snapshot.dart';
 import 'package:stock_alert_app/data/models/watchlist_sort_order.dart';
 import 'package:stock_alert_app/data/models/webdav_config.dart';
 import 'package:stock_alert_app/data/repositories/alert_repository.dart';
+import 'package:stock_alert_app/data/repositories/diagnostic_log_repository.dart';
 import 'package:stock_alert_app/data/repositories/history_repository.dart';
 import 'package:stock_alert_app/data/repositories/settings_repository.dart';
 import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
@@ -47,6 +49,7 @@ void main() {
   test('monitor start failure disables guard and records a readable message',
       () async {
     final settingsRepository = _FakeSettingsRepository(serviceEnabled: true);
+    final diagnosticLogRepository = _FakeDiagnosticLogRepository();
     final service = AshareMonitorService(
       watchlistRepository: _FakeWatchlistRepository(),
       alertRepository: _FakeAlertRepository(),
@@ -56,6 +59,7 @@ void main() {
       audioAlertService: _FakeAudioAlertService(),
       ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
       platformBridgeService: _FakePlatformBridgeService(startResult: false),
+      diagnosticLogRepository: diagnosticLogRepository,
     );
 
     await service.start();
@@ -63,11 +67,17 @@ void main() {
     expect(service.isRunning, isFalse);
     expect(settingsRepository.getStatus().serviceEnabled, isFalse);
     expect(settingsRepository.getStatus().lastMessage, contains('后台监控启动失败'));
+    expect(
+        diagnosticLogRepository.entries.single.level, DiagnosticLogLevel.error);
+    expect(diagnosticLogRepository.entries.single.category, 'service');
+    expect(
+        diagnosticLogRepository.entries.single.message, contains('后台监控启动失败'));
   });
 
   test('monitor reload failure disables guard and records recovery failure',
       () async {
     final settingsRepository = _FakeSettingsRepository(serviceEnabled: true);
+    final diagnosticLogRepository = _FakeDiagnosticLogRepository();
     final service = AshareMonitorService(
       watchlistRepository: _FakeWatchlistRepository(),
       alertRepository: _FakeAlertRepository(),
@@ -77,6 +87,7 @@ void main() {
       audioAlertService: _FakeAudioAlertService(),
       ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
       platformBridgeService: _FakePlatformBridgeService(reloadResult: false),
+      diagnosticLogRepository: diagnosticLogRepository,
     );
 
     await service.reload();
@@ -84,6 +95,11 @@ void main() {
     expect(service.isRunning, isFalse);
     expect(settingsRepository.getStatus().serviceEnabled, isFalse);
     expect(settingsRepository.getStatus().lastMessage, contains('后台监控恢复失败'));
+    expect(
+        diagnosticLogRepository.entries.single.level, DiagnosticLogLevel.error);
+    expect(diagnosticLogRepository.entries.single.category, 'service');
+    expect(
+        diagnosticLogRepository.entries.single.message, contains('后台监控恢复失败'));
   });
 }
 
@@ -309,6 +325,26 @@ class _FakeHistoryRepository implements HistoryRepository {
 
   @override
   List<AlertHistoryEntry> getAll() => const [];
+
+  @override
+  Future<void> initialize() async {}
+}
+
+class _FakeDiagnosticLogRepository implements DiagnosticLogRepository {
+  final List<DiagnosticLogEntry> entries = [];
+
+  @override
+  Future<void> add(DiagnosticLogEntry entry) async {
+    entries.insert(0, entry);
+  }
+
+  @override
+  Future<void> clear() async {
+    entries.clear();
+  }
+
+  @override
+  List<DiagnosticLogEntry> getAll() => List.unmodifiable(entries);
 
   @override
   Future<void> initialize() async {}
