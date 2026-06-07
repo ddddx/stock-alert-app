@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../data/repositories/local_alert_repository.dart';
 import '../../data/repositories/local_diagnostic_log_repository.dart';
 import '../../data/repositories/local_history_repository.dart';
+import '../../data/repositories/local_market_data_health_repository.dart';
 import '../../data/repositories/local_settings_repository.dart';
 import '../../data/repositories/local_trading_calendar_repository.dart';
 import '../../data/repositories/local_watchlist_repository.dart';
@@ -63,6 +64,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   final _historyStore = JsonFileStore(fileName: 'alert_history.json');
   final _settingsStore = JsonFileStore(fileName: 'monitor_settings.json');
   final _diagnosticLogStore = JsonFileStore(fileName: 'diagnostic_log.json');
+  final _marketDataHealthStore =
+      JsonFileStore(fileName: 'market_data_health.json');
   final _tradingCalendarStore =
       JsonFileStore(fileName: 'trading_calendar.json');
   late final _watchlistRepository =
@@ -73,6 +76,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       LocalSettingsRepository(store: _settingsStore);
   late final _diagnosticLogRepository =
       LocalDiagnosticLogRepository(store: _diagnosticLogStore);
+  late final _marketDataHealthRepository =
+      LocalMarketDataHealthRepository(store: _marketDataHealthStore);
   late final _tradingCalendarRepository =
       LocalTradingCalendarRepository(store: _tradingCalendarStore);
   late final Map<String, MarketDataProvider> _marketDataProviders = {
@@ -94,6 +99,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     ruleEngine: _ruleEngine,
     platformBridgeService: _platformBridgeService,
     diagnosticLogRepository: _diagnosticLogRepository,
+    marketDataHealthRepository: _marketDataHealthRepository,
     marketHours: _marketHours,
   );
   late final _dailyBriefingService = AshareDailyBriefingService(
@@ -227,6 +233,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         messageBuilder: _messageBuilder,
         platformBridgeService: _platformBridgeService,
         diagnosticLogRepository: _diagnosticLogRepository,
+        marketDataHealthRepository: _marketDataHealthRepository,
         previewQuote: _monitorService.latestQuotes.isEmpty
             ? null
             : _monitorService.latestQuotes.first,
@@ -311,6 +318,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       _historyStore.initialize(storagePath),
       _settingsStore.initialize(storagePath),
       _diagnosticLogStore.initialize(storagePath),
+      _marketDataHealthStore.initialize(storagePath),
       _tradingCalendarStore.initialize(storagePath),
     ]);
 
@@ -319,6 +327,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     await _historyRepository.initialize();
     await _settingsRepository.initialize();
     await _diagnosticLogRepository.initialize();
+    await _marketDataHealthRepository.initialize();
     await _tradingCalendarRepository.initialize();
     await _dailyBriefingService.start();
     await restoreBackgroundMonitorOnLaunch(
@@ -570,6 +579,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     await _settingsRepository.initialize();
     await _historyRepository.initialize();
     await _diagnosticLogRepository.initialize();
+    await _marketDataHealthRepository.initialize();
     await _tradingCalendarRepository.initialize();
     await _dailyBriefingService.syncNow();
     _syncForegroundRefreshTimer();

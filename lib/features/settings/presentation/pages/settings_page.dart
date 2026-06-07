@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/utils/formatters.dart';
 import '../../../../data/models/diagnostic_log_entry.dart';
+import '../../../../data/models/market_data_health_snapshot.dart';
 import '../../../../data/models/stock_quote_snapshot.dart';
 import '../../../../data/models/webdav_config.dart';
 import '../../../../data/repositories/diagnostic_log_repository.dart';
+import '../../../../data/repositories/market_data_health_repository.dart';
 import '../../../../data/repositories/settings_repository.dart';
 import '../../../../services/alerts/alert_message_builder.dart';
 import '../../../../services/audio/audio_alert_service.dart';
@@ -36,6 +38,7 @@ class SettingsPage extends StatefulWidget {
     this.availableMarketDataProviders = const [],
     this.onMarketDataProviderChanged = _noopMarketDataProviderChanged,
     this.diagnosticLogRepository = const NoopDiagnosticLogRepository(),
+    this.marketDataHealthRepository = const NoopMarketDataHealthRepository(),
   });
 
   final SettingsRepository repository;
@@ -55,6 +58,7 @@ class SettingsPage extends StatefulWidget {
   final List<MarketDataProvider> availableMarketDataProviders;
   final Future<void> Function(String providerId) onMarketDataProviderChanged;
   final DiagnosticLogRepository diagnosticLogRepository;
+  final MarketDataHealthRepository marketDataHealthRepository;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -754,43 +758,75 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildMarketDataSection(dynamic status) {
     final providers = widget.availableMarketDataProviders;
     final selectedProviderId = status.marketDataProviderId;
+    final healthSnapshot = widget.marketDataHealthRepository.getSnapshot();
 
     return SectionCard(
       title: '数据源',
       subtitle: '支持在前台和后台统一切换行情来源，便于交叉核对报价。',
-      child: providers.isEmpty
-          ? const Text('当前暂无可切换的数据源。')
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final provider in providers) ...[
-                  _SettingsSubpanel(
-                    icon: provider.providerId == selectedProviderId
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    title: provider.providerName,
-                    body: _providerDescription(provider),
-                    trailing: provider.providerId == selectedProviderId
-                        ? const Chip(label: Text('当前'))
-                        : FilledButton.tonal(
-                            onPressed: () async {
-                              final wasServiceEnabled = status.serviceEnabled;
-                              await widget.onMarketDataProviderChanged(
-                                provider.providerId,
-                              );
-                              _showFeedback(
-                                wasServiceEnabled
-                                    ? '已切换为 ${provider.providerName}，后台监控和前台刷新都会使用新数据源。'
-                                    : '已切换为 ${provider.providerName}，下次刷新会使用新数据源。',
-                              );
-                            },
-                            child: const Text('切换'),
-                          ),
-                  ),
-                  if (provider != providers.last) const SizedBox(height: 8),
-                ],
-              ],
-            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildMarketDataHealthPanel(
+            healthSnapshot: healthSnapshot,
+            selectedProviderId: selectedProviderId,
+          ),
+          const SizedBox(height: 12),
+          if (providers.isEmpty)
+            const Text('当前暂无可切换的数据源。')
+          else
+            for (final provider in providers) ...[
+              _SettingsSubpanel(
+                icon: provider.providerId == selectedProviderId
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                title: provider.providerName,
+                body: _providerDescription(provider),
+                trailing: provider.providerId == selectedProviderId
+                    ? const Chip(label: Text('当前'))
+                    : FilledButton.tonal(
+                        onPressed: () async {
+                          final wasServiceEnabled = status.serviceEnabled;
+                          await widget.onMarketDataProviderChanged(
+                            provider.providerId,
+                          );
+                          _showFeedback(
+                            wasServiceEnabled
+                                ? '已切换为 ${provider.providerName}，后台监控和前台刷新都会使用新数据源。'
+                                : '已切换为 ${provider.providerName}，下次刷新会使用新数据源。',
+                          );
+                        },
+                        child: const Text('切换'),
+                      ),
+              ),
+              if (provider != providers.last) const SizedBox(height: 8),
+            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMarketDataHealthPanel({
+    required MarketDataHealthSnapshot? healthSnapshot,
+    required String selectedProviderId,
+  }) {
+    if (healthSnapshot == null) {
+      return const _SettingsSubpanel(
+        icon: Icons.query_stats_outlined,
+        title: '数据源健康状态',
+        body: '暂无数据源健康记录，完成一次刷新后生成。',
+      );
+    }
+
+    final providerChanged = healthSnapshot.providerId != selectedProviderId;
+    final healthy = !healthSnapshot.hasFailures &&
+        !providerChanged &&
+        !healthSnapshot.fallbackUsed;
+    return _HealthCheckRow(
+      icon: healthy ? Icons.verified_outlined : Icons.report_problem_outlined,
+      title:
+          '${healthSnapshot.providerName} · ${_healthStatusLabel(healthSnapshot, providerChanged)}',
+      detail: _buildMarketDataHealthDetail(healthSnapshot, providerChanged),
+      healthy: healthy,
     );
   }
 
@@ -1000,6 +1036,51 @@ class _SettingsPageState extends State<SettingsPage> {
       default:
         return '优先走 Eastmoney 批量行情，必要时回退到单只接口与 Tencent 兜底。';
     }
+  }
+
+  String _healthStatusLabel(
+    MarketDataHealthSnapshot healthSnapshot,
+    bool providerChanged,
+  ) {
+    if (providerChanged) {
+      return '等待当前数据源刷新';
+    }
+    if (healthSnapshot.hasPartialSuccess) {
+      return '部分成功';
+    }
+    if (healthSnapshot.hasFailures) {
+      return '异常';
+    }
+    if (healthSnapshot.fallbackUsed) {
+      return '已回退';
+    }
+    return '正常';
+  }
+
+  String _buildMarketDataHealthDetail(
+    MarketDataHealthSnapshot healthSnapshot,
+    bool providerChanged,
+  ) {
+    final parts = [
+      '最近检查 ${Formatters.compactDateTime(healthSnapshot.checkedAt)}',
+      '请求 ${healthSnapshot.requestedCount} 只，成功 ${healthSnapshot.successCount} 只，失败 ${healthSnapshot.failedCount} 只',
+      if (healthSnapshot.latestQuoteAt != null)
+        '最近报价 ${Formatters.compactDateTime(healthSnapshot.latestQuoteAt)}',
+      if (healthSnapshot.fallbackUsed) '本次使用了备用取价路径',
+      if (providerChanged) '当前已切换数据源，等待下一次刷新更新状态',
+      if (healthSnapshot.lastError.isNotEmpty)
+        '最近错误：${_shortError(healthSnapshot.lastError)}',
+      '来源：${healthSnapshot.updatedBy == 'android' ? 'Android 后台' : '前台刷新'}',
+    ];
+    return parts.join('\n');
+  }
+
+  String _shortError(String error) {
+    final compact = error.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length <= 90) {
+      return compact;
+    }
+    return '${compact.substring(0, 90)}...';
   }
 }
 

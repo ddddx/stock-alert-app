@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_alert_app/data/models/alert_history_entry.dart';
 import 'package:stock_alert_app/data/models/alert_rule.dart';
 import 'package:stock_alert_app/data/models/diagnostic_log_entry.dart';
+import 'package:stock_alert_app/data/models/market_data_health_snapshot.dart';
 import 'package:stock_alert_app/data/models/monitor_status.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/models/stock_quote_snapshot.dart';
@@ -12,6 +13,7 @@ import 'package:stock_alert_app/data/models/webdav_config.dart';
 import 'package:stock_alert_app/data/repositories/alert_repository.dart';
 import 'package:stock_alert_app/data/repositories/diagnostic_log_repository.dart';
 import 'package:stock_alert_app/data/repositories/history_repository.dart';
+import 'package:stock_alert_app/data/repositories/market_data_health_repository.dart';
 import 'package:stock_alert_app/data/repositories/settings_repository.dart';
 import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
 import 'package:stock_alert_app/services/alerts/alert_message_builder.dart';
@@ -19,6 +21,7 @@ import 'package:stock_alert_app/services/alerts/alert_rule_engine.dart';
 import 'package:stock_alert_app/services/audio/audio_alert_service.dart';
 import 'package:stock_alert_app/services/background/monitor_service.dart';
 import 'package:stock_alert_app/services/market/ashare_market_data_service.dart';
+import 'package:stock_alert_app/services/market/market_data_provider.dart';
 import 'package:stock_alert_app/services/platform/platform_bridge_service.dart';
 
 void main() {
@@ -71,8 +74,93 @@ void main() {
     expect(diagnosticLogRepository.entries.single.message, result.summary);
   });
 
+  test('monitor refresh writes market data health after successful fetch',
+      () async {
+    final marketDataService = _RecordingMarketDataService();
+    final healthRepository = _FakeMarketDataHealthRepository();
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(),
+      alertRepository: _FakeAlertRepository(),
+      historyRepository: _FakeHistoryRepository(),
+      settingsRepository: _FakeSettingsRepository(),
+      marketDataService: marketDataService,
+      audioAlertService: _FakeAudioAlertService(),
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: _FakePlatformBridgeService(),
+      marketDataHealthRepository: healthRepository,
+      now: () => DateTime(2026, 3, 23, 10, 0),
+    );
+
+    await service.refreshWatchlist();
+
+    final snapshot = healthRepository.snapshot;
+    expect(snapshot, isNotNull);
+    expect(snapshot!.providerId, 'ashare');
+    expect(snapshot.providerName, '聚合 A 股');
+    expect(snapshot.checkedAt, DateTime(2026, 3, 23, 10, 0));
+    expect(snapshot.requestedCount, 1);
+    expect(snapshot.successCount, 1);
+    expect(snapshot.failedCount, 0);
+    expect(snapshot.fallbackUsed, isFalse);
+    expect(snapshot.latestQuoteAt, DateTime(2026, 3, 23, 10, 0));
+    expect(snapshot.lastError, isEmpty);
+    expect(snapshot.updatedBy, 'flutter');
+  });
+
+  test('monitor refresh records partial data-source failures without failing',
+      () async {
+    final healthRepository = _FakeMarketDataHealthRepository();
+    final marketDataService = _SequenceMarketDataService([
+      [
+        StockQuoteSnapshot(
+          code: '600519',
+          name: '贵州茅台',
+          market: 'SH',
+          lastPrice: 1500,
+          previousClose: 1490,
+          changeAmount: 10,
+          changePercent: 0.67,
+          openPrice: 1492,
+          highPrice: 1500,
+          lowPrice: 1490,
+          volume: 1000,
+          timestamp: DateTime(2026, 3, 23, 10, 0),
+        ),
+      ],
+    ]);
+    final service = AshareMonitorService(
+      watchlistRepository: const _FakeWatchlistRepository(
+        items: [
+          StockIdentity(code: '600519', name: '贵州茅台', market: 'SH'),
+          StockIdentity(code: '000001', name: '平安银行', market: 'SZ'),
+        ],
+      ),
+      alertRepository: _FakeAlertRepository(),
+      historyRepository: _FakeHistoryRepository(),
+      settingsRepository: _FakeSettingsRepository(),
+      marketDataService: marketDataService,
+      audioAlertService: _FakeAudioAlertService(),
+      ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
+      platformBridgeService: _FakePlatformBridgeService(),
+      marketDataHealthRepository: healthRepository,
+      now: () => DateTime(2026, 3, 23, 10, 0),
+    );
+
+    final result = await service.refreshWatchlist();
+
+    expect(result.hasError, isFalse);
+    expect(result.summary, contains('另有 1 只刷新失败'));
+    final snapshot = healthRepository.snapshot;
+    expect(snapshot, isNotNull);
+    expect(snapshot!.requestedCount, 2);
+    expect(snapshot.successCount, 1);
+    expect(snapshot.failedCount, 1);
+    expect(snapshot.lastError, contains('partial fake refresh failure'));
+  });
+
   test('monitor refresh failure records diagnostic log', () async {
     final diagnosticLogRepository = _FakeDiagnosticLogRepository();
+    final healthRepository = _FakeMarketDataHealthRepository();
     final service = AshareMonitorService(
       watchlistRepository: const _FakeWatchlistRepository(),
       alertRepository: _FakeAlertRepository(),
@@ -83,6 +171,7 @@ void main() {
       ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
       platformBridgeService: _FakePlatformBridgeService(),
       diagnosticLogRepository: diagnosticLogRepository,
+      marketDataHealthRepository: healthRepository,
       now: () => DateTime(2026, 3, 23, 10, 0),
     );
 
@@ -94,6 +183,12 @@ void main() {
         diagnosticLogRepository.entries.single.level, DiagnosticLogLevel.error);
     expect(diagnosticLogRepository.entries.single.category, 'refresh');
     expect(diagnosticLogRepository.entries.single.message, result.summary);
+    final snapshot = healthRepository.snapshot;
+    expect(snapshot, isNotNull);
+    expect(snapshot!.requestedCount, 1);
+    expect(snapshot.successCount, 0);
+    expect(snapshot.failedCount, 1);
+    expect(snapshot.lastError, contains('network down'));
   });
 
   test('monitor refresh filters out stocks with monitoring disabled', () async {
@@ -461,6 +556,7 @@ void main() {
         throw const SocketException('Connection reset by peer');
       },
     );
+    final healthRepository = _FakeMarketDataHealthRepository();
     final service = AshareMonitorService(
       watchlistRepository: const _FakeWatchlistRepository(
         items: [
@@ -475,6 +571,7 @@ void main() {
       audioAlertService: _FakeAudioAlertService(),
       ruleEngine: AlertRuleEngine(messageBuilder: AlertMessageBuilder()),
       platformBridgeService: _FakePlatformBridgeService(),
+      marketDataHealthRepository: healthRepository,
       now: () => DateTime(2026, 3, 23, 10, 0),
     );
 
@@ -488,6 +585,8 @@ void main() {
     expect(service.latestQuoteFor('600519'), isNotNull);
     expect(service.latestQuoteFor('000001'), isNull);
     expect(settingsRepository.getStatus().lastMessage, result.summary);
+    expect(healthRepository.snapshot?.failedCount, 1);
+    expect(healthRepository.snapshot?.fallbackUsed, isFalse);
   });
 
   test('progressive callbacks exclude stale quotes from a previous refresh',
@@ -609,6 +708,18 @@ class _RecordingMarketDataService extends AshareMarketDataService {
     for (final quote in quotes) {
       onQuoteReceived?.call(quote);
     }
+    markFetchStatus(
+      MarketDataFetchStatus(
+        requestedCount: watchlist.length,
+        successCount: quotes.length,
+        failedCount: (watchlist.length - quotes.length)
+            .clamp(0, watchlist.length)
+            .toInt(),
+        lastError: quotes.length == watchlist.length
+            ? ''
+            : 'partial fake refresh failure',
+      ),
+    );
     return quotes;
   }
 
@@ -629,6 +740,14 @@ class _ThrowingMarketDataService extends AshareMarketDataService {
     void Function(StockQuoteSnapshot quote)? onQuoteReceived,
     bool preferSingleQuoteRetrieval = false,
   }) async {
+    markFetchStatus(
+      MarketDataFetchStatus(
+        requestedCount: watchlist.length,
+        successCount: 0,
+        failedCount: watchlist.length,
+        lastError: 'SocketException: network down',
+      ),
+    );
     throw const SocketException('network down');
   }
 }
@@ -652,6 +771,18 @@ class _SequenceMarketDataService extends AshareMarketDataService {
     for (final quote in quotes) {
       onQuoteReceived?.call(quote);
     }
+    markFetchStatus(
+      MarketDataFetchStatus(
+        requestedCount: watchlist.length,
+        successCount: quotes.length,
+        failedCount: (watchlist.length - quotes.length)
+            .clamp(0, watchlist.length)
+            .toInt(),
+        lastError: quotes.length == watchlist.length
+            ? ''
+            : 'partial fake refresh failure',
+      ),
+    );
     return quotes;
   }
 
@@ -913,4 +1044,24 @@ class _FakeDiagnosticLogRepository implements DiagnosticLogRepository {
 
   @override
   Future<void> initialize() async {}
+}
+
+class _FakeMarketDataHealthRepository implements MarketDataHealthRepository {
+  MarketDataHealthSnapshot? snapshot;
+
+  @override
+  Future<void> clear() async {
+    snapshot = null;
+  }
+
+  @override
+  MarketDataHealthSnapshot? getSnapshot() => snapshot;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> replace(MarketDataHealthSnapshot snapshot) async {
+    this.snapshot = snapshot;
+  }
 }

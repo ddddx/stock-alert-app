@@ -210,6 +210,7 @@ class AshareMarketDataService extends MarketDataProvider {
   Future<List<StockQuoteSnapshot>> fetchQuotes(List<StockIdentity> stocks,
       {bool preferSingleQuoteRetrieval = false}) async {
     if (stocks.isEmpty) {
+      markFetchStatus(const MarketDataFetchStatus());
       return const [];
     }
 
@@ -219,6 +220,8 @@ class AshareMarketDataService extends MarketDataProvider {
 
     final quotesByCode = <String, StockQuoteSnapshot>{};
     var fallbackStocks = List<StockIdentity>.from(stocks);
+    var fallbackUsed = false;
+    var lastError = '';
 
     try {
       final batchResult = await _fetchBatchQuotes(stocks).timeout(
@@ -228,9 +231,12 @@ class AshareMarketDataService extends MarketDataProvider {
       fallbackStocks = batchResult.fallbackStocks;
     } catch (_) {
       // Fall back to the legacy per-stock path when the batch payload changes.
+      fallbackUsed = true;
+      lastError = 'Eastmoney batch quote failed';
     }
 
     if (fallbackStocks.isNotEmpty) {
+      fallbackUsed = true;
       _SingleQuoteOutcome? lastSingleFailure;
       final singleOutcomes = await Future.wait(
         fallbackStocks.map(_fetchSingleQuoteOutcome),
@@ -242,9 +248,19 @@ class AshareMarketDataService extends MarketDataProvider {
           continue;
         }
         lastSingleFailure = outcome;
+        lastError = outcome.error.toString();
       }
 
       if (quotesByCode.isEmpty && lastSingleFailure != null) {
+        markFetchStatus(
+          MarketDataFetchStatus(
+            requestedCount: stocks.length,
+            successCount: 0,
+            failedCount: stocks.length,
+            fallbackUsed: fallbackUsed,
+            lastError: lastSingleFailure.error.toString(),
+          ),
+        );
         Error.throwWithStackTrace(
           lastSingleFailure.error!,
           lastSingleFailure.stackTrace!,
@@ -252,10 +268,20 @@ class AshareMarketDataService extends MarketDataProvider {
       }
     }
 
-    return stocks
+    final quotes = stocks
         .map((stock) => quotesByCode[stock.code])
         .whereType<StockQuoteSnapshot>()
         .toList(growable: false);
+    markFetchStatus(
+      MarketDataFetchStatus(
+        requestedCount: stocks.length,
+        successCount: quotes.length,
+        failedCount: stocks.length - quotes.length,
+        fallbackUsed: fallbackUsed,
+        lastError: lastError,
+      ),
+    );
+    return quotes;
   }
 
   @override
@@ -265,6 +291,7 @@ class AshareMarketDataService extends MarketDataProvider {
     bool preferSingleQuoteRetrieval = false,
   }) async {
     if (stocks.isEmpty) {
+      markFetchStatus(const MarketDataFetchStatus());
       return const [];
     }
 
@@ -312,16 +339,34 @@ class AshareMarketDataService extends MarketDataProvider {
 
     if (quotesByCode.isEmpty && lastSingleFailure != null) {
       final failure = lastSingleFailure;
+      markFetchStatus(
+        MarketDataFetchStatus(
+          requestedCount: stocks.length,
+          successCount: 0,
+          failedCount: stocks.length,
+          lastError: failure.error.toString(),
+        ),
+      );
       Error.throwWithStackTrace(
         failure.error!,
         failure.stackTrace!,
       );
     }
 
-    return stocks
+    final quotes = stocks
         .map((stock) => quotesByCode[stock.code])
         .whereType<StockQuoteSnapshot>()
         .toList(growable: false);
+    markFetchStatus(
+      MarketDataFetchStatus(
+        requestedCount: stocks.length,
+        successCount: quotes.length,
+        failedCount: stocks.length - quotes.length,
+        lastError:
+            failedOutcomes.isEmpty ? '' : failedOutcomes.last.error.toString(),
+      ),
+    );
+    return quotes;
   }
 
   Future<List<StockQuoteSnapshot>> _fetchQuotesIndividually(
@@ -342,16 +387,34 @@ class AshareMarketDataService extends MarketDataProvider {
     }
 
     if (quotesByCode.isEmpty && lastSingleFailure != null) {
+      markFetchStatus(
+        MarketDataFetchStatus(
+          requestedCount: stocks.length,
+          successCount: 0,
+          failedCount: stocks.length,
+          lastError: lastSingleFailure.error.toString(),
+        ),
+      );
       Error.throwWithStackTrace(
         lastSingleFailure.error!,
         lastSingleFailure.stackTrace!,
       );
     }
 
-    return stocks
+    final quotes = stocks
         .map((stock) => quotesByCode[stock.code])
         .whereType<StockQuoteSnapshot>()
         .toList(growable: false);
+    markFetchStatus(
+      MarketDataFetchStatus(
+        requestedCount: stocks.length,
+        successCount: quotes.length,
+        failedCount: stocks.length - quotes.length,
+        lastError:
+            lastSingleFailure == null ? '' : lastSingleFailure.error.toString(),
+      ),
+    );
+    return quotes;
   }
 
   Future<StockQuoteSnapshot> _fetchSingleQuote(StockIdentity stock) async {

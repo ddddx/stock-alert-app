@@ -35,21 +35,30 @@ class RobustNativeMarketDataSource(
 
         val quotesByCode = linkedMapOf<String, NativeQuote>()
         var fallbackStocks = stocks
+        var fallbackUsed = false
+        var lastError = ""
 
         try {
             val batchResult = fetchBatchQuotes(stocks)
             quotesByCode.putAll(batchResult.quotesByCode)
             fallbackStocks = batchResult.fallbackStocks
-        } catch (_: Exception) {
+        } catch (error: Exception) {
             // Fall back to per-symbol retrieval when batch data is unavailable.
+            fallbackUsed = true
+            lastError = error.message ?: error.javaClass.simpleName
         }
 
         if (fallbackStocks.isEmpty()) {
             return NativeQuoteFetchResult(
                 quotes = stocks.mapNotNull { stock -> quotesByCode[stock.code] },
                 failedCount = 0,
+                requestedCount = stocks.size,
+                successCount = quotesByCode.size,
+                fallbackUsed = fallbackUsed,
+                lastError = lastError,
             )
         }
+        fallbackUsed = true
 
         val executor = java.util.concurrent.Executors.newFixedThreadPool(minOf(fallbackStocks.size, maxConcurrentQuoteFetches))
         val futures = fallbackStocks.map { stock ->
@@ -68,16 +77,25 @@ class RobustNativeMarketDataSource(
                 } else {
                     failedCount += 1
                     lastFailure = outcome
+                    lastError = outcome.error?.message ?: outcome.error?.javaClass?.simpleName ?: "行情刷新失败"
                 }
             }
 
             if (quotesByCode.isEmpty() && lastFailure != null) {
-                throw lastFailure.error ?: IllegalStateException("行情刷新失败")
+                throw NativeQuoteFetchException(
+                    lastError.ifBlank { "行情刷新失败" },
+                    lastFailure.error,
+                    fallbackUsed = fallbackUsed,
+                )
             }
 
             NativeQuoteFetchResult(
                 quotes = stocks.mapNotNull { stock -> quotesByCode[stock.code] },
                 failedCount = failedCount,
+                requestedCount = stocks.size,
+                successCount = quotesByCode.size,
+                fallbackUsed = fallbackUsed,
+                lastError = lastError,
             )
         } catch (error: InterruptedException) {
             futures.forEach { it.cancel(true) }

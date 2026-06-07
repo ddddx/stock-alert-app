@@ -5,11 +5,34 @@ import '../../data/models/stock_search_result.dart';
 
 const defaultMarketDataProviderId = 'ashare';
 
+class MarketDataFetchStatus {
+  const MarketDataFetchStatus({
+    this.requestedCount = 0,
+    this.successCount = 0,
+    this.failedCount = 0,
+    this.fallbackUsed = false,
+    this.lastError = '',
+  });
+
+  final int requestedCount;
+  final int successCount;
+  final int failedCount;
+  final bool fallbackUsed;
+  final String lastError;
+}
+
 abstract class MarketDataProvider {
   static const progressiveQuoteConcurrency = 4;
 
+  MarketDataFetchStatus _lastFetchStatus = const MarketDataFetchStatus();
+
   String get providerId;
   String get providerName;
+  MarketDataFetchStatus get lastFetchStatus => _lastFetchStatus;
+
+  void markFetchStatus(MarketDataFetchStatus status) {
+    _lastFetchStatus = status;
+  }
 
   Future<List<StockSearchResult>> searchStocks(String keyword);
 
@@ -28,6 +51,7 @@ abstract class MarketDataProvider {
     bool preferSingleQuoteRetrieval = false,
   }) async {
     if (stocks.isEmpty) {
+      markFetchStatus(const MarketDataFetchStatus());
       return const [];
     }
 
@@ -63,12 +87,29 @@ abstract class MarketDataProvider {
     );
 
     if (quotesByCode.isEmpty && failedErrors.isNotEmpty) {
+      markFetchStatus(
+        MarketDataFetchStatus(
+          requestedCount: stocks.length,
+          successCount: 0,
+          failedCount: stocks.length,
+          lastError: failedErrors.last.toString(),
+        ),
+      );
       throw failedErrors.last;
     }
 
-    return stocks
+    final quotes = stocks
         .map((stock) => quotesByCode[stock.code])
         .whereType<StockQuoteSnapshot>()
         .toList(growable: false);
+    markFetchStatus(
+      MarketDataFetchStatus(
+        requestedCount: stocks.length,
+        successCount: quotes.length,
+        failedCount: stocks.length - quotes.length,
+        lastError: failedErrors.isEmpty ? '' : failedErrors.last.toString(),
+      ),
+    );
+    return quotes;
   }
 }

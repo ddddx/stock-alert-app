@@ -301,6 +301,7 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 } else {
                     result.summary
                 }
+                saveMarketDataHealth(result)
                 MonitorStorage.updateStatus(this, result.checkedAtMillis, summary)
                 logDiagnostic(
                     if (result.hasError) "error" else "info",
@@ -319,6 +320,13 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
                 val settings = loadSettings()
                 val summary =
                     "后台监控刷新失败：${error.message ?: error.javaClass.simpleName}"
+                saveMarketDataHealthFailure(
+                    checkedAtMillis = checkedAtMillis,
+                    settings = settings,
+                    requestedCount = MonitorStorage.loadWatchlist(this)
+                        .count { it.monitoringEnabled },
+                    errorMessage = error.message ?: error.javaClass.simpleName,
+                )
                 MonitorStorage.updateStatus(this, checkedAtMillis, summary)
                 logDiagnostic("error", "refresh", summary, checkedAtMillis)
                 handler.post {
@@ -626,6 +634,55 @@ class MonitorForegroundService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun loadSettings(): NativeMonitorSettings = MonitorStorage.loadSettings(this)
+
+    private fun saveMarketDataHealth(result: NativeRefreshResult) {
+        runCatching {
+            MonitorStorage.saveMarketDataHealth(
+                context = this,
+                snapshot = NativeMarketDataHealthSnapshot(
+                    providerId = result.providerId,
+                    providerName = result.providerName,
+                    checkedAtMillis = result.checkedAtMillis,
+                    requestedCount = result.requestedCount,
+                    successCount = result.successCount,
+                    failedCount = result.failedCount,
+                    fallbackUsed = result.fallbackUsed,
+                    latestQuoteAtMillis = result.latestQuoteAtMillis,
+                    lastError = result.lastError,
+                ),
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Unable to save market data health snapshot", error)
+        }
+    }
+
+    private fun saveMarketDataHealthFailure(
+        checkedAtMillis: Long,
+        settings: NativeMonitorSettings,
+        requestedCount: Int,
+        errorMessage: String,
+    ) {
+        val providerId = if (settings.marketDataProviderId.trim() == "sina") "sina" else "ashare"
+        val providerName = if (providerId == "sina") "新浪财经" else "聚合 A 股"
+        runCatching {
+            MonitorStorage.saveMarketDataHealth(
+                context = this,
+                snapshot = NativeMarketDataHealthSnapshot(
+                    providerId = providerId,
+                    providerName = providerName,
+                    checkedAtMillis = checkedAtMillis,
+                    requestedCount = requestedCount,
+                    successCount = 0,
+                    failedCount = requestedCount,
+                    fallbackUsed = false,
+                    latestQuoteAtMillis = null,
+                    lastError = errorMessage,
+                ),
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Unable to save failed market data health snapshot", error)
+        }
+    }
 
     private fun logDiagnostic(
         level: String,

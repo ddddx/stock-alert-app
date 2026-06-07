@@ -50,6 +50,8 @@ class SinaNativeMarketDataSource(
         val quotesByCode = linkedMapOf<String, NativeQuote>()
         var failedCount = 0
         var lastError: Exception? = null
+        var lastErrorMessage = ""
+        var fallbackUsed = false
 
         try {
             val joinedCodes = stocksByPrefixedCode.keys.joinToString(",")
@@ -58,25 +60,39 @@ class SinaNativeMarketDataSource(
             quotesByCode.putAll(parseBatchQuotes(payload, stocksByPrefixedCode))
         } catch (error: Exception) {
             lastError = error
+            lastErrorMessage = error.message ?: error.javaClass.simpleName
+            fallbackUsed = true
         }
 
         val missingStocks = stocks.filter { stock -> !quotesByCode.containsKey(stock.code) }
+        if (missingStocks.isNotEmpty()) {
+            fallbackUsed = true
+        }
         missingStocks.forEach { stock ->
             try {
                 quotesByCode[stock.code] = fetchQuote(stock)
             } catch (error: Exception) {
                 failedCount += 1
                 lastError = error
+                lastErrorMessage = error.message ?: error.javaClass.simpleName
             }
         }
 
         if (quotesByCode.isEmpty() && lastError != null) {
-            throw lastError
+            throw NativeQuoteFetchException(
+                lastErrorMessage.ifBlank { "Sina quote fetch failed" },
+                lastError,
+                fallbackUsed = fallbackUsed,
+            )
         }
 
         return NativeQuoteFetchResult(
             quotes = stocks.mapNotNull { stock -> quotesByCode[stock.code] },
             failedCount = failedCount,
+            requestedCount = stocks.size,
+            successCount = quotesByCode.size,
+            fallbackUsed = fallbackUsed,
+            lastError = lastErrorMessage,
         )
     }
 

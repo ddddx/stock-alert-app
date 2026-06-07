@@ -143,6 +143,19 @@ data class NativeAlertHistoryEntry(
     val playedSound: Boolean,
 )
 
+data class NativeMarketDataHealthSnapshot(
+    val providerId: String,
+    val providerName: String,
+    val checkedAtMillis: Long,
+    val requestedCount: Int,
+    val successCount: Int,
+    val failedCount: Int,
+    val fallbackUsed: Boolean,
+    val latestQuoteAtMillis: Long?,
+    val lastError: String = "",
+    val updatedBy: String = "android",
+)
+
 object NativeSecurityPriceScale {
     private const val STOCK_DIVISOR = 100.0
     private const val MILLI_PRICE_DIVISOR = 1000.0
@@ -254,6 +267,7 @@ object MonitorStorage {
     private const val HISTORY_FILE = "alert_history.json"
     private const val RUNTIME_FILE = "monitor_runtime_state.json"
     private const val DIAGNOSTIC_LOG_FILE = "diagnostic_log.json"
+    private const val MARKET_DATA_HEALTH_FILE = "market_data_health.json"
     private const val TRADING_CALENDAR_FILE = "trading_calendar.json"
     private const val MAX_DIAGNOSTIC_LOG_ENTRIES = 120
     private const val DEFAULT_MESSAGE = "等待首次刷新 A 股行情。"
@@ -522,6 +536,25 @@ object MonitorStorage {
             merged.put(existing.opt(index))
         }
         writeJsonArray(storageFile(context, HISTORY_FILE), merged)
+    }
+
+    fun saveMarketDataHealth(context: Context, snapshot: NativeMarketDataHealthSnapshot) {
+        val json = JSONObject()
+            .put("schemaVersion", 1)
+            .put("providerId", snapshot.providerId.ifBlank { "ashare" })
+            .put("providerName", snapshot.providerName.ifBlank { "聚合 A 股" })
+            .put("checkedAt", formatIso8601(snapshot.checkedAtMillis))
+            .put("requestedCount", snapshot.requestedCount.coerceAtLeast(0))
+            .put("successCount", snapshot.successCount.coerceAtLeast(0))
+            .put("failedCount", snapshot.failedCount.coerceAtLeast(0))
+            .put("fallbackUsed", snapshot.fallbackUsed)
+            .put(
+                "latestQuoteAt",
+                snapshot.latestQuoteAtMillis?.let(::formatIso8601) ?: JSONObject.NULL,
+            )
+            .put("lastError", snapshot.lastError.trim())
+            .put("updatedBy", snapshot.updatedBy.ifBlank { "android" })
+        writeJsonObject(storageFile(context, MARKET_DATA_HEALTH_FILE), json)
     }
 
     @Synchronized

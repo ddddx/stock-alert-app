@@ -136,6 +136,7 @@ class SinaMarketDataProvider extends MarketDataProvider {
     bool preferSingleQuoteRetrieval = false,
   }) async {
     if (stocks.isEmpty) {
+      markFetchStatus(const MarketDataFetchStatus());
       return const [];
     }
 
@@ -150,6 +151,8 @@ class SinaMarketDataProvider extends MarketDataProvider {
       for (final stock in stocks) _prefixedCode(stock): stock,
     };
     final quotesByCode = <String, StockQuoteSnapshot>{};
+    var fallbackUsed = false;
+    var lastError = '';
 
     try {
       final payload = await _getText(
@@ -163,27 +166,70 @@ class SinaMarketDataProvider extends MarketDataProvider {
           stockByPrefixedCode: stockByPrefixedCode,
         ),
       );
-    } catch (_) {
+    } catch (error) {
       // Fall back to per-stock retrieval when the batch payload changes.
+      fallbackUsed = true;
+      lastError = error.toString();
     }
 
     if (quotesByCode.length < stocks.length) {
       final missingStocks = stocks
           .where((stock) => !quotesByCode.containsKey(stock.code))
           .toList(growable: false);
-      final fallbackQuotes = await super.fetchQuotesProgressively(
-        missingStocks,
-        preferSingleQuoteRetrieval: true,
+      fallbackUsed = true;
+      _QuoteFetchOutcome? lastFailure;
+      final outcomes = await Future.wait(
+        missingStocks.map(_fetchQuoteOutcome),
       );
-      for (final quote in fallbackQuotes) {
-        quotesByCode[quote.code] = quote;
+      for (final outcome in outcomes) {
+        final quote = outcome.quote;
+        if (quote != null) {
+          quotesByCode[quote.code] = quote;
+          continue;
+        }
+        lastFailure = outcome;
+        lastError = outcome.error.toString();
+      }
+
+      if (quotesByCode.isEmpty && lastFailure != null) {
+        markFetchStatus(
+          MarketDataFetchStatus(
+            requestedCount: stocks.length,
+            successCount: 0,
+            failedCount: stocks.length,
+            fallbackUsed: fallbackUsed,
+            lastError: lastFailure.error.toString(),
+          ),
+        );
+        Error.throwWithStackTrace(
+          lastFailure.error!,
+          lastFailure.stackTrace!,
+        );
       }
     }
 
-    return stocks
+    final quotes = stocks
         .map((stock) => quotesByCode[stock.code])
         .whereType<StockQuoteSnapshot>()
         .toList(growable: false);
+    markFetchStatus(
+      MarketDataFetchStatus(
+        requestedCount: stocks.length,
+        successCount: quotes.length,
+        failedCount: stocks.length - quotes.length,
+        fallbackUsed: fallbackUsed,
+        lastError: lastError,
+      ),
+    );
+    return quotes;
+  }
+
+  Future<_QuoteFetchOutcome> _fetchQuoteOutcome(StockIdentity stock) async {
+    try {
+      return _QuoteFetchOutcome.success(await fetchQuote(stock));
+    } catch (error, stackTrace) {
+      return _QuoteFetchOutcome.failure(error, stackTrace);
+    }
   }
 
   Future<List<StockSearchResult>> _searchStocksViaNative(String keyword) async {
@@ -232,7 +278,8 @@ class SinaMarketDataProvider extends MarketDataProvider {
       map['market'] as String?,
       code: code,
     );
-    if (!RegExp(r'^\d{6}$').hasMatch(code) || (market != 'SH' && market != 'SZ')) {
+    if (!RegExp(r'^\d{6}$').hasMatch(code) ||
+        (market != 'SH' && market != 'SZ')) {
       return null;
     }
 
@@ -260,7 +307,8 @@ class SinaMarketDataProvider extends MarketDataProvider {
       if (fields.length > 3) fields[3].trim(),
       fields[0].trim(),
     ].firstWhere(
-      (value) => RegExp(r'^(sh|sz)\d{6}$', caseSensitive: false).hasMatch(value),
+      (value) =>
+          RegExp(r'^(sh|sz)\d{6}$', caseSensitive: false).hasMatch(value),
       orElse: () => '',
     );
     if (prefixedCode.isEmpty) {
@@ -351,7 +399,8 @@ class SinaMarketDataProvider extends MarketDataProvider {
     final changePercent =
         previousClose == 0 ? 0.0 : changeAmount / previousClose * 100;
     final rawName = fields[0].trim();
-    final resolvedName = _isReadableText(rawName) ? rawName : stock.readableName;
+    final resolvedName =
+        _isReadableText(rawName) ? rawName : stock.readableName;
 
     return StockQuoteSnapshot(
       code: stock.code,
@@ -451,7 +500,9 @@ class SinaMarketDataProvider extends MarketDataProvider {
   }
 
   Future<String> _getText(Uri uri) async {
-    for (var attempt = 0; attempt <= _requestRetryBackoffs.length; attempt += 1) {
+    for (var attempt = 0;
+        attempt <= _requestRetryBackoffs.length;
+        attempt += 1) {
       try {
         final loader = _textLoader;
         if (loader != null) {
@@ -476,9 +527,11 @@ class SinaMarketDataProvider extends MarketDataProvider {
 
   Future<String> _loadText(Uri uri) async {
     final request = await _httpClient.getUrl(uri);
-    request.headers.set(HttpHeaders.acceptHeader, 'application/json, text/plain, */*');
+    request.headers
+        .set(HttpHeaders.acceptHeader, 'application/json, text/plain, */*');
     request.headers.set(HttpHeaders.userAgentHeader, 'Mozilla/5.0');
-    request.headers.set(HttpHeaders.refererHeader, 'https://finance.sina.com.cn');
+    request.headers
+        .set(HttpHeaders.refererHeader, 'https://finance.sina.com.cn');
     final response = await request.close();
     final bytes = await response.fold<List<int>>(
       <int>[],
@@ -574,4 +627,32 @@ class SinaMarketDataProvider extends MarketDataProvider {
     }
     return '股票';
   }
+}
+
+class _QuoteFetchOutcome {
+  const _QuoteFetchOutcome({
+    required this.quote,
+    required this.error,
+    required this.stackTrace,
+  });
+
+  factory _QuoteFetchOutcome.success(StockQuoteSnapshot quote) {
+    return _QuoteFetchOutcome(
+      quote: quote,
+      error: null,
+      stackTrace: null,
+    );
+  }
+
+  factory _QuoteFetchOutcome.failure(Object error, StackTrace stackTrace) {
+    return _QuoteFetchOutcome(
+      quote: null,
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+
+  final StockQuoteSnapshot? quote;
+  final Object? error;
+  final StackTrace? stackTrace;
 }

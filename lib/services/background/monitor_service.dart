@@ -1,8 +1,10 @@
 import '../../data/models/diagnostic_log_entry.dart';
+import '../../data/models/market_data_health_snapshot.dart';
 import '../../data/models/stock_quote_snapshot.dart';
 import '../../data/repositories/alert_repository.dart';
 import '../../data/repositories/diagnostic_log_repository.dart';
 import '../../data/repositories/history_repository.dart';
+import '../../data/repositories/market_data_health_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/watchlist_repository.dart';
 import '../alerts/alert_rule_engine.dart';
@@ -57,6 +59,8 @@ class AshareMonitorService implements MonitorService {
     required PlatformBridgeService platformBridgeService,
     DiagnosticLogRepository diagnosticLogRepository =
         const NoopDiagnosticLogRepository(),
+    MarketDataHealthRepository marketDataHealthRepository =
+        const NoopMarketDataHealthRepository(),
     AshareMarketHours marketHours = const AshareMarketHours(),
     DateTime Function()? now,
   })  : _watchlistRepository = watchlistRepository,
@@ -69,6 +73,7 @@ class AshareMonitorService implements MonitorService {
         _ruleEngine = ruleEngine,
         _platformBridgeService = platformBridgeService,
         _diagnosticLogRepository = diagnosticLogRepository,
+        _marketDataHealthRepository = marketDataHealthRepository,
         _marketHours = marketHours,
         _now = now ?? DateTime.now;
 
@@ -82,6 +87,7 @@ class AshareMonitorService implements MonitorService {
   final AlertRuleEngine _ruleEngine;
   final PlatformBridgeService _platformBridgeService;
   final DiagnosticLogRepository _diagnosticLogRepository;
+  final MarketDataHealthRepository _marketDataHealthRepository;
   final AshareMarketHours _marketHours;
   final DateTime Function() _now;
 
@@ -205,6 +211,7 @@ class AshareMonitorService implements MonitorService {
       );
     }
 
+    final marketDataProvider = _resolvedMarketDataProvider;
     try {
       final latestByCode = {
         for (final quote in _latestQuotes) quote.code: quote,
@@ -218,7 +225,7 @@ class AshareMonitorService implements MonitorService {
       }
 
       final progressiveQuotes =
-          await _resolvedMarketDataProvider.fetchQuotesProgressively(
+          await marketDataProvider.fetchQuotesProgressively(
         monitoredWatchlist,
         onQuoteReceived: (quote) {
           latestByCode[quote.code] = quote;
@@ -278,9 +285,33 @@ class AshareMonitorService implements MonitorService {
         );
       }
 
-      final summary = triggers.isEmpty
-          ? '已刷新 ${quotes.length} 只A股，暂无规则触发。'
-          : '已刷新 ${quotes.length} 只A股，触发 ${triggers.length} 条提醒。';
+      final fetchStatus = marketDataProvider.lastFetchStatus;
+      final failedCount = _resolvedFailedCount(
+        fetchStatus: fetchStatus,
+        requestedCount: monitoredWatchlist.length,
+        quoteCount: quotes.length,
+      );
+      final summary = _buildRefreshSummary(
+        quoteCount: quotes.length,
+        triggerCount: triggers.length,
+        failedCount: failedCount,
+      );
+      await _recordMarketDataHealth(
+        provider: marketDataProvider,
+        checkedAt: checkedAt,
+        requestedCount: _resolvedRequestedCount(
+          fetchStatus: fetchStatus,
+          fallbackRequestedCount: monitoredWatchlist.length,
+        ),
+        successCount: _resolvedSuccessCount(
+          fetchStatus: fetchStatus,
+          fallbackSuccessCount: quotes.length,
+        ),
+        failedCount: failedCount,
+        fallbackUsed: fetchStatus.fallbackUsed,
+        latestQuoteAt: _latestQuoteTimestamp(quotes),
+        lastError: fetchStatus.lastError,
+      );
       await _settingsRepository.markChecked(
           checkedAt: checkedAt, message: summary);
       await _platformBridgeService.updateForegroundMonitorSummary(
@@ -299,6 +330,23 @@ class AshareMonitorService implements MonitorService {
       );
     } catch (error) {
       final summary = '行情刷新失败：$error';
+      final fetchStatus = marketDataProvider.lastFetchStatus;
+      await _recordMarketDataHealth(
+        provider: marketDataProvider,
+        checkedAt: checkedAt,
+        requestedCount: _resolvedRequestedCount(
+          fetchStatus: fetchStatus,
+          fallbackRequestedCount: monitoredWatchlist.length,
+        ),
+        successCount: 0,
+        failedCount: _resolvedRequestedCount(
+          fetchStatus: fetchStatus,
+          fallbackRequestedCount: monitoredWatchlist.length,
+        ),
+        fallbackUsed: fetchStatus.fallbackUsed,
+        latestQuoteAt: null,
+        lastError: error.toString(),
+      );
       await _settingsRepository.markChecked(
           checkedAt: checkedAt, message: summary);
       await _platformBridgeService.updateForegroundMonitorSummary(
@@ -435,6 +483,89 @@ class AshareMonitorService implements MonitorService {
     final seed =
         '${trigger.rule.id}:${trigger.quote.code}:${trigger.triggeredAt.millisecondsSinceEpoch}';
     return seed.hashCode & 0x7fffffff;
+  }
+
+  String _buildRefreshSummary({
+    required int quoteCount,
+    required int triggerCount,
+    required int failedCount,
+  }) {
+    final failureSuffix = failedCount > 0 ? '，另有 $failedCount 只刷新失败。' : '。';
+    if (triggerCount == 0) {
+      return failedCount > 0
+          ? '已刷新 $quoteCount 只A股，另有 $failedCount 只刷新失败。'
+          : '已刷新 $quoteCount 只A股，暂无规则触发。';
+    }
+    return '已刷新 $quoteCount 只A股，触发 $triggerCount 条提醒$failureSuffix';
+  }
+
+  int _resolvedRequestedCount({
+    required MarketDataFetchStatus fetchStatus,
+    required int fallbackRequestedCount,
+  }) {
+    return fetchStatus.requestedCount > 0
+        ? fetchStatus.requestedCount
+        : fallbackRequestedCount;
+  }
+
+  int _resolvedSuccessCount({
+    required MarketDataFetchStatus fetchStatus,
+    required int fallbackSuccessCount,
+  }) {
+    return fetchStatus.requestedCount > 0
+        ? fetchStatus.successCount
+        : fallbackSuccessCount;
+  }
+
+  int _resolvedFailedCount({
+    required MarketDataFetchStatus fetchStatus,
+    required int requestedCount,
+    required int quoteCount,
+  }) {
+    if (fetchStatus.requestedCount > 0) {
+      return fetchStatus.failedCount;
+    }
+    return (requestedCount - quoteCount).clamp(0, requestedCount).toInt();
+  }
+
+  DateTime? _latestQuoteTimestamp(List<StockQuoteSnapshot> quotes) {
+    DateTime? latest;
+    for (final quote in quotes) {
+      if (latest == null || quote.timestamp.isAfter(latest)) {
+        latest = quote.timestamp;
+      }
+    }
+    return latest;
+  }
+
+  Future<void> _recordMarketDataHealth({
+    required MarketDataProvider provider,
+    required DateTime checkedAt,
+    required int requestedCount,
+    required int successCount,
+    required int failedCount,
+    required bool fallbackUsed,
+    required DateTime? latestQuoteAt,
+    required String lastError,
+  }) async {
+    try {
+      await _marketDataHealthRepository.replace(
+        MarketDataHealthSnapshot(
+          providerId: provider.providerId,
+          providerName: provider.providerName,
+          checkedAt: checkedAt,
+          requestedCount: requestedCount,
+          successCount: successCount,
+          failedCount: failedCount,
+          fallbackUsed: fallbackUsed,
+          latestQuoteAt: latestQuoteAt,
+          lastError: lastError,
+          updatedBy: 'flutter',
+        ),
+      );
+    } catch (_) {
+      // Health snapshots are diagnostic only and must never break monitoring.
+    }
   }
 
   Future<void> _logDiagnostic({

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_alert_app/data/models/diagnostic_log_entry.dart';
+import 'package:stock_alert_app/data/models/market_data_health_snapshot.dart';
 import 'package:stock_alert_app/data/models/monitor_status.dart';
 import 'package:stock_alert_app/data/models/stock_identity.dart';
 import 'package:stock_alert_app/data/models/stock_quote_snapshot.dart';
@@ -9,6 +10,7 @@ import 'package:stock_alert_app/data/models/stock_search_result.dart';
 import 'package:stock_alert_app/data/models/watchlist_sort_order.dart';
 import 'package:stock_alert_app/data/models/webdav_config.dart';
 import 'package:stock_alert_app/data/repositories/diagnostic_log_repository.dart';
+import 'package:stock_alert_app/data/repositories/market_data_health_repository.dart';
 import 'package:stock_alert_app/data/repositories/settings_repository.dart';
 import 'package:stock_alert_app/data/repositories/watchlist_repository.dart';
 import 'package:stock_alert_app/features/settings/presentation/pages/settings_page.dart';
@@ -501,6 +503,55 @@ void main() {
     expect(find.text('暂无诊断日志。完成一次刷新或启动后台监控后会在这里记录关键事件。'), findsOneWidget);
   });
 
+  testWidgets('settings page shows market data health snapshot', (
+    tester,
+  ) async {
+    _useLargeViewport(tester);
+    final settingsRepository = _FakeSettingsRepository();
+    final healthRepository = _FakeMarketDataHealthRepository(
+      MarketDataHealthSnapshot(
+        providerId: 'ashare',
+        providerName: '聚合 A 股',
+        checkedAt: DateTime(2026, 3, 23, 10, 0),
+        requestedCount: 2,
+        successCount: 1,
+        failedCount: 1,
+        fallbackUsed: true,
+        latestQuoteAt: DateTime(2026, 3, 23, 9, 59),
+        lastError: 'SocketException: network down',
+        updatedBy: 'android',
+      ),
+    );
+
+    await tester.pumpWidget(
+      buildTestApp(
+        SettingsPage(
+          repository: settingsRepository,
+          monitorService: _FakeMonitorService(),
+          audioService: _FakeAudioAlertService(shouldSucceed: true),
+          messageBuilder: AlertMessageBuilder(),
+          platformBridgeService: _FakePlatformBridgeService(),
+          marketDataHealthRepository: healthRepository,
+          previewQuote: _sampleQuote(),
+          onRefresh: () async {},
+          onChanged: () {},
+          onRequestAndroidBackgroundAccess: ({required onboarding}) async =>
+              true,
+          onExportToWebDav: (_) async => 'ok',
+          onImportFromWebDav: (_) async => 'ok',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('聚合 A 股 · 部分成功'), findsOneWidget);
+    expect(find.textContaining('请求 2 只，成功 1 只，失败 1 只'), findsOneWidget);
+    expect(find.textContaining('本次使用了备用取价路径'), findsOneWidget);
+    expect(find.textContaining('最近错误：SocketException: network down'),
+        findsOneWidget);
+    expect(find.textContaining('来源：Android 后台'), findsOneWidget);
+  });
+
   testWidgets('webdav draft survives rebuild before save', (tester) async {
     final settingsRepository = _FakeSettingsRepository();
 
@@ -945,6 +996,28 @@ class _FakeDiagnosticLogRepository implements DiagnosticLogRepository {
 
   @override
   Future<void> initialize() async {}
+}
+
+class _FakeMarketDataHealthRepository implements MarketDataHealthRepository {
+  _FakeMarketDataHealthRepository([this.snapshot]);
+
+  MarketDataHealthSnapshot? snapshot;
+
+  @override
+  Future<void> clear() async {
+    snapshot = null;
+  }
+
+  @override
+  MarketDataHealthSnapshot? getSnapshot() => snapshot;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> replace(MarketDataHealthSnapshot snapshot) async {
+    this.snapshot = snapshot;
+  }
 }
 
 StockQuoteSnapshot _sampleQuote() {

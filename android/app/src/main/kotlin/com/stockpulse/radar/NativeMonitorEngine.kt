@@ -30,6 +30,14 @@ data class NativeRefreshResult(
     val triggers: List<NativeAlertTrigger>,
     val summary: String,
     val checkedAtMillis: Long,
+    val requestedCount: Int = quotes.size,
+    val successCount: Int = quotes.size,
+    val failedCount: Int = 0,
+    val fallbackUsed: Boolean = false,
+    val latestQuoteAtMillis: Long? = null,
+    val providerId: String = "ashare",
+    val providerName: String = "聚合 A 股",
+    val lastError: String = "",
     val error: String? = null,
 ) {
     val hasError: Boolean
@@ -58,18 +66,22 @@ class NativeMonitorEngine {
         }
 
         val monitoredWatchlist = watchlist.filter { it.monitoringEnabled }
+        val providerId = normalizedProviderId(settings.marketDataProviderId)
+        val providerName = providerName(providerId)
         if (monitoredWatchlist.isEmpty()) {
             return NativeRefreshResult(
                 quotes = emptyList(),
                 triggers = emptyList(),
                 summary = "自选中暂无开启监控的股票，未执行行情刷新。",
                 checkedAtMillis = nowMillis,
+                providerId = providerId,
+                providerName = providerName,
             )
         }
 
         return try {
             resetRuntimeStateIfTradingDayChanged(runtimeState, nowMillis)
-            val marketDataSource = when (settings.marketDataProviderId) {
+            val marketDataSource = when (providerId) {
                 "sina" -> sinaMarketDataSource
                 else -> ashareMarketDataSource
             }
@@ -97,16 +109,51 @@ class NativeMonitorEngine {
                 triggers = triggers,
                 summary = summary,
                 checkedAtMillis = nowMillis,
+                requestedCount = quoteResult.requestedCount,
+                successCount = quoteResult.successCount,
+                failedCount = quoteResult.failedCount,
+                fallbackUsed = quoteResult.fallbackUsed,
+                latestQuoteAtMillis = latestQuoteAtMillis(quotes),
+                providerId = providerId,
+                providerName = providerName,
+                lastError = quoteResult.lastError,
             )
         } catch (error: Exception) {
+            val errorMessage = error.message ?: error.javaClass.simpleName
+            val fallbackUsed = (error as? NativeQuoteFetchException)?.fallbackUsed ?: false
             NativeRefreshResult(
                 quotes = emptyList(),
                 triggers = emptyList(),
-                summary = "行情刷新失败：${error.message ?: error.javaClass.simpleName}",
+                summary = "行情刷新失败：$errorMessage",
                 checkedAtMillis = nowMillis,
-                error = error.message ?: error.javaClass.simpleName,
+                requestedCount = monitoredWatchlist.size,
+                successCount = 0,
+                failedCount = monitoredWatchlist.size,
+                fallbackUsed = fallbackUsed,
+                providerId = providerId,
+                providerName = providerName,
+                lastError = errorMessage,
+                error = errorMessage,
             )
         }
+    }
+
+    private fun normalizedProviderId(providerId: String): String {
+        return if (providerId.trim() == "sina") "sina" else "ashare"
+    }
+
+    private fun providerName(providerId: String): String {
+        return if (providerId == "sina") "新浪财经" else "聚合 A 股"
+    }
+
+    private fun latestQuoteAtMillis(quotes: List<NativeQuote>): Long? {
+        var latest: Long? = null
+        quotes.forEach { quote ->
+            if (latest == null || quote.timestampMillis > latest!!) {
+                latest = quote.timestampMillis
+            }
+        }
+        return latest
     }
 
     private fun appendHistory(runtimeState: NativeRuntimeState, quote: NativeQuote) {
@@ -747,7 +794,17 @@ class NativeMarketDataSource {
 data class NativeQuoteFetchResult(
     val quotes: List<NativeQuote>,
     val failedCount: Int,
+    val requestedCount: Int = quotes.size + failedCount,
+    val successCount: Int = quotes.size,
+    val fallbackUsed: Boolean = false,
+    val lastError: String = "",
 )
+
+class NativeQuoteFetchException(
+    message: String,
+    cause: Exception? = null,
+    val fallbackUsed: Boolean = false,
+) : Exception(message, cause)
 
 data class NativeQuoteFetchOutcome(
     val quote: NativeQuote?,
